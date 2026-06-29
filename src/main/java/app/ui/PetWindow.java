@@ -8,10 +8,10 @@ import java.awt.event.MouseEvent;
 public class PetWindow extends JFrame {
 
     //桌宠图标大小
-    private static final int PET_SIZE=120;
+    private static final int PET_SIZE=64;
 
     //设置图片路径
-    private static final String PET_IMAGE_PATH="assets/closure_logo.png";
+    private static final String PET_IMAGE_PATH="src/main/resources/images/closure_logo.png";
 
     //聊天窗口
     private final ChatWindow chatWindow =new ChatWindow();
