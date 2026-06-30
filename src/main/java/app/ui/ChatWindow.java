@@ -74,7 +74,8 @@ public class ChatWindow extends JFrame {
         inputField.setText("");
 
         //生成一个假的回复
-        String reply= ChatService.getReply(text);
+        final ChatService chatService=new ChatService();
+        String reply= chatService.getReply(text);
 
         //显示可露希尔的回复
         appendPetMessage(reply);
