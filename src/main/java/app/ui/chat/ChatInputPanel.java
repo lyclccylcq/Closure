@@ -25,7 +25,19 @@ public class ChatInputPanel extends JPanel {
         inputField.addActionListener(e -> sendMessage());
     }
 
-    private void sendMessage(){
+    public void setOnSendMessage(Consumer<String> onSendMessage){
+        this.onSendMessage=onSendMessage;
+    }
 
+    private void sendMessage(){
+        String message=inputField.getText().trim();
+
+        if (message.isEmpty()){
+            return;
+        }
+        inputField.setText("");
+        if(onSendMessage!=null){
+            onSendMessage.accept(message);
+        }
     }
 }
