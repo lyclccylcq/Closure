@@ -113,4 +113,4 @@ public class MessageItemPanel extends JPanel {
         return contentPanel;
     }
     }
-}
+
