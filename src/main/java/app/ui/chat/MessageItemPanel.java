@@ -2,6 +2,7 @@ package app.ui.chat;
 
 import app.model.ChatMessage;
 import app.model.MessageRole;
+import app.util.AvatarLoader;
 
 import javax.swing.*;
 import java.awt.*;
@@ -35,7 +36,7 @@ public class MessageItemPanel extends JPanel {
     }
 
     private JLabel createAvatarLable(MessageRole role){
-        ImageIcon avatar=ImageLoader.loadIcon(
+        ImageIcon avatar= AvatarLoader.loadAvatar(
                 role.getAvatarPath(),
                 AVATAR_SIZE,
                 AVATAR_SIZE

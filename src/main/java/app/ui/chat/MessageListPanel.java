@@ -55,9 +55,6 @@ public class MessageListPanel extends JScrollPane {
     private void scrollToBottom() {
         /*
          * SwingUtilities.invokeLater 的意思是：
-         * 等当前这轮 UI 更新结束后，再执行里面的代码。
-         *
-         * 为什么要这样？
          * 因为刚 add 新消息时，滚动条的最大值可能还没来得及更新。
          * 如果立刻设置滚动条位置，可能滚不到真正的底部。
          */
