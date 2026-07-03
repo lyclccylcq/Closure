@@ -12,14 +12,12 @@ import java.awt.event.WindowEvent;
 
 /**
  * PetWindow 表示桌面上的桌宠窗口。
- *
  * 它负责：
  * 1. 显示桌宠图标
  * 2. 让桌宠窗口保持无边框、透明背景
  * 3. 让桌宠可以被鼠标拖动
  * 4. 右键显示菜单
  * 5. 双击打开聊天窗口
- *
  * 注意：
  * PetWindow 是整个程序的主窗口。
  * ChatWindow 只是它打开的聊天窗口。
@@ -27,8 +25,7 @@ import java.awt.event.WindowEvent;
 public class PetWindow extends JFrame {
 
     /**
-     * 桌宠图标大小。
-     *
+     * 桌宠图标大小，
      * 这里设置成 64 像素，
      * 避免桌面图标看起来比普通 App 图标大太多。
      */
@@ -36,36 +33,30 @@ public class PetWindow extends JFrame {
 
     /**
      * 桌宠图片路径。
-     *
      * 注意：
      * 这里使用的是 resources 资源路径，
      * 不是 "src/main/resources/..." 文件路径。
-     *
      * 对应真实位置：
      * src/main/resources/images/closure_logo.png
      */
-    private static final String PET_IMAGE_PATH = "/images/closure_logo.png";
+    private static final String PET_IMAGE_PATH = "/images/closure-logo.png";
 
     /**
      * 聊天窗口对象。
-     *
      * 这里不直接 new ChatWindow。
      * 而是在用户第一次双击或点击菜单时再创建。
-     *
      * 这样可以避免程序一启动就创建聊天窗口。
      */
     private ChatWindow chatWindow;
 
     /**
      * 记录鼠标按下时的位置。
-     *
      * 用于计算拖动桌宠时窗口应该移动到哪里。
      */
     private Point mousePressedPoint;
 
     /**
      * 右键菜单。
-     *
      * 包含：
      * 1. 通讯
      * 2. 下线
@@ -308,7 +299,6 @@ public class PetWindow extends JFrame {
 
     /**
      * 打开聊天窗口。
-     *
      * 触发方式：
      * 1. 双击桌宠图标
      * 2. 右键菜单点击“通讯”
@@ -377,7 +367,6 @@ public class PetWindow extends JFrame {
 
     /**
      * 恢复桌宠置顶状态。
-     *
      * 当聊天窗口关闭或隐藏时调用。
      */
     private void restorePetAlwaysOnTop() {

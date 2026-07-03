@@ -1,8 +1,8 @@
 package app.model;
 
 public enum MessageRole {
-    USER("我","images/npc_001_doctor.png",true),
-    CLOSURE("可露希尔","images/char_4228_closur_2.png",false);
+    USER("我","/images/npc_001_doctor.png",true),
+    CLOSURE("可露希尔", "/images/char_4228_closure_2.png",false);
 
     private final String displayName;
     private final String avatarPath;

@@ -10,7 +10,12 @@ import java.awt.*;
 public class MessageItemPanel extends JPanel {
 
     private static final int AVATAR_SIZE=40;
-    private static final int MESSAGE_WIDTH=260;
+
+    //这是限制文本的最大宽度
+    private static final int MESSAGE_MAX_WIDTH=260;
+    //内边距
+    private static final Insets MESSAGE_INSETS=new Insets(8,10,8,10);
+
 
     public MessageItemPanel(ChatMessage message){
         MessageRole role=message.getRole();
@@ -98,9 +103,11 @@ public class MessageItemPanel extends JPanel {
             messageArea.setBackground(Color.WHITE);
         }
 
-        // 限制消息区域最大宽度
-        // 防止一行文字太长，把整个窗口撑开
-        messageArea.setMaximumSize(new Dimension(MESSAGE_WIDTH, Integer.MAX_VALUE));
+        //固定首选尺寸
+        Dimension messageSize=calculateMessageSize(messageArea,message.getContent());
+        messageArea.setPreferredSize(messageSize);
+        messageArea.setMinimumSize(messageSize);
+        messageArea.setMaximumSize(messageSize);
 
         // 把名字加入内容区域
         contentPanel.add(nameLabel);
@@ -108,10 +115,44 @@ public class MessageItemPanel extends JPanel {
         // 名字和消息内容之间留一点空隙
         contentPanel.add(Box.createVerticalStrut(4));
 
-        // 把消息文本加入内容区域
-        contentPanel.add(messageArea);
+        //左右对齐，保持宽度
+        JPanel messageRow=new JPanel(new FlowLayout(
+                isUser?FlowLayout.RIGHT:FlowLayout.LEFT,
+                0,
+                0
+        ));
+
+        messageRow.setBackground(new Color(245,245,245));
+        messageRow.add(messageArea);
+        contentPanel.add(messageRow);
+
+        nameLabel.setAlignmentX(isUser?Component.RIGHT_ALIGNMENT:Component.LEFT_ALIGNMENT);
+        messageRow.setAlignmentX(isUser?Component.RIGHT_ALIGNMENT:Component.LEFT_ALIGNMENT);
 
         return contentPanel;
+    }
+
+    //计算消息的长宽
+    private Dimension calculateMessageSize(JTextArea messageArea,String content) {
+        FontMetrics fontMetrics = messageArea.getFontMetrics(messageArea.getFont());
+        int maxLineWidth = 0;
+
+        //先算没有换行时候的宽度
+        for(String line:content.split("\\R",-1)){
+            maxLineWidth=Math.max(maxLineWidth,fontMetrics.stringWidth(line));
+        }
+
+        //文字宽度不能超过气泡最大宽度扣掉内边距的可用区域
+        int maxTextWidth=MESSAGE_MAX_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
+        int textWidth=Math.max(1,Math.min(maxLineWidth+1,maxLineWidth));
+        int bubbleWidth=textWidth+MESSAGE_INSETS.left+MESSAGE_INSETS.right;
+
+        // 先给定宽度再询问首选高度，让 JTextArea 按换行后的高度返回尺寸。
+        messageArea.setSize(new Dimension(bubbleWidth,Short.MAX_VALUE));
+        Dimension preferredSize=messageArea.getPreferredSize();
+        preferredSize.width=bubbleWidth;
+
+        return preferredSize;
     }
     }
 

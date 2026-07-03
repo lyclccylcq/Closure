@@ -5,5 +5,4 @@ module com.example.closure {
 
 
     opens com.example.closure to javafx.fxml;
-    exports com.example.closure;
 }
