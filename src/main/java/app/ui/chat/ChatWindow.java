@@ -33,6 +33,7 @@ public class ChatWindow extends JFrame {
 
         // 设置窗口标题
         setTitle("通讯频道：可露希尔");
+        getContentPane().setBackground(new Color(8,12,18));
 
         // 设置聊天窗口大小
         setSize(420, 520);

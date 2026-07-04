@@ -9,6 +9,12 @@ import java.awt.*;
 
 public class MessageItemPanel extends JPanel {
 
+    private static final Color BACKGROUND_COLOR=new Color(8,12,18);
+    private static final Color BUBBLE_COLOR=new Color(18,27,39);
+    private static final Color BORDER_COLOR=new Color(58,214,255);
+    private static final Color TEXT_COLOR=new Color(238,246,255);
+    private static final Color NAME_COLOR=new Color(134,226,255);
+
     private static final int AVATAR_SIZE=40;
 
     //这是限制文本的最大宽度
@@ -24,7 +30,8 @@ public class MessageItemPanel extends JPanel {
         setLayout(new BorderLayout(8,0));
 
         //设置背景色和间距
-        setBackground(new Color(245,245,245));
+        //setBackground(new Color(245,245,245));
+        setBackground(BACKGROUND_COLOR);
         setBorder(BorderFactory.createEmptyBorder(8,8,0,8));
 
         JLabel avatarLabel=createAvatarLable(role);
@@ -64,10 +71,12 @@ public class MessageItemPanel extends JPanel {
 
         contentPanel.setLayout(new BoxLayout(contentPanel,BoxLayout.Y_AXIS));
         // 内容区域背景和外层背景保持一致
-        contentPanel.setBackground(new Color(245, 245, 245));
+        //contentPanel.setBackground(new Color(245, 245, 245));
+        contentPanel.setBackground(BACKGROUND_COLOR);
 
         // 创建名字标签
         JLabel nameLabel = new JLabel(role.getDisplayName());
+        nameLabel.setBackground(NAME_COLOR);
 
         // 设置名字字体：无衬线、加粗、12号
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
@@ -86,10 +95,20 @@ public class MessageItemPanel extends JPanel {
 
         // 设置消息文字字体
         messageArea.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        messageArea.setForeground(TEXT_COLOR);
+        messageArea.setCaretColor(TEXT_COLOR);
 
         // 设置消息文本的内边距
         // 这样文字不会紧贴气泡边缘
-        messageArea.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        messageArea.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR,1),
+                BorderFactory.createEmptyBorder(
+                        MESSAGE_INSETS.top,
+                        MESSAGE_INSETS.left,
+                        MESSAGE_INSETS.bottom,
+                        MESSAGE_INSETS.right
+                )
+        ));
 
         /*
          * 根据发送者设置不同的消息背景色。
@@ -100,7 +119,8 @@ public class MessageItemPanel extends JPanel {
         if (isUser) {
             messageArea.setBackground(new Color(220, 240, 255));
         } else {
-            messageArea.setBackground(Color.WHITE);
+           // messageArea.setBackground(Color.WHITE);
+            messageArea.setBackground(BUBBLE_COLOR);
         }
 
         //固定首选尺寸
@@ -122,7 +142,8 @@ public class MessageItemPanel extends JPanel {
                 0
         ));
 
-        messageRow.setBackground(new Color(245,245,245));
+        //messageRow.setBackground(new Color(245,245,245));
+        messageRow.setBackground(BACKGROUND_COLOR);
         messageRow.add(messageArea);
         contentPanel.add(messageRow);
 

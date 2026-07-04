@@ -7,6 +7,9 @@ import javax.swing.*;
 import java.awt.*;
 
 public class MessageListPanel extends JScrollPane {
+
+    private static final Color BACKGROUND_COLOR=new Color(8,12,18);
+    private static final Color SCROLLBAR_COLOR=new Color(36,52,68);
     private final JPanel messageContainer;
 
     public MessageListPanel() {
@@ -17,14 +20,18 @@ public class MessageListPanel extends JScrollPane {
         messageContainer.setLayout(new BoxLayout(messageContainer,BoxLayout.Y_AXIS));
 
         //设置消息列表背景色
-        messageContainer.setBackground(new Color(245,245,245));
+       messageContainer.setBackground(BACKGROUND_COLOR);
 
         setViewportView(messageContainer);
+        getViewport().setBackground(BACKGROUND_COLOR);
 
         //去掉面板的滚动边框
         setBorder(null);
+        setBackground(BACKGROUND_COLOR);
 
         getVerticalScrollBar().setUnitIncrement(16);
+        getVerticalScrollBar().setBackground(BACKGROUND_COLOR);
+        getVerticalScrollBar().setForeground(SCROLLBAR_COLOR);
     }
 
     public void addMessage(ChatMessage message){
