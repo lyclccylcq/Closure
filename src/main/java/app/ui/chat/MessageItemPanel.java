@@ -11,14 +11,16 @@ public class MessageItemPanel extends JPanel {
 
     private static final Color BACKGROUND_COLOR=new Color(8,12,18);
     private static final Color BUBBLE_COLOR=new Color(18,27,39);
-    private static final Color BORDER_COLOR=new Color(58,214,255);
+    private static final Color BORDER_COLOR=new Color(58,174,210);
     private static final Color TEXT_COLOR=new Color(238,246,255);
-    private static final Color NAME_COLOR=new Color(134,226,255);
+
 
     private static final int AVATAR_SIZE=40;
 
     //这是限制文本的最大宽度
     private static final int MESSAGE_MAX_WIDTH=260;
+    //限制短消息防止气泡被压成竖排
+    private static final int MESSAGE_MIN_WIDTH=96;
     //内边距
     private static final Insets MESSAGE_INSETS=new Insets(8,10,8,10);
 
@@ -76,10 +78,12 @@ public class MessageItemPanel extends JPanel {
 
         // 创建名字标签
         JLabel nameLabel = new JLabel(role.getDisplayName());
-        nameLabel.setBackground(NAME_COLOR);
+
 
         // 设置名字字体：无衬线、加粗、12号
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        nameLabel.setForeground(TEXT_COLOR);
+        nameLabel.setOpaque(false);
 
         // 创建消息文本区域
         JTextArea messageArea = new JTextArea(message.getContent());
@@ -96,7 +100,9 @@ public class MessageItemPanel extends JPanel {
         // 设置消息文字字体
         messageArea.setFont(new Font("SansSerif", Font.PLAIN, 14));
         messageArea.setForeground(TEXT_COLOR);
+        messageArea.setDisabledTextColor(TEXT_COLOR);
         messageArea.setCaretColor(TEXT_COLOR);
+        messageArea.setOpaque(true);
 
         // 设置消息文本的内边距
         // 这样文字不会紧贴气泡边缘
@@ -165,7 +171,9 @@ public class MessageItemPanel extends JPanel {
 
         //文字宽度不能超过气泡最大宽度扣掉内边距的可用区域
         int maxTextWidth=MESSAGE_MAX_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
-        int textWidth=Math.max(1,Math.min(maxLineWidth+1,maxLineWidth));
+        //int textWidth=Math.max(1,Math.min(maxLineWidth+1,maxLineWidth));
+        int minTextWidth=MESSAGE_MIN_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
+        int textWidth=Math.max(minTextWidth,Math.min(maxLineWidth+1,maxTextWidth));
         int bubbleWidth=textWidth+MESSAGE_INSETS.left+MESSAGE_INSETS.right;
 
         // 先给定宽度再询问首选高度，让 JTextArea 按换行后的高度返回尺寸。
