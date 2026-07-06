@@ -21,6 +21,8 @@ public class MessageItemPanel extends JPanel {
     private static final int MESSAGE_MAX_WIDTH=260;
     //限制短消息防止气泡被压成竖排
     private static final int MESSAGE_MIN_WIDTH=96;
+    // 短消息按字符数估算宽度，比 JTextArea 的自动换行判断更适合中文。
+    private static final int SHORT_MESSAGE_LENGTH=12;
     //内边距
     private static final Insets MESSAGE_INSETS=new Insets(8,10,8,10);
 
@@ -123,7 +125,7 @@ public class MessageItemPanel extends JPanel {
          * 可露希尔消息：白色
          */
         if (isUser) {
-            messageArea.setBackground(new Color(220, 240, 255));
+            messageArea.setBackground(BUBBLE_COLOR);
         } else {
            // messageArea.setBackground(Color.WHITE);
             messageArea.setBackground(BUBBLE_COLOR);
@@ -163,6 +165,7 @@ public class MessageItemPanel extends JPanel {
     private Dimension calculateMessageSize(JTextArea messageArea,String content) {
         FontMetrics fontMetrics = messageArea.getFontMetrics(messageArea.getFont());
         int maxLineWidth = 0;
+        int maxLineLength=0;
 
         //先算没有换行时候的宽度
         for(String line:content.split("\\R",-1)){
@@ -173,7 +176,11 @@ public class MessageItemPanel extends JPanel {
         int maxTextWidth=MESSAGE_MAX_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
         //int textWidth=Math.max(1,Math.min(maxLineWidth+1,maxLineWidth));
         int minTextWidth=MESSAGE_MIN_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
-        int textWidth=Math.max(minTextWidth,Math.min(maxLineWidth+1,maxTextWidth));
+        int contentWidth=maxLineWidth+1;
+        if(maxLineLength>0 && maxLineLength<=SHORT_MESSAGE_LENGTH){
+            contentWidth=Math.max(contentWidth,fontMetrics.charWidth('测')*maxLineLength);
+        }
+        int textWidth=Math.max(minTextWidth,Math.min(contentWidth,maxTextWidth));
         int bubbleWidth=textWidth+MESSAGE_INSETS.left+MESSAGE_INSETS.right;
 
         // 先给定宽度再询问首选高度，让 JTextArea 按换行后的高度返回尺寸。
