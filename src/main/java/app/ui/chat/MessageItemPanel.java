@@ -17,12 +17,6 @@ public class MessageItemPanel extends JPanel {
 
     private static final int AVATAR_SIZE=40;
 
-    //这是限制文本的最大宽度
-    private static final int MESSAGE_MAX_WIDTH=260;
-    //限制短消息防止气泡被压成竖排
-    private static final int MESSAGE_MIN_WIDTH=96;
-    // 短消息按字符数估算宽度，比 JTextArea 的自动换行判断更适合中文。
-    private static final int SHORT_MESSAGE_LENGTH=12;
     //内边距
     private static final Insets MESSAGE_INSETS=new Insets(8,10,8,10);
 
@@ -90,8 +84,9 @@ public class MessageItemPanel extends JPanel {
         // 创建消息文本区域
         JTextArea messageArea = new JTextArea(message.getContent());
 
-        // 消息内容不允许用户编辑
-        messageArea.setEditable(false);
+        // 保持 editable 的绘制状态，避免系统外观把不可编辑文本区刷成白色样式。
+        messageArea.setEditable(true);
+        messageArea.setFocusable(false);
 
         // 开启自动换行
         messageArea.setLineWrap(true);
@@ -132,7 +127,16 @@ public class MessageItemPanel extends JPanel {
         }
 
         //固定首选尺寸
-        Dimension messageSize=calculateMessageSize(messageArea,message.getContent());
+        // 计算强制换行后的文本和气泡尺寸
+        MessageLayoutCalculator.Result layout = MessageLayoutCalculator.calculate(
+                messageArea,
+                message.getContent(),
+                MESSAGE_INSETS
+        );
+
+        messageArea.setText(layout.getContent());
+
+        Dimension messageSize = layout.getSize();
         messageArea.setPreferredSize(messageSize);
         messageArea.setMinimumSize(messageSize);
         messageArea.setMaximumSize(messageSize);
@@ -162,33 +166,6 @@ public class MessageItemPanel extends JPanel {
     }
 
     //计算消息的长宽
-    private Dimension calculateMessageSize(JTextArea messageArea,String content) {
-        FontMetrics fontMetrics = messageArea.getFontMetrics(messageArea.getFont());
-        int maxLineWidth = 0;
-        int maxLineLength=0;
 
-        //先算没有换行时候的宽度
-        for(String line:content.split("\\R",-1)){
-            maxLineWidth=Math.max(maxLineWidth,fontMetrics.stringWidth(line));
-        }
-
-        //文字宽度不能超过气泡最大宽度扣掉内边距的可用区域
-        int maxTextWidth=MESSAGE_MAX_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
-        //int textWidth=Math.max(1,Math.min(maxLineWidth+1,maxLineWidth));
-        int minTextWidth=MESSAGE_MIN_WIDTH-MESSAGE_INSETS.left-MESSAGE_INSETS.right;
-        int contentWidth=maxLineWidth+1;
-        if(maxLineLength>0 && maxLineLength<=SHORT_MESSAGE_LENGTH){
-            contentWidth=Math.max(contentWidth,fontMetrics.charWidth('测')*maxLineLength);
-        }
-        int textWidth=Math.max(minTextWidth,Math.min(contentWidth,maxTextWidth));
-        int bubbleWidth=textWidth+MESSAGE_INSETS.left+MESSAGE_INSETS.right;
-
-        // 先给定宽度再询问首选高度，让 JTextArea 按换行后的高度返回尺寸。
-        messageArea.setSize(new Dimension(bubbleWidth,Short.MAX_VALUE));
-        Dimension preferredSize=messageArea.getPreferredSize();
-        preferredSize.width=bubbleWidth;
-
-        return preferredSize;
-    }
     }
 
