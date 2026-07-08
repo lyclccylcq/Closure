@@ -3,114 +3,194 @@ package app.ui.chat;
 import app.model.ChatMessage;
 import app.model.MessageRole;
 import app.service.ChatService;
+import javafx.application.Platform;
+import javafx.embed.swing.JFXPanel;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 
 import javax.swing.*;
 import java.awt.*;
+import java.net.URL;
 
 public class ChatWindow extends JFrame {
+    private static final String BACKGROUND_STYLE="-fx-background-color: #080c12;";
+    private static final String BUBBLE_STYLE="""
+            -fx-background-color: #121b27;
+            -fx-border-color: #3aaed2;
+            -fx-border-width: 1;
+            -fx-background-radius: 6;
+            -fx-border-radius: 6;
+            -fx-padding: 8 10 8 10;
+            -fx-text-fill: #eef6ff;
+            -fx-font-size: 14px;
+            """;
+    private static final String NAME_STYLE="-fx-text-fill: #eef6ff; -fx-font-size: 12px; -fx-font-weight: bold;";
+    private static final String INPUT_STYLE="""
+            -fx-background-color: #0e1620;
+            -fx-border-color: #30586c;
+            -fx-border-width: 1;
+            -fx-text-fill: #eef6ff;
+            -fx-prompt-text-fill: #6f8a9b;
+            -fx-font-size: 14px;
+            """;
+    private static final String BUTTON_STYLE="""
+            -fx-background-color: #122a38;
+            -fx-border-color: #3ad6ff;
+            -fx-border-width: 1;
+            -fx-text-fill: #eef6ff;
+            -fx-font-size: 14px;
+            -fx-padding: 7 18 7 18;
+            """;
+    private static final int AVATAR_SIZE=40;
+    private static final double BUBBLE_MAX_WIDTH=280;
 
-    /**
-     * 消息列表区域。
-     */
-    private final MessageListPanel messageListPanel;
-
-    /**
-     * 底部输入区域。
-     */
-    private final ChatInputPanel chatInputPanel;
-
-    /**
-     * 聊天服务。
-     */
     private final ChatService chatService;
+    private final JFXPanel fxPanel;
 
-    /**
-     * 构造方法：创建聊天窗口。
-     */
+    private VBox messageBox;
+    private ScrollPane scrollPane;
+    private TextField inputField;
+
     public ChatWindow() {
-        // 创建聊天服务对象
         chatService = new ChatService();
+        fxPanel = new JFXPanel();
 
-        // 设置窗口标题
         setTitle("通讯频道：可露希尔");
-        getContentPane().setBackground(new Color(8,12,18));
-
-        // 设置聊天窗口大小
-        setSize(420, 520);
-
-        // 如果外部没有重新设置位置，则默认居中
+        setSize(420,520);
         setLocationRelativeTo(null);
-
-        /*
-         * 关闭聊天窗口时只隐藏窗口，不退出整个程序。
-         */
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-
-        // 初始化消息列表区域
-        messageListPanel = new MessageListPanel();
-
-        // 初始化底部输入区域
-        chatInputPanel = new ChatInputPanel();
-
-        /*
-         * 设置聊天窗口整体布局。
-         */
         setLayout(new BorderLayout());
+        add(fxPanel,BorderLayout.CENTER);
 
-        // 添加消息列表到窗口中间
-        add(messageListPanel, BorderLayout.CENTER);
+        Platform.setImplicitExit(false);
+        Platform.runLater(this::initFxContent);
+    }
 
-        // 添加输入区域到窗口底部
-        add(chatInputPanel, BorderLayout.SOUTH);
+    private void initFxContent(){
+        BorderPane root=new BorderPane();
+        root.setStyle(BACKGROUND_STYLE);
 
-        /*
-         * 设置输入区域的发送回调。
-         */
-        chatInputPanel.setOnSendMessage(this::handleUserMessage);
+        messageBox=new VBox(18);
+        messageBox.setPadding(new Insets(14));
+        messageBox.setFillWidth(true);
+        messageBox.setStyle(BACKGROUND_STYLE);
 
-        // 聊天窗口打开时，先显示一句可露希尔的欢迎语
+        scrollPane=new ScrollPane(messageBox);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollPane.setStyle(BACKGROUND_STYLE+" -fx-background: #080c12; -fx-border-color: transparent;");
+
+        inputField=new TextField();
+        inputField.setStyle(INPUT_STYLE);
+        inputField.setOnAction(event -> sendCurrentMessage());
+
+        Button sendButton=new Button("发送");
+        sendButton.setStyle(BUTTON_STYLE);
+        sendButton.setOnAction(event -> sendCurrentMessage());
+
+        HBox inputBar=new HBox(8,inputField,sendButton);
+        inputBar.setPadding(new Insets(10,12,12,12));
+        inputBar.setAlignment(Pos.CENTER);
+        inputBar.setStyle(BACKGROUND_STYLE);
+        HBox.setHgrow(inputField, Priority.ALWAYS);
+
+        root.setCenter(scrollPane);
+        root.setBottom(inputBar);
+
+        fxPanel.setScene(new Scene(root));
         addPetMessage("给，咖啡。看你那黑眼圈，昨晚又熬夜了吧？");
     }
 
-    /**
-     * 处理用户发送的消息。
-     */
+    private void sendCurrentMessage(){
+        String text=inputField.getText().trim();
+        if(text.isEmpty()){
+            return;
+        }
+
+        inputField.clear();
+        handleUserMessage(text);
+    }
+
     private void handleUserMessage(String userText) {
-        // 先显示用户消息
         addUserMessage(userText);
-
-        // 通过 ChatService 生成可露希尔回复
         String reply = chatService.getReply(userText);
-
-        // 显示可露希尔回复
         addPetMessage(reply);
     }
 
-    /**
-     * 添加一条用户消息。
-     */
     private void addUserMessage(String content) {
-        /*
-         * 创建一条 ChatMessage 数据。
-         */
-        ChatMessage message = new ChatMessage(MessageRole.USER, content);
-
-        // 把消息交给消息列表显示
-        messageListPanel.addMessage(message);
+        addMessage(new ChatMessage(MessageRole.USER,content));
     }
 
-    /**
-     * 添加一条可露希尔消息.
-     */
     private void addPetMessage(String content) {
-        /*
-         * 创建一条 ChatMessage 数据。
-         *
-         * MessageRole.CLOSURE 表示这条消息是可露希尔发的。
-         */
-        ChatMessage message = new ChatMessage(MessageRole.CLOSURE, content);
+        addMessage(new ChatMessage(MessageRole.CLOSURE,content));
+    }
 
-        // 把消息交给消息列表显示
-        messageListPanel.addMessage(message);
+    private void addMessage(ChatMessage message){
+        if(Platform.isFxApplicationThread()){
+            addMessageNode(message);
+        }else{
+            Platform.runLater(() -> addMessageNode(message));
+        }
+    }
+
+    private void addMessageNode(ChatMessage message){
+        if(messageBox==null){
+            return;
+        }
+
+        boolean isUser=message.getRole().isUser();
+
+        HBox row=new HBox(8);
+        row.setMaxWidth(Double.MAX_VALUE);
+        row.setAlignment(isUser ? Pos.TOP_RIGHT : Pos.TOP_LEFT);
+
+        ImageView avatarView=createAvatarView(message.getRole());
+        VBox contentColumn=new VBox(4);
+        contentColumn.setAlignment(isUser ? Pos.TOP_RIGHT : Pos.TOP_LEFT);
+
+        Label nameLabel=new Label(message.getRole().getDisplayName());
+        nameLabel.setStyle(NAME_STYLE);
+
+        Label bubbleLabel=new Label(message.getContent());
+        bubbleLabel.setWrapText(true);
+        bubbleLabel.setMaxWidth(BUBBLE_MAX_WIDTH);
+        bubbleLabel.setStyle(BUBBLE_STYLE);
+
+        contentColumn.getChildren().addAll(nameLabel,bubbleLabel);
+
+        if(isUser){
+            row.getChildren().addAll(contentColumn,avatarView);
+        }else{
+            row.getChildren().addAll(avatarView,contentColumn);
+        }
+
+        messageBox.getChildren().add(row);
+        Platform.runLater(() -> scrollPane.setVvalue(1.0));
+    }
+
+    private ImageView createAvatarView(MessageRole role){
+        ImageView avatarView=new ImageView();
+        avatarView.setFitWidth(AVATAR_SIZE);
+        avatarView.setFitHeight(AVATAR_SIZE);
+        avatarView.setPreserveRatio(true);
+
+        URL avatarUrl=ChatWindow.class.getResource(role.getAvatarPath());
+        if(avatarUrl!=null){
+            avatarView.setImage(new Image(avatarUrl.toExternalForm(),AVATAR_SIZE,AVATAR_SIZE,true,true));
+        }
+
+        return avatarView;
     }
 }
