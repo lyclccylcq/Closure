@@ -53,9 +53,11 @@ public class ChatWindow extends JFrame {
             -fx-padding: 7 18 7 18;
             """;
     private static final int AVATAR_SIZE=40;
+    // JavaFX Label 会在超过这个宽度时自然换行，短消息则保持按内容自适应。
     private static final double BUBBLE_MAX_WIDTH=280;
 
     private final ChatService chatService;
+    // JFXPanel 负责把 JavaFX Scene 嵌进现有 Swing JFrame，PetWindow 的调用方式就不用改。
     private final JFXPanel fxPanel;
 
     private VBox messageBox;
@@ -73,7 +75,9 @@ public class ChatWindow extends JFrame {
         setLayout(new BorderLayout());
         add(fxPanel,BorderLayout.CENTER);
 
+        // 聊天窗口隐藏时不要关闭 JavaFX runtime，否则下次再打开窗口会失败。
         Platform.setImplicitExit(false);
+        // JavaFX 节点必须在 JavaFX Application Thread 上创建。
         Platform.runLater(this::initFxContent);
     }
 
@@ -81,6 +85,7 @@ public class ChatWindow extends JFrame {
         BorderPane root=new BorderPane();
         root.setStyle(BACKGROUND_STYLE);
 
+        // VBox 竖向保存所有消息行，ScrollPane 负责滚动。
         messageBox=new VBox(18);
         messageBox.setPadding(new Insets(14));
         messageBox.setFillWidth(true);
@@ -141,6 +146,7 @@ public class ChatWindow extends JFrame {
         if(Platform.isFxApplicationThread()){
             addMessageNode(message);
         }else{
+            // Swing 事件或其他线程进来时，切回 JavaFX 线程更新 UI。
             Platform.runLater(() -> addMessageNode(message));
         }
     }
@@ -164,6 +170,7 @@ public class ChatWindow extends JFrame {
         nameLabel.setStyle(NAME_STYLE);
 
         Label bubbleLabel=new Label(message.getContent());
+        // JavaFX 自己处理文本测量和换行，避免 Swing JTextArea 手算尺寸的问题。
         bubbleLabel.setWrapText(true);
         bubbleLabel.setMaxWidth(BUBBLE_MAX_WIDTH);
         bubbleLabel.setStyle(BUBBLE_STYLE);
@@ -177,6 +184,7 @@ public class ChatWindow extends JFrame {
         }
 
         messageBox.getChildren().add(row);
+        // 新消息加入后滚到底部，放到下一轮 JavaFX 布局后执行更稳。
         Platform.runLater(() -> scrollPane.setVvalue(1.0));
     }
 

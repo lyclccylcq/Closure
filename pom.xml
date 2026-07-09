@@ -28,6 +28,7 @@
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        <!-- JFXPanel 需要 javafx-swing，用来在 Swing JFrame 中嵌入 JavaFX Scene。 -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-swing</artifactId>
