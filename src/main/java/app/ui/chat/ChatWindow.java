@@ -11,9 +11,11 @@ import java.awt.*;
 public class ChatWindow extends JFrame {
     // JFXPanel 负责把 JavaFX Scene 嵌进现有 Swing JFrame，PetWindow 的调用方式就不用改。
     private final JFXPanel fxPanel;
+    private final SoundPlayer soundPlayer;
 
     public ChatWindow() {
         fxPanel = new JFXPanel();
+        soundPlayer = new SoundPlayer();
 
         initWindow();
 
@@ -21,6 +23,17 @@ public class ChatWindow extends JFrame {
         Platform.setImplicitExit(false);
         // JavaFX 节点必须在 JavaFX Application Thread 上创建。
         Platform.runLater(this::initFxContent);
+    }
+
+    @Override
+    public void setVisible(boolean visible){
+        boolean wasVisible=isVisible();
+        super.setVisible(visible);
+
+        // 每次聊天窗口从隐藏变成显示时播放打开提示音。
+        if(visible && !wasVisible){
+            soundPlayer.playOpen();
+        }
     }
 
     private void initWindow(){
