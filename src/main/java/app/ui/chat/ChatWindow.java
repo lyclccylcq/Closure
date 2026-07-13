@@ -46,7 +46,7 @@ public class ChatWindow extends JFrame {
     }
 
     private void initFxContent(){
-        ChatView chatView=new ChatView(new ChatService());
+        ChatView chatView=new ChatView(new ChatService(),soundPlayer);
         fxPanel.setScene(new Scene(chatView));
     }
 }
