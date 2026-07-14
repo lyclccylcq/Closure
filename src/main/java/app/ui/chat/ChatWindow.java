@@ -37,9 +37,8 @@ public class ChatWindow extends JFrame {
 
         super.setVisible(visible);
 
-        // 每次聊天窗口从隐藏变成显示时播放打开提示音，并把消息列表滚到最新位置。
+        // 每次聊天窗口从隐藏变成显示时，把消息列表滚到最新位置。
         if(visible && !wasVisible){
-            soundPlayer.playOpen();
             Platform.runLater(() -> {
                 if(chatView!=null){
                     chatView.scrollToLatestMessage();

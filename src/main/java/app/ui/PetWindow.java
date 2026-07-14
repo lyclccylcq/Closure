@@ -3,12 +3,19 @@ package app.ui;
 import app.ui.chat.ChatWindow;
 import app.util.AvatarLoader;
 
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
+import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * PetWindow 表示桌面上的桌宠窗口。
@@ -17,7 +24,7 @@ import java.awt.event.WindowEvent;
  * 2. 让桌宠窗口保持无边框、透明背景
  * 3. 让桌宠可以被鼠标拖动
  * 4. 右键显示菜单
- * 5. 双击打开聊天窗口
+ * 5. 双击 logo 打开动态模型
  * 注意：
  * PetWindow 是整个程序的主窗口。
  * ChatWindow 只是它打开的聊天窗口。
@@ -25,11 +32,17 @@ import java.awt.event.WindowEvent;
 public class PetWindow extends JFrame {
 
     /**
-     * 桌宠图标大小，
+     * 启动 logo 大小，
      * 这里设置成 64 像素，
      * 避免桌面图标看起来比普通 App 图标大太多。
      */
-    private static final int PET_SIZE = 64;
+    private static final int LOGO_SIZE = 64;
+
+    /**
+     * 动态模型显示大小。
+     * 点击 logo 之后，窗口会从 LOGO_SIZE 放大到这个尺寸。
+     */
+    private static final int MODEL_SIZE = 220;
 
     /**
      * 桌宠图片路径。
@@ -42,6 +55,25 @@ public class PetWindow extends JFrame {
     private static final String PET_IMAGE_PATH = "/images/closure-logo.png";
 
     /**
+     * 打开模型时播放的语音路径。
+     */
+    private static final String OPEN_AUDIO_PATH = "/audio/open.wav";
+
+    /**
+     * 桌宠动态模型帧目录。
+     * webm 已经被拆成 PNG 帧：
+     * src/main/resources/models/closure_frames/frame_001.png
+     * 程序启动时先显示 logo，点击 logo 后再循环播放这些 PNG。
+     */
+    private static final String PET_FRAME_DIRECTORY = "/models/closure_frames";
+
+    /**
+     * PNG 帧播放速度。
+     * 当前帧资源按 12fps 从 webm 抽取，所以每帧约 83ms。
+     */
+    private static final int PET_FRAME_DELAY_MILLIS = 83;
+
+    /**
      * 聊天窗口对象。
      * 这里不直接 new ChatWindow。
      * 而是在用户第一次双击或点击菜单时再创建。
@@ -50,10 +82,28 @@ public class PetWindow extends JFrame {
     private ChatWindow chatWindow;
 
     /**
+     * 动态桌宠组件。
+     * 如果当前没有加载 PNG 帧动画，它会保持为 null。
+     */
+    private PetAnimationPanel petAnimationPanel;
+
+    /**
+     * 桌宠组件共用的鼠标监听器。
+     * logo 和动态模型都使用它，所以切换组件后拖拽、右键菜单仍然可用。
+     */
+    private MouseAdapter petMouseAdapter;
+
+    /**
      * 记录鼠标按下时的位置。
      * 用于计算拖动桌宠时窗口应该移动到哪里。
      */
     private Point mousePressedPoint;
+
+    /**
+     * 记录鼠标按下时的屏幕位置。
+     * 用来区分“点击打开模型”和“拖动移动窗口”。
+     */
+    private Point mousePressedScreenPoint;
 
     /**
      * 右键菜单。
@@ -105,7 +155,7 @@ public class PetWindow extends JFrame {
         setBackground(new Color(0, 0, 0, 0));
 
         // 设置桌宠窗口大小
-        setSize(PET_SIZE, PET_SIZE);
+        setSize(LOGO_SIZE, LOGO_SIZE);
 
         // 设置桌宠初始位置
         setLocation(1000, 500);
@@ -122,31 +172,18 @@ public class PetWindow extends JFrame {
      * 初始化桌宠图标。
      */
     private void initPetIcon() {
-        // 创建一个 JLabel 用来显示桌宠图片
-        JLabel petLabel = new JLabel();
-
-        /*
-         * 加载并缩放桌宠图片。
-         *
-         * ImageLoader.loadIcon 会从 resources 中读取图片，
-         * 然后缩放到 PET_SIZE x PET_SIZE。
-         */
+        // 程序启动时固定先显示 logo；点击 logo 后再打开动态模型。
         ImageIcon icon = AvatarLoader.loadAvatar(
                 PET_IMAGE_PATH,
-                PET_SIZE,
-                PET_SIZE
+                LOGO_SIZE,
+                LOGO_SIZE
         );
 
-        // 把图片设置到 JLabel 上
-        petLabel.setIcon(icon);
-
-        // 让图片在 JLabel 中水平居中
+        JLabel petLabel = new JLabel(icon);
         petLabel.setHorizontalAlignment(SwingConstants.CENTER);
-
-        // 让图片在 JLabel 中垂直居中
         petLabel.setVerticalAlignment(SwingConstants.CENTER);
 
-        // 把图标组件加入窗口
+        // 把桌宠组件加入窗口
         add(petLabel);
 
         /*
@@ -158,7 +195,7 @@ public class PetWindow extends JFrame {
          * 3. 鼠标松开
          * 4. 鼠标点击
          */
-        MouseAdapter mouseAdapter = new MouseAdapter() {
+        petMouseAdapter = new MouseAdapter() {
 
             /**
              * 鼠标按下时触发。
@@ -172,6 +209,7 @@ public class PetWindow extends JFrame {
                  * 不是屏幕上的绝对位置。
                  */
                 mousePressedPoint = event.getPoint();
+                mousePressedScreenPoint = event.getLocationOnScreen();
 
                 /*
                  * 判断是否触发右键菜单。
@@ -228,22 +266,107 @@ public class PetWindow extends JFrame {
             @Override
             public void mouseClicked(MouseEvent event) {
                 /*
-                 * 判断是否是鼠标左键双击。
-                 *
-                 * 如果是，就打开聊天窗口。
+                 * logo 阶段左键双击打开动态模型，并同步播放 open 语音。
+                 * 模型已经打开后，左键双击继续保留为打开聊天窗口。
                  */
                 if (SwingUtilities.isLeftMouseButton(event)
                         && event.getClickCount() == 2) {
+                    if (petAnimationPanel == null && isClickWithoutDrag(event)) {
+                        playOpenVoice();
+                        openPetModel();
+                        return;
+                    }
+
                     openChatWindow();
                 }
             }
         };
 
-        // 给桌宠图标添加鼠标点击监听
-        petLabel.addMouseListener(mouseAdapter);
+        // 给桌宠组件添加鼠标点击监听
+        addPetMouseListeners(petLabel);
 
-        // 给桌宠图标添加鼠标拖动监听
-        petLabel.addMouseMotionListener(mouseAdapter);
+    }
+
+    private void addPetMouseListeners(Component component) {
+        component.addMouseListener(petMouseAdapter);
+        component.addMouseMotionListener(petMouseAdapter);
+
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                addPetMouseListeners(child);
+            }
+        }
+    }
+
+    private void openPetModel() {
+        if (PetWindow.class.getResource(PET_FRAME_DIRECTORY + "/frame_001.png") == null) {
+            System.out.println("模型 PNG 帧不存在：" + PET_FRAME_DIRECTORY);
+            return;
+        }
+
+        ImageIcon fallbackIcon = AvatarLoader.loadAvatar(
+                PET_IMAGE_PATH,
+                MODEL_SIZE,
+                MODEL_SIZE
+        );
+
+        petAnimationPanel = new PetAnimationPanel(
+                PET_FRAME_DIRECTORY,
+                MODEL_SIZE,
+                MODEL_SIZE,
+                fallbackIcon,
+                PET_FRAME_DELAY_MILLIS
+        );
+        addPetMouseListeners(petAnimationPanel);
+
+        Point currentLocation = getLocation();
+        int oldHeight = getHeight();
+
+        getContentPane().removeAll();
+        add(petAnimationPanel);
+        setSize(MODEL_SIZE, MODEL_SIZE);
+        setLocation(currentLocation.x, currentLocation.y - MODEL_SIZE + oldHeight);
+        revalidate();
+        validate();
+        repaint();
+    }
+
+    private boolean isClickWithoutDrag(MouseEvent event) {
+        if (mousePressedScreenPoint == null) {
+            return true;
+        }
+
+        Point releasedPoint = event.getLocationOnScreen();
+        int moveX = Math.abs(releasedPoint.x - mousePressedScreenPoint.x);
+        int moveY = Math.abs(releasedPoint.y - mousePressedScreenPoint.y);
+        return moveX <= 3 && moveY <= 3;
+    }
+
+    private void playOpenVoice() {
+        Thread soundThread = new Thread(() -> {
+            try (InputStream inputStream = PetWindow.class.getResourceAsStream(OPEN_AUDIO_PATH)) {
+                if (inputStream == null) {
+                    System.out.println("语音路径不存在：" + OPEN_AUDIO_PATH);
+                    return;
+                }
+
+                try (BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream)) {
+                    Clip clip = AudioSystem.getClip();
+                    clip.open(AudioSystem.getAudioInputStream(bufferedInputStream));
+                    clip.addLineListener(event -> {
+                        if (event.getType() == javax.sound.sampled.LineEvent.Type.STOP) {
+                            clip.close();
+                        }
+                    });
+                    clip.start();
+                }
+            } catch (IOException | LineUnavailableException | UnsupportedAudioFileException exception) {
+                System.out.println("open 语音播放失败：" + exception.getMessage());
+            }
+        }, "open-voice-player");
+
+        soundThread.setDaemon(true);
+        soundThread.start();
     }
 
     /**
@@ -263,7 +386,7 @@ public class PetWindow extends JFrame {
         chatItem.addActionListener(e -> openChatWindow());
 
         // 点击“下线”时退出程序
-        exitItem.addActionListener(e -> System.exit(0));
+        exitItem.addActionListener(e -> exitApplication());
 
         // 把“通讯”加入菜单
         popupMenu.add(chatItem);
@@ -377,5 +500,12 @@ public class PetWindow extends JFrame {
         if (chatWindow != null) {
             chatWindow.setAlwaysOnTop(false);
         }
+    }
+
+    private void exitApplication() {
+        if (petAnimationPanel != null) {
+            petAnimationPanel.dispose();
+        }
+        System.exit(0);
     }
 }
