@@ -12,6 +12,7 @@ public class ChatWindow extends JFrame {
     // JFXPanel 负责把 JavaFX Scene 嵌进现有 Swing JFrame，PetWindow 的调用方式就不用改。
     private final JFXPanel fxPanel;
     private final SoundPlayer soundPlayer;
+    private ChatView chatView;
 
     public ChatWindow() {
         fxPanel = new JFXPanel();
@@ -28,11 +29,22 @@ public class ChatWindow extends JFrame {
     @Override
     public void setVisible(boolean visible){
         boolean wasVisible=isVisible();
+
+        // 每次从隐藏变成显示前重新居中，避免 PetWindow 或其他调用方之前改过窗口位置。
+        if(visible && !wasVisible){
+            setLocationRelativeTo(null);
+        }
+
         super.setVisible(visible);
 
-        // 每次聊天窗口从隐藏变成显示时播放打开提示音。
+        // 每次聊天窗口从隐藏变成显示时播放打开提示音，并把消息列表滚到最新位置。
         if(visible && !wasVisible){
             soundPlayer.playOpen();
+            Platform.runLater(() -> {
+                if(chatView!=null){
+                    chatView.scrollToLatestMessage();
+                }
+            });
         }
     }
 
@@ -46,7 +58,7 @@ public class ChatWindow extends JFrame {
     }
 
     private void initFxContent(){
-        ChatView chatView=new ChatView(new ChatService(),soundPlayer);
+        chatView=new ChatView(new ChatService(),soundPlayer);
         fxPanel.setScene(new Scene(chatView));
     }
 }
