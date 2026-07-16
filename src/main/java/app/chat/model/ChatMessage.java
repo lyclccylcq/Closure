@@ -1,4 +1,4 @@
-package app.model;
+package app.chat.model;
 
 public class ChatMessage {
 

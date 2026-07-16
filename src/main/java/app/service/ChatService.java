@@ -1,6 +1,6 @@
 package app.service;
 
-import app.model.ChatReply;
+import app.chat.model.ChatReply;
 
 public class ChatService {
 

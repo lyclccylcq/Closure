@@ -1,6 +1,8 @@
 package app.ui;
 
 import app.ui.chat.ChatWindow;
+import app.ui.pet.PetAction;
+import app.ui.pet.PetAnimationPanel;
 import app.util.AvatarLoader;
 
 import javax.sound.sampled.AudioSystem;
@@ -58,20 +60,6 @@ public class PetWindow extends JFrame {
      * 打开模型时播放的语音路径。
      */
     private static final String OPEN_AUDIO_PATH = "/audio/open.wav";
-
-    /**
-     * 桌宠动态模型帧目录。
-     * webm 已经被拆成 PNG 帧：
-     * src/main/resources/models/closure_frames/frame_001.png
-     * 程序启动时先显示 logo，点击 logo 后再循环播放这些 PNG。
-     */
-    private static final String PET_FRAME_DIRECTORY = "/models/closure_frames";
-
-    /**
-     * PNG 帧播放速度。
-     * 当前帧资源按 12fps 从 webm 抽取，所以每帧约 83ms。
-     */
-    private static final int PET_FRAME_DELAY_MILLIS = 83;
 
     /**
      * 聊天窗口对象。
@@ -299,8 +287,8 @@ public class PetWindow extends JFrame {
     }
 
     private void openPetModel() {
-        if (PetWindow.class.getResource(PET_FRAME_DIRECTORY + "/frame_001.png") == null) {
-            System.out.println("模型 PNG 帧不存在：" + PET_FRAME_DIRECTORY);
+        if (!PetAction.OPEN.hasFrames()) {
+            System.out.println("模型 PNG 帧不存在：" + PetAction.OPEN.frameDirectory());
             return;
         }
 
@@ -311,11 +299,10 @@ public class PetWindow extends JFrame {
         );
 
         petAnimationPanel = new PetAnimationPanel(
-                PET_FRAME_DIRECTORY,
+                PetAction.OPEN,
                 MODEL_SIZE,
                 MODEL_SIZE,
-                fallbackIcon,
-                PET_FRAME_DELAY_MILLIS
+                fallbackIcon
         );
         addPetMouseListeners(petAnimationPanel);
 

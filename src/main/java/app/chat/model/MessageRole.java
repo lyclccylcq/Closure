@@ -1,4 +1,4 @@
-package app.model;
+package app.chat.model;
 
 public enum MessageRole {
     USER("我","/images/npc_001_doctor.png",true),
