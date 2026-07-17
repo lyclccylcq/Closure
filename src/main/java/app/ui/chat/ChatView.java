@@ -4,13 +4,18 @@ import app.chat.model.ChatMessage;
 import app.chat.model.ChatReply;
 import app.chat.model.MessageRole;
 import app.service.ChatService;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
 final class ChatView extends BorderPane {
+    private static final Duration STREAM_INTERVAL=Duration.millis(60);
+
     private final ChatService chatService;
     private final SoundPlayer soundPlayer;
     private final VBox messageBox;
@@ -40,14 +45,14 @@ final class ChatView extends BorderPane {
         setCenter(scrollPane);
         setBottom(new ChatInputBar(this::handleUserMessage));
 
-        addPetMessage("给，咖啡。看你那黑眼圈，昨晚又熬夜了吧？");
+        addStreamingPetMessage("给，咖啡。看你那黑眼圈，昨晚又熬夜了吧？");
         soundPlayer.playVoice("/audio/chatstart.wav");
     }
 
     private void handleUserMessage(String userText) {
         addUserMessage(userText);
         ChatReply reply=chatService.getReply(userText);
-        addPetMessage(reply.getText());
+        addStreamingPetMessage(reply.getText());
 
         // 回复对象里带了语音路径；没有配置语音时，SoundPlayer 不会播放任何东西。
         if(reply.hasVoice()){
@@ -59,13 +64,37 @@ final class ChatView extends BorderPane {
         addMessage(new ChatMessage(MessageRole.USER,content));
     }
 
-    private void addPetMessage(String content) {
-        addMessage(new ChatMessage(MessageRole.CLOSURE,content));
+    private void addStreamingPetMessage(String content) {
+        MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,""));
+        streamTextInto(bubble,content);
     }
 
-    private void addMessage(ChatMessage message){
-        messageBox.getChildren().add(new MessageBubble(message));
+    private MessageBubble addMessage(ChatMessage message){
+        MessageBubble bubble=new MessageBubble(message);
+        messageBox.getChildren().add(bubble);
         scrollToLatestMessage();
+        return bubble;
+    }
+
+    private void streamTextInto(MessageBubble bubble,String content){
+        int[] codePoints=content.codePoints().toArray();
+        if(codePoints.length==0){
+            bubble.setContent("");
+            return;
+        }
+
+        StringBuilder visibleText=new StringBuilder();
+        int[] nextIndex={0};
+
+        Timeline timeline=new Timeline(new KeyFrame(STREAM_INTERVAL,event -> {
+            visibleText.appendCodePoint(codePoints[nextIndex[0]]);
+            nextIndex[0]++;
+            bubble.setContent(visibleText.toString());
+            scrollToLatestMessage();
+        }));
+
+        timeline.setCycleCount(codePoints.length);
+        timeline.play();
     }
 
     void scrollToLatestMessage(){

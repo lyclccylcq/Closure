@@ -12,6 +12,8 @@ import javafx.scene.layout.VBox;
 import java.net.URL;
 
 final class MessageBubble extends HBox {
+    private final Label bubbleLabel;
+
     MessageBubble(ChatMessage message){
         super(8);
         boolean isUser=message.getRole().isUser();
@@ -20,6 +22,7 @@ final class MessageBubble extends HBox {
         setAlignment(isUser ? Pos.TOP_RIGHT : Pos.TOP_LEFT);
 
         ImageView avatarView=createAvatarView(message.getRole());
+        bubbleLabel=createBubbleLabel(message.getContent());
         VBox contentColumn=createContentColumn(message,isUser);
 
         if(isUser){
@@ -36,14 +39,21 @@ final class MessageBubble extends HBox {
         Label nameLabel=new Label(message.getRole().getDisplayName());
         nameLabel.setStyle(ChatStyles.NAME_STYLE);
 
-        Label bubbleLabel=new Label(message.getContent());
-        // JavaFX 自己处理文本测量和换行，避免 Swing JTextArea 手算尺寸的问题。
-        bubbleLabel.setWrapText(true);
-        bubbleLabel.setMaxWidth(ChatStyles.BUBBLE_MAX_WIDTH);
-        bubbleLabel.setStyle(ChatStyles.BUBBLE_STYLE);
-
         contentColumn.getChildren().addAll(nameLabel,bubbleLabel);
         return contentColumn;
+    }
+
+    void setContent(String content){
+        bubbleLabel.setText(content);
+    }
+
+    private Label createBubbleLabel(String content){
+        Label label=new Label(content);
+        // JavaFX 自己处理文本测量和换行，避免 Swing JTextArea 手算尺寸的问题。
+        label.setWrapText(true);
+        label.setMaxWidth(ChatStyles.BUBBLE_MAX_WIDTH);
+        label.setStyle(ChatStyles.BUBBLE_STYLE);
+        return label;
     }
 
     private ImageView createAvatarView(MessageRole role){
