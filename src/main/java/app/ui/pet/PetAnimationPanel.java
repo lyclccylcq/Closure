@@ -1,6 +1,7 @@
 package app.ui.pet;
 
 import javax.swing.*;
+import java.awt.Image;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.net.URL;
@@ -12,6 +13,8 @@ import java.util.Map;
 public final class PetAnimationPanel extends JPanel {
     private final JLabel frameLabel;
     private final Icon fallbackIcon;
+    private final int targetWidth;
+    private final int targetHeight;
     private final Map<PetAction, List<Icon>> frameCache = new EnumMap<>(PetAction.class);
     private Timer animationTimer;
     private PetAction currentAction;
@@ -20,6 +23,8 @@ public final class PetAnimationPanel extends JPanel {
     public PetAnimationPanel(PetAction initialAction, int width, int height, Icon fallbackIcon) {
         super(new BorderLayout());
         this.fallbackIcon = fallbackIcon;
+        targetWidth = width;
+        targetHeight = height;
 
         setOpaque(false);
         setPreferredSize(new Dimension(width, height));
@@ -65,7 +70,13 @@ public final class PetAnimationPanel extends JPanel {
                 break;
             }
 
-            loadedFrames.add(new ImageIcon(frameUrl));
+            ImageIcon originalIcon = new ImageIcon(frameUrl);
+            Image scaledImage = originalIcon.getImage().getScaledInstance(
+                    targetWidth,
+                    targetHeight,
+                    Image.SCALE_SMOOTH
+            );
+            loadedFrames.add(new ImageIcon(scaledImage));
         }
 
         if (loadedFrames.isEmpty()) {

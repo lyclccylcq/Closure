@@ -3,6 +3,7 @@ package app.ui;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
+import app.ui.quick.QuickChatWindow;
 import app.util.AvatarLoader;
 
 import javax.sound.sampled.AudioSystem;
@@ -44,7 +45,7 @@ public class PetWindow extends JFrame {
      * 动态模型显示大小。
      * 点击 logo 之后，窗口会从 LOGO_SIZE 放大到这个尺寸。
      */
-    private static final int MODEL_SIZE = 220;
+    private static final int MODEL_SIZE = 280;
 
     /**
      * 桌宠图片路径。
@@ -68,6 +69,12 @@ public class PetWindow extends JFrame {
      * 这样可以避免程序一启动就创建聊天窗口。
      */
     private ChatWindow chatWindow;
+
+    /**
+     * 贴在桌宠旁边的轻量问答窗口。
+     * 它和完整聊天窗口分开，适合临时问一句、看一句回复。
+     */
+    private QuickChatWindow quickChatWindow;
 
     /**
      * 动态桌宠组件。
@@ -235,6 +242,7 @@ public class PetWindow extends JFrame {
 
                 // 移动桌宠窗口
                 setLocation(newX, newY);
+                moveQuickChatWindowNextToPet();
             }
 
             /**
@@ -316,6 +324,7 @@ public class PetWindow extends JFrame {
         revalidate();
         validate();
         repaint();
+        moveQuickChatWindowNextToPet();
     }
 
     private boolean isClickWithoutDrag(MouseEvent event) {
@@ -366,14 +375,23 @@ public class PetWindow extends JFrame {
         // 创建“通讯”菜单项
         JMenuItem chatItem = new JMenuItem("通讯");
 
+        // 创建“对白问答”菜单项
+        JMenuItem quickChatItem = new JMenuItem("对白问答");
+
         // 创建“下线”菜单项
         JMenuItem exitItem = new JMenuItem("下线");
 
         // 点击“通讯”时打开聊天窗口
         chatItem.addActionListener(e -> openChatWindow());
 
+        // 点击“对白问答”时打开贴在桌宠下端偏右的 galgame 式对话框
+        quickChatItem.addActionListener(e -> openQuickChatWindow());
+
         // 点击“下线”时退出程序
         exitItem.addActionListener(e -> exitApplication());
+
+        // 把“对白问答”加入菜单
+        popupMenu.add(quickChatItem);
 
         // 把“通讯”加入菜单
         popupMenu.add(chatItem);
@@ -489,9 +507,26 @@ public class PetWindow extends JFrame {
         }
     }
 
+    private void openQuickChatWindow() {
+        if (quickChatWindow == null) {
+            quickChatWindow = new QuickChatWindow(this);
+        }
+
+        quickChatWindow.showNextTo(getBounds());
+    }
+
+    private void moveQuickChatWindowNextToPet() {
+        if (quickChatWindow != null) {
+            quickChatWindow.moveNextTo(getBounds());
+        }
+    }
+
     private void exitApplication() {
         if (petAnimationPanel != null) {
             petAnimationPanel.dispose();
+        }
+        if (quickChatWindow != null) {
+            quickChatWindow.dispose();
         }
         System.exit(0);
     }
