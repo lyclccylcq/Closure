@@ -324,7 +324,7 @@ public class PetWindow extends JFrame {
         revalidate();
         validate();
         repaint();
-        moveQuickChatWindowNextToPet();
+        showQuickChatWindow();
     }
 
     private boolean isClickWithoutDrag(MouseEvent event) {
@@ -375,23 +375,14 @@ public class PetWindow extends JFrame {
         // 创建“通讯”菜单项
         JMenuItem chatItem = new JMenuItem("通讯");
 
-        // 创建“对白问答”菜单项
-        JMenuItem quickChatItem = new JMenuItem("对白问答");
-
         // 创建“下线”菜单项
         JMenuItem exitItem = new JMenuItem("下线");
 
         // 点击“通讯”时打开聊天窗口
         chatItem.addActionListener(e -> openChatWindow());
 
-        // 点击“对白问答”时打开贴在桌宠下端偏右的 galgame 式对话框
-        quickChatItem.addActionListener(e -> openQuickChatWindow());
-
         // 点击“下线”时退出程序
         exitItem.addActionListener(e -> exitApplication());
-
-        // 把“对白问答”加入菜单
-        popupMenu.add(quickChatItem);
 
         // 把“通讯”加入菜单
         popupMenu.add(chatItem);
@@ -507,7 +498,7 @@ public class PetWindow extends JFrame {
         }
     }
 
-    private void openQuickChatWindow() {
+    private void showQuickChatWindow() {
         if (quickChatWindow == null) {
             quickChatWindow = new QuickChatWindow(this);
         }
