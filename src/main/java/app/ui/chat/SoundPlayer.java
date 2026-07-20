@@ -9,7 +9,7 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
-final class SoundPlayer {
+public final class SoundPlayer {
     private static final String SEND_SOUND="/audio/send.wav";
     private static final String RECEIVE_SOUND="/audio/receive.wav";
     private static final String CLICK_SOUND="/audio/click.wav";
@@ -19,6 +19,9 @@ final class SoundPlayer {
     private MediaPlayer currentVoicePlayer;
     private double effectVolume=0.55;
     private double voiceVolume=0.9;
+
+    public SoundPlayer(){
+    }
 
     void playSend(){
         playEffect(SEND_SOUND);
@@ -36,7 +39,7 @@ final class SoundPlayer {
         playEffect(OPEN_SOUND);
     }
 
-    void playVoice(String resourcePath){
+    public void playVoice(String resourcePath){
         if(resourcePath==null || resourcePath.isBlank()){
             return;
         }
@@ -57,7 +60,7 @@ final class SoundPlayer {
         });
     }
 
-    void stopVoice(){
+    public void stopVoice(){
         runOnFxThread(this::stopVoiceNow);
     }
 

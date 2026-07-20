@@ -500,7 +500,7 @@ public class PetWindow extends JFrame {
 
     private void showQuickChatWindow() {
         if (quickChatWindow == null) {
-            quickChatWindow = new QuickChatWindow(this);
+            quickChatWindow = new QuickChatWindow();
         }
 
         quickChatWindow.showNextTo(getBounds());
