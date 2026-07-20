@@ -5,6 +5,8 @@ module com.example.closure {
     requires javafx.swing;
     // SoundPlayer 使用 JavaFX Media/AudioClip 播放提示音和配音。
     requires javafx.media;
+    // AI 模型客户端使用 JDK 自带 HttpClient 调用 OpenAI-compatible 接口。
+    requires java.net.http;
     requires java.desktop;
 
 
