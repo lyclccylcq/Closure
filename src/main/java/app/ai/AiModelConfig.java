@@ -1,17 +1,28 @@
 package app.ai;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Properties;
 
 /**
  * AI 模型连接配置。
- * 这里优先从环境变量读取，避免把 API Key 写进代码仓库。
+ * 读取顺序：
+ * 1. 优先读取环境变量，适合部署或临时调试；
+ * 2. 环境变量没有设置时，再读取 config/local-ai.properties；
+ * 3. endpoint 仍然没有设置时，使用 OpenAI-compatible 默认地址。
+ *
+ * 真正包含 API Key 的 local-ai.properties 已加入 .gitignore，不要提交到仓库。
  */
 public final class AiModelConfig {
     public static final String ENV_ENDPOINT="CLOSURE_AI_ENDPOINT";
     public static final String ENV_API_KEY="CLOSURE_AI_API_KEY";
     public static final String ENV_MODEL="CLOSURE_AI_MODEL";
 
+    private static final Path LOCAL_CONFIG_PATH=Path.of("config","local-ai.properties");
     private static final String DEFAULT_ENDPOINT="https://api.openai.com/v1/chat/completions";
     private static final Duration DEFAULT_CONNECT_TIMEOUT=Duration.ofSeconds(10);
     private static final Duration DEFAULT_REQUEST_TIMEOUT=Duration.ofSeconds(90);
@@ -44,20 +55,29 @@ public final class AiModelConfig {
     }
 
     /**
-     * 从环境变量创建配置。
+     * 从环境变量和本地私有配置文件创建配置。
      *
-     * CLOSURE_AI_ENDPOINT 可选，默认使用 OpenAI-compatible chat completions 地址。
-     * CLOSURE_AI_MODEL 必填。
-     * CLOSURE_AI_API_KEY 对本地模型可选；如果连接官方 OpenAI 地址则应填写。
+     * 配置文件路径：config/local-ai.properties
+     * 文件格式示例：
+     * CLOSURE_AI_API_KEY=你的 key
+     * CLOSURE_AI_MODEL=gpt-4.1-mini
+     * CLOSURE_AI_ENDPOINT=https://api.openai.com/v1/chat/completions
      */
     public static AiModelConfig fromEnvironment(){
-        String endpointText=envOrDefault(ENV_ENDPOINT,DEFAULT_ENDPOINT);
-        String apiKey=System.getenv(ENV_API_KEY);
-        String model=System.getenv(ENV_MODEL);
+        Properties localProperties=loadLocalProperties();
+
+        String endpointText=configValueOrDefault(ENV_ENDPOINT,localProperties,DEFAULT_ENDPOINT);
+        String apiKey=configValue(ENV_API_KEY,localProperties);
+        String model=configValue(ENV_MODEL,localProperties);
         URI endpoint=URI.create(endpointText);
 
         if(isOpenAiEndpoint(endpoint) && (apiKey==null || apiKey.isBlank())){
-            throw new AiModelException("连接 OpenAI endpoint 时需要设置环境变量 " + ENV_API_KEY);
+            throw new AiModelException(
+                    "连接 OpenAI endpoint 时需要配置 "
+                            + ENV_API_KEY
+                            + "，可以写在环境变量或 "
+                            + LOCAL_CONFIG_PATH
+            );
         }
 
         return new AiModelConfig(
@@ -93,12 +113,40 @@ public final class AiModelConfig {
         return apiKey!=null && !apiKey.isBlank();
     }
 
-    private static String envOrDefault(String name,String defaultValue){
-        String value=System.getenv(name);
+    private static Properties loadLocalProperties(){
+        Properties properties=new Properties();
+        if(!Files.exists(LOCAL_CONFIG_PATH)){
+            return properties;
+        }
+
+        try(var reader=Files.newBufferedReader(LOCAL_CONFIG_PATH, StandardCharsets.UTF_8)){
+            properties.load(reader);
+            return properties;
+        }catch(IOException exception){
+            throw new AiModelException("读取本地 AI 配置失败：" + LOCAL_CONFIG_PATH,exception);
+        }
+    }
+
+    private static String configValue(String name,Properties localProperties){
+        String environmentValue=System.getenv(name);
+        if(environmentValue!=null && !environmentValue.isBlank()){
+            return environmentValue.trim();
+        }
+
+        String localValue=localProperties.getProperty(name);
+        if(localValue!=null && !localValue.isBlank()){
+            return localValue.trim();
+        }
+
+        return null;
+    }
+
+    private static String configValueOrDefault(String name,Properties localProperties,String defaultValue){
+        String value=configValue(name,localProperties);
         if(value==null || value.isBlank()){
             return defaultValue;
         }
-        return value.trim();
+        return value;
     }
 
     private static String blankToNull(String value){

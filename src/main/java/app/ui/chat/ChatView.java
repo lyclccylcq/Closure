@@ -1,9 +1,9 @@
 package app.ui.chat;
 
 import app.chat.model.ChatMessage;
-import app.chat.model.ChatReply;
 import app.chat.model.MessageRole;
 import app.service.ChatService;
+import app.service.ChatStreamListener;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -51,13 +51,8 @@ final class ChatView extends BorderPane {
 
     private void handleUserMessage(String userText) {
         addUserMessage(userText);
-        ChatReply reply=chatService.getReply(userText);
-        addStreamingPetMessage(reply.getText());
-
-        // 回复对象里带了语音路径；没有配置语音时，SoundPlayer 不会播放任何东西。
-        if(reply.hasVoice()){
-            soundPlayer.playVoice(reply.getVoicePath());
-        }
+        MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,"接线中..."));
+        streamReplyInto(bubble,userText);
     }
 
     private void addUserMessage(String content) {
@@ -74,6 +69,45 @@ final class ChatView extends BorderPane {
         messageBox.getChildren().add(bubble);
         scrollToLatestMessage();
         return bubble;
+    }
+
+    private void streamReplyInto(MessageBubble bubble,String userText){
+        StringBuilder replyText=new StringBuilder();
+        boolean[] receivedToken={false};
+
+        chatService.streamReply(userText,new ChatStreamListener() {
+            @Override
+            public void onToken(String token){
+                Platform.runLater(() -> {
+                    if(!receivedToken[0]){
+                        receivedToken[0]=true;
+                        replyText.setLength(0);
+                    }
+
+                    replyText.append(token);
+                    bubble.setContent(replyText.toString());
+                    scrollToLatestMessage();
+                });
+            }
+
+            @Override
+            public void onComplete(){
+                Platform.runLater(() -> {
+                    if(!receivedToken[0]){
+                        bubble.setContent("工程部暂时没有收到模型回复。");
+                    }
+                    scrollToLatestMessage();
+                });
+            }
+
+            @Override
+            public void onError(Throwable error){
+                Platform.runLater(() -> {
+                    bubble.setContent("模型连接失败：" + error.getMessage());
+                    scrollToLatestMessage();
+                });
+            }
+        });
     }
 
     private void streamTextInto(MessageBubble bubble,String content){

@@ -1,8 +1,7 @@
 package app.ui.quick;
 
-import app.chat.model.ChatReply;
 import app.service.ChatService;
-import app.ui.chat.SoundPlayer;
+import app.service.ChatStreamListener;
 import javafx.animation.KeyFrame;
 import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
@@ -38,7 +37,6 @@ public class QuickChatWindow {
     private static boolean fxStarted;
 
     private final ChatService chatService;
-    private final SoundPlayer soundPlayer;
     private Stage stage;
     private Label answerLabel;
     private TextField inputField;
@@ -52,7 +50,6 @@ public class QuickChatWindow {
 
     public QuickChatWindow(){
         chatService=new ChatService();
-        soundPlayer=new SoundPlayer();
         runOnFxThread(this::initStage);
     }
 
@@ -84,7 +81,6 @@ public class QuickChatWindow {
             if(segmentPause!=null){
                 segmentPause.stop();
             }
-            soundPlayer.stopVoice();
             if(stage!=null){
                 stage.close();
             }
@@ -259,14 +255,25 @@ public class QuickChatWindow {
         }
 
         inputField.clear();
+        startModelRequest();
 
-        ChatReply reply=chatService.getReply(question);
-        answerSegments=splitAnswer(reply.getText());
-        nextSegmentIndex=0;
-        streamNextAnswerSegment();
-        if(reply.hasVoice()){
-            soundPlayer.playVoice(reply.getVoicePath());
-        }
+        StringBuilder replyText=new StringBuilder();
+        chatService.streamReply(question,new ChatStreamListener() {
+            @Override
+            public void onToken(String token){
+                replyText.append(token);
+            }
+
+            @Override
+            public void onComplete(){
+                runOnFxThread(() -> showCollectedModelReply(replyText.toString()));
+            }
+
+            @Override
+            public void onError(Throwable error){
+                runOnFxThread(() -> showModelError(error));
+            }
+        });
     }
 
     private boolean hasPendingSegment(){
@@ -275,6 +282,40 @@ public class QuickChatWindow {
 
     private boolean isAnswerBusy(){
         return streamingAnswer || waitingForNextSegment || hasPendingSegment();
+    }
+
+    private void startModelRequest(){
+        if(streamTimeline!=null){
+            streamTimeline.stop();
+        }
+        if(segmentPause!=null){
+            segmentPause.stop();
+        }
+
+        answerSegments=List.of();
+        nextSegmentIndex=0;
+        streamingAnswer=true;
+        waitingForNextSegment=false;
+        answerLabel.setText("接线中...");
+        updateInputState();
+    }
+
+    private void showCollectedModelReply(String replyText){
+        streamingAnswer=false;
+        waitingForNextSegment=false;
+        answerSegments=splitAnswer(replyText);
+        nextSegmentIndex=0;
+        streamNextAnswerSegment();
+    }
+
+    private void showModelError(Throwable error){
+        streamingAnswer=false;
+        waitingForNextSegment=false;
+        answerSegments=List.of();
+        nextSegmentIndex=0;
+        answerLabel.setText("模型连接失败：" + error.getMessage());
+        updateInputState();
+        inputField.requestFocus();
     }
 
     private void streamNextAnswerSegment(){

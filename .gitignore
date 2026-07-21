@@ -36,3 +36,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Local AI Secrets ###
+config/local-ai.properties
