@@ -11,6 +11,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -22,6 +23,7 @@ import javafx.stage.StageStyle;
 import javafx.util.Duration;
 
 import java.awt.Rectangle;
+import java.util.ArrayList;
 import java.util.List;
 
 public class QuickChatWindow {
@@ -30,7 +32,7 @@ public class QuickChatWindow {
     private static final int WINDOW_HEIGHT=132;
     private static final int DIALOG_BOTTOM_OVERLAP=48;
     private static final int DIALOG_RIGHT_SHIFT=56;
-    private static final int MAX_SINGLE_SEGMENT_CODE_POINTS=52;
+    private static final int MAX_SEGMENT_CODE_POINTS=44;
     private static final Duration STREAM_INTERVAL=Duration.millis(60);
     private static final Duration SEGMENT_PAUSE=Duration.millis(520);
 
@@ -47,6 +49,7 @@ public class QuickChatWindow {
     private int nextSegmentIndex;
     private boolean streamingAnswer;
     private boolean waitingForNextSegment;
+    private volatile int requestGeneration;
 
     public QuickChatWindow(){
         chatService=new ChatService();
@@ -74,15 +77,29 @@ public class QuickChatWindow {
     }
 
     public void dispose(){
+        requestGeneration++;
         runOnFxThread(() -> {
-            if(streamTimeline!=null){
-                streamTimeline.stop();
-            }
-            if(segmentPause!=null){
-                segmentPause.stop();
-            }
+            stopCurrentPresentation();
             if(stage!=null){
                 stage.close();
+            }
+        });
+    }
+
+    public void hideAndStop(){
+        requestGeneration++;
+        runOnFxThread(() -> {
+            stopCurrentPresentation();
+            answerSegments=List.of();
+            nextSegmentIndex=0;
+            streamingAnswer=false;
+            waitingForNextSegment=false;
+            if(answerLabel!=null){
+                answerLabel.setText("工程部可露希尔在线");
+            }
+            updateInputState();
+            if(stage!=null){
+                stage.hide();
             }
         });
     }
@@ -137,6 +154,8 @@ public class QuickChatWindow {
     private BorderPane createContent(){
         answerLabel=new Label("工程部可露希尔在线");
         answerLabel.setWrapText(true);
+        answerLabel.setTextOverrun(OverrunStyle.CLIP);
+        answerLabel.setEllipsisString("");
         answerLabel.setMaxWidth(Double.MAX_VALUE);
         answerLabel.setMinHeight(58);
         answerLabel.setStyle("""
@@ -258,20 +277,33 @@ public class QuickChatWindow {
         startModelRequest();
 
         StringBuilder replyText=new StringBuilder();
+        int requestId=++requestGeneration;
         chatService.streamReply(question,new ChatStreamListener() {
             @Override
             public void onToken(String token){
+                if(requestId!=requestGeneration){
+                    return;
+                }
+
                 replyText.append(token);
             }
 
             @Override
             public void onComplete(){
-                runOnFxThread(() -> showCollectedModelReply(replyText.toString()));
+                runOnFxThread(() -> {
+                    if(requestId==requestGeneration){
+                        showCollectedModelReply(replyText.toString());
+                    }
+                });
             }
 
             @Override
             public void onError(Throwable error){
-                runOnFxThread(() -> showModelError(error));
+                runOnFxThread(() -> {
+                    if(requestId==requestGeneration){
+                        showModelError(error);
+                    }
+                });
             }
         });
     }
@@ -285,12 +317,7 @@ public class QuickChatWindow {
     }
 
     private void startModelRequest(){
-        if(streamTimeline!=null){
-            streamTimeline.stop();
-        }
-        if(segmentPause!=null){
-            segmentPause.stop();
-        }
+        stopCurrentPresentation();
 
         answerSegments=List.of();
         nextSegmentIndex=0;
@@ -298,6 +325,15 @@ public class QuickChatWindow {
         waitingForNextSegment=false;
         answerLabel.setText("接线中...");
         updateInputState();
+    }
+
+    private void stopCurrentPresentation(){
+        if(streamTimeline!=null){
+            streamTimeline.stop();
+        }
+        if(segmentPause!=null){
+            segmentPause.stop();
+        }
     }
 
     private void showCollectedModelReply(String replyText){
@@ -400,33 +436,46 @@ public class QuickChatWindow {
 
     private List<String> splitAnswer(String answer){
         int[] codePoints=answer.codePoints().toArray();
-        if(codePoints.length<=MAX_SINGLE_SEGMENT_CODE_POINTS){
+        if(codePoints.length<=MAX_SEGMENT_CODE_POINTS){
             return List.of(answer);
         }
 
-        int splitIndex=findSplitIndex(codePoints);
-        String firstSegment=new String(codePoints,0,splitIndex).trim();
-        String secondSegment=new String(codePoints,splitIndex,codePoints.length-splitIndex).trim();
-        return List.of(firstSegment,secondSegment);
+        List<String> segments=new ArrayList<>();
+        int startIndex=0;
+        while(startIndex<codePoints.length){
+            int endIndex=findSegmentEnd(codePoints,startIndex);
+            String segment=new String(codePoints,startIndex,endIndex-startIndex).trim();
+            if(!segment.isEmpty()){
+                segments.add(segment);
+            }
+            startIndex=skipWhitespace(codePoints,endIndex);
+        }
+
+        return segments.isEmpty() ? List.of(answer) : segments;
     }
 
-    private int findSplitIndex(int[] codePoints){
-        int middle=codePoints.length/2;
-        int searchRadius=Math.min(18,middle);
+    private int findSegmentEnd(int[] codePoints,int startIndex){
+        int maxEndIndex=Math.min(startIndex+MAX_SEGMENT_CODE_POINTS,codePoints.length);
+        if(maxEndIndex>=codePoints.length){
+            return codePoints.length;
+        }
 
-        for(int offset=0;offset<=searchRadius;offset++){
-            int forwardIndex=middle+offset;
-            if(forwardIndex<codePoints.length-1 && isSegmentBreak(codePoints[forwardIndex])){
-                return forwardIndex+1;
-            }
-
-            int backwardIndex=middle-offset;
-            if(backwardIndex>0 && isSegmentBreak(codePoints[backwardIndex])){
-                return backwardIndex+1;
+        int minimumEndIndex=startIndex+Math.max(18,MAX_SEGMENT_CODE_POINTS/2);
+        for(int index=maxEndIndex-1;index>=minimumEndIndex;index--){
+            if(isSegmentBreak(codePoints[index])){
+                return index+1;
             }
         }
 
-        return middle;
+        return maxEndIndex;
+    }
+
+    private int skipWhitespace(int[] codePoints,int startIndex){
+        int index=startIndex;
+        while(index<codePoints.length && Character.isWhitespace(codePoints[index])){
+            index++;
+        }
+        return index;
     }
 
     private boolean isSegmentBreak(int codePoint){

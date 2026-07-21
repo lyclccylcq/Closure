@@ -48,6 +48,12 @@ public class PetWindow extends JFrame {
     private static final int MODEL_SIZE = 280;
 
     /**
+     * 模型打开后默认放在屏幕右侧靠上位置。
+     */
+    private static final int MODEL_RIGHT_MARGIN = 96;
+    private static final int MODEL_TOP_MARGIN = 80;
+
+    /**
      * 桌宠图片路径。
      * 注意：
      * 这里使用的是 resources 资源路径，
@@ -314,17 +320,36 @@ public class PetWindow extends JFrame {
         );
         addPetMouseListeners(petAnimationPanel);
 
-        Point currentLocation = getLocation();
-        int oldHeight = getHeight();
-
         getContentPane().removeAll();
         add(petAnimationPanel);
         setSize(MODEL_SIZE, MODEL_SIZE);
-        setLocation(currentLocation.x, currentLocation.y - MODEL_SIZE + oldHeight);
+        setLocation(calculateDefaultModelLocation());
         revalidate();
         validate();
         repaint();
         showQuickChatWindow();
+    }
+
+    private Point calculateDefaultModelLocation() {
+        GraphicsConfiguration graphicsConfiguration = getGraphicsConfiguration();
+        if (graphicsConfiguration == null) {
+            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+            return new Point(
+                    Math.max(0, screenSize.width - MODEL_SIZE - MODEL_RIGHT_MARGIN),
+                    Math.max(0, MODEL_TOP_MARGIN)
+            );
+        }
+
+        Rectangle screenBounds = graphicsConfiguration.getBounds();
+        Insets screenInsets = Toolkit.getDefaultToolkit().getScreenInsets(graphicsConfiguration);
+        int availableX = screenBounds.x + screenInsets.left;
+        int availableY = screenBounds.y + screenInsets.top;
+        int availableWidth = screenBounds.width - screenInsets.left - screenInsets.right;
+
+        return new Point(
+                availableX + Math.max(0, availableWidth - MODEL_SIZE - MODEL_RIGHT_MARGIN),
+                availableY + MODEL_TOP_MARGIN
+        );
     }
 
     private boolean isClickWithoutDrag(MouseEvent event) {
@@ -423,6 +448,8 @@ public class PetWindow extends JFrame {
      * 2. 右键菜单点击“通讯”
      */
     private void openChatWindow() {
+        hideQuickChatWindow();
+
         /*
          * 如果聊天窗口还没有创建，就创建一个。
          *
@@ -509,6 +536,12 @@ public class PetWindow extends JFrame {
     private void moveQuickChatWindowNextToPet() {
         if (quickChatWindow != null) {
             quickChatWindow.moveNextTo(getBounds());
+        }
+    }
+
+    private void hideQuickChatWindow() {
+        if (quickChatWindow != null) {
+            quickChatWindow.hideAndStop();
         }
     }
 
