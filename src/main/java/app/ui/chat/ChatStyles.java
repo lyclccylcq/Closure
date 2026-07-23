@@ -12,7 +12,11 @@ final class ChatStyles {
             -fx-text-fill: #eef6ff;
             -fx-font-size: 14px;
             """;
-    static final String NAME_STYLE="-fx-text-fill: #eef6ff; -fx-font-size: 12px; -fx-font-weight: bold;";
+    static final String NAME_STYLE= """
+            -fx-text-fill: #eef6ff;
+            -fx-font-size: 12px;
+            -fx-font-weight: bold;
+            """;
     static final String INPUT_STYLE="""
             -fx-background-color: #0e1620;
             -fx-border-color: #30586c;

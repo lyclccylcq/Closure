@@ -23,11 +23,11 @@ import java.io.InputStream;
 /**
  * PetWindow 表示桌面上的桌宠窗口。
  * 它负责：
- * 1. 显示桌宠图标
+ * 1. 显示桌宠模型
  * 2. 让桌宠窗口保持无边框、透明背景
  * 3. 让桌宠可以被鼠标拖动
  * 4. 右键显示菜单
- * 5. 双击 logo 打开动态模型
+ * 5. 双击模型打开通讯窗口
  * 注意：
  * PetWindow 是整个程序的主窗口。
  * ChatWindow 只是它打开的聊天窗口。
@@ -35,15 +35,7 @@ import java.io.InputStream;
 public class PetWindow extends JFrame {
 
     /**
-     * 启动 logo 大小，
-     * 这里设置成 64 像素，
-     * 避免桌面图标看起来比普通 App 图标大太多。
-     */
-    private static final int LOGO_SIZE = 64;
-
-    /**
      * 动态模型显示大小。
-     * 点击 logo 之后，窗口会从 LOGO_SIZE 放大到这个尺寸。
      */
     private static final int MODEL_SIZE = 280;
 
@@ -56,10 +48,8 @@ public class PetWindow extends JFrame {
     /**
      * 桌宠图片路径。
      * 注意：
-     * 这里使用的是 resources 资源路径，
-     * 不是 "src/main/resources/..." 文件路径。
-     * 对应真实位置：
-     * src/main/resources/images/closure_logo.png
+     * 这个图片不再作为程序启动后的第一屏，
+     * 只在模型帧缺失时作为兜底图显示。
      */
     private static final String PET_IMAGE_PATH = "/images/closure-logo.png";
 
@@ -84,13 +74,13 @@ public class PetWindow extends JFrame {
 
     /**
      * 动态桌宠组件。
-     * 如果当前没有加载 PNG 帧动画，它会保持为 null。
+     * 如果当前没有加载 PNG 帧动画，它会显示兜底图片。
      */
     private PetAnimationPanel petAnimationPanel;
 
     /**
      * 桌宠组件共用的鼠标监听器。
-     * logo 和动态模型都使用它，所以切换组件后拖拽、右键菜单仍然可用。
+     * 模型组件使用它处理拖拽、右键菜单和双击通讯。
      */
     private MouseAdapter petMouseAdapter;
 
@@ -121,11 +111,15 @@ public class PetWindow extends JFrame {
         // 初始化窗口基本属性
         initWindow();
 
-        // 初始化桌宠图标和鼠标事件
-        initPetIcon();
+        // 初始化桌宠鼠标事件
+        initPetMouseAdapter();
 
         // 初始化右键菜单
         initPopupMenu();
+
+        // 程序启动后直接显示可露希尔模型。
+        openPetModel();
+        playOpenVoice();
     }
 
     /**
@@ -155,11 +149,8 @@ public class PetWindow extends JFrame {
          */
         setBackground(new Color(0, 0, 0, 0));
 
-        // 设置桌宠窗口大小
-        setSize(LOGO_SIZE, LOGO_SIZE);
-
-        // 设置桌宠初始位置
-        setLocation(1000, 500);
+        // 设置桌宠窗口大小，位置会在模型加载后按屏幕重新计算。
+        setSize(MODEL_SIZE, MODEL_SIZE);
 
         /*
          * 关闭桌宠窗口时退出程序。
@@ -170,23 +161,9 @@ public class PetWindow extends JFrame {
     }
 
     /**
-     * 初始化桌宠图标。
+     * 初始化桌宠鼠标事件。
      */
-    private void initPetIcon() {
-        // 程序启动时固定先显示 logo；点击 logo 后再打开动态模型。
-        ImageIcon icon = AvatarLoader.loadAvatar(
-                PET_IMAGE_PATH,
-                LOGO_SIZE,
-                LOGO_SIZE
-        );
-
-        JLabel petLabel = new JLabel(icon);
-        petLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        petLabel.setVerticalAlignment(SwingConstants.CENTER);
-
-        // 把桌宠组件加入窗口
-        add(petLabel);
-
+    private void initPetMouseAdapter() {
         /*
          * 创建鼠标监听器。
          *
@@ -267,26 +244,13 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseClicked(MouseEvent event) {
-                /*
-                 * logo 阶段左键双击打开动态模型，并同步播放 open 语音。
-                 * 模型已经打开后，左键双击继续保留为打开聊天窗口。
-                 */
                 if (SwingUtilities.isLeftMouseButton(event)
-                        && event.getClickCount() == 2) {
-                    if (petAnimationPanel == null && isClickWithoutDrag(event)) {
-                        playOpenVoice();
-                        openPetModel();
-                        return;
-                    }
-
+                        && event.getClickCount() == 2
+                        && isClickWithoutDrag(event)) {
                     openChatWindow();
                 }
             }
         };
-
-        // 给桌宠组件添加鼠标点击监听
-        addPetMouseListeners(petLabel);
-
     }
 
     private void addPetMouseListeners(Component component) {
@@ -303,7 +267,6 @@ public class PetWindow extends JFrame {
     private void openPetModel() {
         if (!PetAction.OPEN.hasFrames()) {
             System.out.println("模型 PNG 帧不存在：" + PetAction.OPEN.frameDirectory());
-            return;
         }
 
         ImageIcon fallbackIcon = AvatarLoader.loadAvatar(
@@ -444,7 +407,7 @@ public class PetWindow extends JFrame {
     /**
      * 打开聊天窗口。
      * 触发方式：
-     * 1. 双击桌宠图标
+     * 1. 双击桌宠模型
      * 2. 右键菜单点击“通讯”
      */
     private void openChatWindow() {
@@ -496,7 +459,7 @@ public class PetWindow extends JFrame {
          * 2. 聊天窗口置顶
          *
          * 这样可以解决：
-         * 双击打开聊天后，桌宠图标挡在聊天窗口上方的问题。
+         * 双击打开聊天后，桌宠模型挡在聊天窗口上方的问题。
          */
         setAlwaysOnTop(false);
         chatWindow.setAlwaysOnTop(true);
