@@ -3,7 +3,7 @@ package app.ui;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
-import app.ui.quick.QuickChatWindow;
+import app.ui.quick.PetSpeechBubbleWindow;
 import app.util.AvatarLoader;
 
 import javax.sound.sampled.AudioSystem;
@@ -19,6 +19,7 @@ import java.awt.event.WindowEvent;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * PetWindow 表示桌面上的桌宠窗口。
@@ -46,6 +47,23 @@ public class PetWindow extends JFrame {
     private static final int MODEL_TOP_MARGIN = 80;
 
     /**
+     * 可露希尔上线时显示的短对白。
+     */
+    private static final String STARTUP_BUBBLE_TEXT = "工程部可露希尔在线。";
+
+    /**
+     * 单击模型时随机显示的短互动对白。
+     */
+    private static final String[] INTERACTION_BUBBLE_LINES = {
+            "叫我？工程部刚好还没断电。",
+            "别戳啦，我在呢。",
+            "博士，有事就说，维修费可以之后再算。",
+            "这台终端又响了？你最好不是来催工期的。",
+            "我正在假装很忙，配合一下。",
+            "补觉申请还没批下来，所以我还在线。"
+    };
+
+    /**
      * 桌宠图片路径。
      * 注意：
      * 这个图片不再作为程序启动后的第一屏，
@@ -67,10 +85,10 @@ public class PetWindow extends JFrame {
     private ChatWindow chatWindow;
 
     /**
-     * 贴在桌宠旁边的轻量问答窗口。
-     * 它和完整聊天窗口分开，适合临时问一句、看一句回复。
+     * 贴在桌宠旁边的点击互动对白气泡。
+     * 它不负责聊天输入，只显示可露希尔自己的短台词。
      */
-    private QuickChatWindow quickChatWindow;
+    private PetSpeechBubbleWindow speechBubbleWindow;
 
     /**
      * 动态桌宠组件。
@@ -83,6 +101,12 @@ public class PetWindow extends JFrame {
      * 模型组件使用它处理拖拽、右键菜单和双击通讯。
      */
     private MouseAdapter petMouseAdapter;
+
+    /**
+     * 单击互动延迟计时器。
+     * 用于区分单击气泡和双击通讯。
+     */
+    private Timer interactionClickTimer;
 
     /**
      * 记录鼠标按下时的位置。
@@ -225,7 +249,7 @@ public class PetWindow extends JFrame {
 
                 // 移动桌宠窗口
                 setLocation(newX, newY);
-                moveQuickChatWindowNextToPet();
+                moveSpeechBubbleNextToPet();
             }
 
             /**
@@ -244,9 +268,17 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseClicked(MouseEvent event) {
-                if (SwingUtilities.isLeftMouseButton(event)
-                        && event.getClickCount() == 2
-                        && isClickWithoutDrag(event)) {
+                if (!SwingUtilities.isLeftMouseButton(event) || !isClickWithoutDrag(event)) {
+                    return;
+                }
+
+                if (event.getClickCount() == 1) {
+                    scheduleInteractionBubble();
+                    return;
+                }
+
+                if (event.getClickCount() == 2) {
+                    cancelInteractionBubble();
                     openChatWindow();
                 }
             }
@@ -290,7 +322,43 @@ public class PetWindow extends JFrame {
         revalidate();
         validate();
         repaint();
-        showQuickChatWindow();
+        showStartupSpeechBubble();
+    }
+
+    private void scheduleInteractionBubble() {
+        cancelInteractionBubble();
+
+        interactionClickTimer = new Timer(220, event -> showInteractionSpeechBubble());
+        interactionClickTimer.setRepeats(false);
+        interactionClickTimer.start();
+    }
+
+    private void cancelInteractionBubble() {
+        if (interactionClickTimer != null) {
+            interactionClickTimer.stop();
+            interactionClickTimer = null;
+        }
+    }
+
+    private void showStartupSpeechBubble() {
+        showSpeechBubble(STARTUP_BUBBLE_TEXT);
+    }
+
+    private void showInteractionSpeechBubble() {
+        showSpeechBubble(randomInteractionLine());
+    }
+
+    private String randomInteractionLine() {
+        int lineIndex = ThreadLocalRandom.current().nextInt(INTERACTION_BUBBLE_LINES.length);
+        return INTERACTION_BUBBLE_LINES[lineIndex];
+    }
+
+    private void showSpeechBubble(String text) {
+        if (speechBubbleWindow == null) {
+            speechBubbleWindow = new PetSpeechBubbleWindow();
+        }
+
+        speechBubbleWindow.showNextTo(getBounds(), text);
     }
 
     private Point calculateDefaultModelLocation() {
@@ -392,10 +460,10 @@ public class PetWindow extends JFrame {
          * 在鼠标点击的位置显示菜单。
          *
          * event.getComponent()：
-         * 表示当前触发事件的组件，也就是 petLabel。
+         * 表示当前触发事件的模型组件。
          *
          * event.getX(), event.getY()：
-         * 表示鼠标在 petLabel 内部的位置。
+         * 表示鼠标在该组件内部的位置。
          */
         popupMenu.show(
                 event.getComponent(),
@@ -411,7 +479,7 @@ public class PetWindow extends JFrame {
      * 2. 右键菜单点击“通讯”
      */
     private void openChatWindow() {
-        hideQuickChatWindow();
+        hideSpeechBubble();
 
         /*
          * 如果聊天窗口还没有创建，就创建一个。
@@ -488,32 +556,25 @@ public class PetWindow extends JFrame {
         }
     }
 
-    private void showQuickChatWindow() {
-        if (quickChatWindow == null) {
-            quickChatWindow = new QuickChatWindow();
-        }
-
-        quickChatWindow.showNextTo(getBounds());
-    }
-
-    private void moveQuickChatWindowNextToPet() {
-        if (quickChatWindow != null) {
-            quickChatWindow.moveNextTo(getBounds());
+    private void moveSpeechBubbleNextToPet() {
+        if (speechBubbleWindow != null) {
+            speechBubbleWindow.moveNextTo(getBounds());
         }
     }
 
-    private void hideQuickChatWindow() {
-        if (quickChatWindow != null) {
-            quickChatWindow.hideAndStop();
+    private void hideSpeechBubble() {
+        if (speechBubbleWindow != null) {
+            speechBubbleWindow.hide();
         }
     }
 
     private void exitApplication() {
+        cancelInteractionBubble();
         if (petAnimationPanel != null) {
             petAnimationPanel.dispose();
         }
-        if (quickChatWindow != null) {
-            quickChatWindow.dispose();
+        if (speechBubbleWindow != null) {
+            speechBubbleWindow.dispose();
         }
         System.exit(0);
     }
