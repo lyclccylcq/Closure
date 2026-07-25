@@ -1,9 +1,11 @@
 package app.ui;
 
+import app.reminder.WorkBreakReminder;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
 import app.ui.quick.PetSpeechBubbleWindow;
+import app.ui.reminder.ReminderSettingsWindow;
 import app.util.AvatarLoader;
 
 import javax.sound.sampled.AudioSystem;
@@ -19,6 +21,7 @@ import java.awt.event.WindowEvent;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -45,6 +48,12 @@ public class PetWindow extends JFrame {
      */
     private static final int MODEL_RIGHT_MARGIN = 96;
     private static final int MODEL_TOP_MARGIN = 80;
+
+    /**
+     * 默认工作提醒间隔。
+     * 用户可以在提醒设置窗口里改成 5 分钟到 2 小时。
+     */
+    private static final Duration WORK_REMINDER_INTERVAL = Duration.ofHours(2);
 
     /**
      * 可露希尔上线时显示的短对白。
@@ -91,6 +100,16 @@ public class PetWindow extends JFrame {
     private PetSpeechBubbleWindow speechBubbleWindow;
 
     /**
+     * 后台工作提醒计时器。
+     */
+    private WorkBreakReminder workBreakReminder;
+
+    /**
+     * 工作提醒时间设置窗口。
+     */
+    private ReminderSettingsWindow reminderSettingsWindow;
+
+    /**
      * 动态桌宠组件。
      * 如果当前没有加载 PNG 帧动画，它会显示兜底图片。
      */
@@ -124,7 +143,8 @@ public class PetWindow extends JFrame {
      * 右键菜单。
      * 包含：
      * 1. 通讯
-     * 2. 下线
+     * 2. 提醒设置
+     * 3. 下线
      */
     private JPopupMenu popupMenu;
 
@@ -138,12 +158,16 @@ public class PetWindow extends JFrame {
         // 初始化桌宠鼠标事件
         initPetMouseAdapter();
 
+        // 初始化后台工作提醒
+        initWorkBreakReminder();
+
         // 初始化右键菜单
         initPopupMenu();
 
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
         playOpenVoice();
+        startWorkBreakReminder();
     }
 
     /**
@@ -361,6 +385,76 @@ public class PetWindow extends JFrame {
         speechBubbleWindow.showNextTo(getBounds(), text);
     }
 
+    private void initWorkBreakReminder() {
+        workBreakReminder = new WorkBreakReminder(
+                WORK_REMINDER_INTERVAL,
+                this::showWorkBreakReminder
+        );
+    }
+
+    private void startWorkBreakReminder() {
+        workBreakReminder.start();
+    }
+
+    private void pauseWorkBreakReminder() {
+        workBreakReminder.pause();
+        showSpeechBubble("工作提醒先暂停。博士，别趁机把休息也省了。");
+    }
+
+    private void restartWorkBreakReminder() {
+        workBreakReminder.restart();
+        showSpeechBubble("重新计时了。" + workReminderIntervalText() + " 后我再来查岗。");
+    }
+
+    private void openWorkReminderSettingsWindow() {
+        if (reminderSettingsWindow == null) {
+            reminderSettingsWindow = new ReminderSettingsWindow(
+                    interval -> SwingUtilities.invokeLater(() -> applyWorkReminderInterval(interval)),
+                    enabled -> SwingUtilities.invokeLater(() -> setWorkReminderEnabled(enabled)),
+                    () -> SwingUtilities.invokeLater(this::restartWorkBreakReminder)
+            );
+        }
+
+        reminderSettingsWindow.show(
+                workBreakReminder.workInterval(),
+                workBreakReminder.isRunning(),
+                getBounds()
+        );
+    }
+
+    private void applyWorkReminderInterval(Duration workInterval) {
+        boolean wasRunning = workBreakReminder.isRunning();
+        workBreakReminder.setWorkInterval(workInterval);
+
+        if (wasRunning) {
+            showSpeechBubble("提醒间隔改成 " + workReminderIntervalText() + "，从现在重新计时。");
+        } else {
+            showSpeechBubble("提醒间隔改成 " + workReminderIntervalText() + "。打开提醒后生效。");
+        }
+    }
+
+    private void setWorkReminderEnabled(boolean enabled) {
+        if (enabled) {
+            restartWorkBreakReminder();
+            return;
+        }
+
+        pauseWorkBreakReminder();
+    }
+
+    private void showWorkBreakReminder(String reminderText) {
+        showSpeechBubble(reminderText);
+    }
+
+    private String workReminderIntervalText() {
+        long hours = workBreakReminder.workInterval().toHours();
+        if (hours > 0 && workBreakReminder.workInterval().minusHours(hours).isZero()) {
+            return hours + " 小时";
+        }
+
+        return workBreakReminder.workInterval().toMinutes() + " 分钟";
+    }
+
     private Point calculateDefaultModelLocation() {
         GraphicsConfiguration graphicsConfiguration = getGraphicsConfiguration();
         if (graphicsConfiguration == null) {
@@ -431,17 +525,29 @@ public class PetWindow extends JFrame {
         // 创建“通讯”菜单项
         JMenuItem chatItem = new JMenuItem("通讯");
 
+        // 创建工作提醒设置菜单项
+        JMenuItem workReminderSettingsItem = new JMenuItem("提醒设置...");
+
         // 创建“下线”菜单项
         JMenuItem exitItem = new JMenuItem("下线");
 
         // 点击“通讯”时打开聊天窗口
         chatItem.addActionListener(e -> openChatWindow());
 
+        // 打开工作提醒设置窗口
+        workReminderSettingsItem.addActionListener(e -> openWorkReminderSettingsWindow());
+
         // 点击“下线”时退出程序
         exitItem.addActionListener(e -> exitApplication());
 
         // 把“通讯”加入菜单
         popupMenu.add(chatItem);
+
+        // 添加一条分隔线
+        popupMenu.addSeparator();
+
+        // 把工作提醒设置项加入菜单
+        popupMenu.add(workReminderSettingsItem);
 
         // 添加一条分隔线
         popupMenu.addSeparator();
@@ -570,6 +676,12 @@ public class PetWindow extends JFrame {
 
     private void exitApplication() {
         cancelInteractionBubble();
+        if (workBreakReminder != null) {
+            workBreakReminder.dispose();
+        }
+        if (reminderSettingsWindow != null) {
+            reminderSettingsWindow.dispose();
+        }
         if (petAnimationPanel != null) {
             petAnimationPanel.dispose();
         }
