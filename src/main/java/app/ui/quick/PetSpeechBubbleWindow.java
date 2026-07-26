@@ -28,7 +28,7 @@ public class PetSpeechBubbleWindow {
     private static final int WINDOW_WIDTH = 280;
     private static final int WINDOW_HEIGHT = 84;
     private static final int DIALOG_BOTTOM_OVERLAP = 74;
-    private static final int DIALOG_RIGHT_SHIFT = 82;
+    private static final int DIALOG_GAP = 10;
     private static final Duration STREAM_INTERVAL = Duration.millis(55);
     private static final Duration AUTO_HIDE_DELAY = Duration.millis(3200);
 
@@ -164,29 +164,51 @@ public class PetSpeechBubbleWindow {
         Point2D location = calculateLocation(petBounds);
         stage.setX(location.getX());
         stage.setY(location.getY());
+        stage.toFront();
     }
 
     private Point2D calculateLocation(Rectangle petBounds) {
-        double x = petBounds.x + Math.max(0, petBounds.width - WINDOW_WIDTH) + DIALOG_RIGHT_SHIFT;
+        double rightX = petBounds.x + petBounds.width + DIALOG_GAP;
+        double leftX = petBounds.x - WINDOW_WIDTH - DIALOG_GAP;
         double y = petBounds.y + petBounds.height - DIALOG_BOTTOM_OVERLAP;
 
         Screen screen = screenFor(petBounds);
-        if (screen != null) {
-            javafx.geometry.Rectangle2D visualBounds = screen.getVisualBounds();
-            double minX = visualBounds.getMinX();
-            double maxX = visualBounds.getMaxX() - WINDOW_WIDTH;
-            double minY = visualBounds.getMinY();
-            double maxY = visualBounds.getMaxY() - WINDOW_HEIGHT;
-
-            if (x > maxX) {
-                x = petBounds.x + petBounds.width - WINDOW_WIDTH;
-            }
-
-            x = Math.max(minX, Math.min(x, maxX));
-            y = Math.max(minY, Math.min(y, maxY));
+        if (screen == null) {
+            return new Point2D(rightX, y);
         }
 
+        javafx.geometry.Rectangle2D visualBounds = screen.getVisualBounds();
+        double minX = visualBounds.getMinX();
+        double maxX = visualBounds.getMaxX() - WINDOW_WIDTH;
+        double minY = visualBounds.getMinY();
+        double maxY = visualBounds.getMaxY() - WINDOW_HEIGHT;
+        double x = chooseNonOverlappingX(petBounds, rightX, leftX, minX, maxX);
+
+        y = Math.max(minY, Math.min(y, maxY));
         return new Point2D(x, y);
+    }
+
+    private double chooseNonOverlappingX(
+            Rectangle petBounds,
+            double rightX,
+            double leftX,
+            double minX,
+            double maxX
+    ) {
+        if (rightX <= maxX) {
+            return rightX;
+        }
+        if (leftX >= minX) {
+            return leftX;
+        }
+
+        double rightSpace = maxX - (petBounds.x + petBounds.width + DIALOG_GAP);
+        double leftSpace = petBounds.x - DIALOG_GAP - minX;
+        if (rightSpace >= leftSpace) {
+            return Math.max(minX, Math.min(rightX, maxX));
+        }
+
+        return Math.max(minX, Math.min(leftX, maxX));
     }
 
     private Screen screenFor(Rectangle petBounds) {
