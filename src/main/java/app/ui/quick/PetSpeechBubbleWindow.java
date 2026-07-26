@@ -28,7 +28,8 @@ public class PetSpeechBubbleWindow {
     private static final int WINDOW_WIDTH = 280;
     private static final int WINDOW_HEIGHT = 84;
     private static final int DIALOG_BOTTOM_OVERLAP = 74;
-    private static final int DIALOG_GAP = 10;
+    private static final int DIALOG_RIGHT_SHIFT = 82;
+    private static final int DIALOG_EDGE_GAP = 10;
     private static final Duration STREAM_INTERVAL = Duration.millis(55);
     private static final Duration AUTO_HIDE_DELAY = Duration.millis(3200);
 
@@ -168,8 +169,8 @@ public class PetSpeechBubbleWindow {
     }
 
     private Point2D calculateLocation(Rectangle petBounds) {
-        double rightX = petBounds.x + petBounds.width + DIALOG_GAP;
-        double leftX = petBounds.x - WINDOW_WIDTH - DIALOG_GAP;
+        double rightX = petBounds.x + Math.max(0, petBounds.width - WINDOW_WIDTH) + DIALOG_RIGHT_SHIFT;
+        double leftX = petBounds.x - Math.max(DIALOG_EDGE_GAP, WINDOW_WIDTH - DIALOG_RIGHT_SHIFT);
         double y = petBounds.y + petBounds.height - DIALOG_BOTTOM_OVERLAP;
 
         Screen screen = screenFor(petBounds);
@@ -202,8 +203,8 @@ public class PetSpeechBubbleWindow {
             return leftX;
         }
 
-        double rightSpace = maxX - (petBounds.x + petBounds.width + DIALOG_GAP);
-        double leftSpace = petBounds.x - DIALOG_GAP - minX;
+        double rightSpace = maxX - rightX;
+        double leftSpace = leftX - minX;
         if (rightSpace >= leftSpace) {
             return Math.max(minX, Math.min(rightX, maxX));
         }
