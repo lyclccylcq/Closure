@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.service.ChatSpeechController;
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.Scene;
@@ -12,11 +13,24 @@ public class ChatWindow extends JFrame {
     // JFXPanel 负责把 JavaFX Scene 嵌进现有 Swing JFrame，PetWindow 的调用方式就不用改。
     private final JFXPanel fxPanel;
     private final SoundPlayer soundPlayer;
+    private final ChatSpeechController chatSpeechController;
+    private final boolean ownsSpeechController;
     private ChatView chatView;
+    private boolean disposed;
 
     public ChatWindow() {
+        this(ChatSpeechController.fromEnvironment(), true);
+    }
+
+    public ChatWindow(ChatSpeechController chatSpeechController) {
+        this(chatSpeechController, false);
+    }
+
+    private ChatWindow(ChatSpeechController chatSpeechController, boolean ownsSpeechController) {
         fxPanel = new JFXPanel();
         soundPlayer = new SoundPlayer();
+        this.chatSpeechController = chatSpeechController;
+        this.ownsSpeechController = ownsSpeechController;
 
         initWindow();
 
@@ -57,7 +71,28 @@ public class ChatWindow extends JFrame {
     }
 
     private void initFxContent(){
-        chatView=new ChatView(new ChatService(),soundPlayer);
+        chatView=new ChatView(new ChatService(),soundPlayer,chatSpeechController);
         fxPanel.setScene(new Scene(chatView));
+    }
+
+    @Override
+    public void dispose(){
+        disposeResources();
+        super.dispose();
+    }
+
+    private void disposeResources(){
+        if(disposed){
+            return;
+        }
+        disposed=true;
+
+        soundPlayer.stopVoice();
+        if(chatView!=null){
+            chatView.dispose();
+        }
+        if(ownsSpeechController){
+            chatSpeechController.close();
+        }
     }
 }

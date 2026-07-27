@@ -20,7 +20,7 @@ import java.util.concurrent.CompletionException;
  * GPT-SoVITS HTTP 客户端。
  * 所有网络请求都通过 HttpClient.sendAsync 执行，不阻塞 UI 线程。
  */
-public final class GptSovitsClient {
+public final class GptSovitsClient implements VoiceSynthesisClient {
     private static final String SET_GPT_WEIGHTS_PATH = "/set_gpt_weights";
     private static final String SET_SOVITS_WEIGHTS_PATH = "/set_sovits_weights";
     private static final String TTS_PATH = "/tts";
@@ -39,26 +39,49 @@ public final class GptSovitsClient {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     }
 
+    @Override
     public CompletableFuture<Void> initializeModels() {
         return setWeights(SET_GPT_WEIGHTS_PATH, config.getGptWeightPath())
                 .thenCompose(unused -> setWeights(SET_SOVITS_WEIGHTS_PATH, config.getSovitsWeightPath()));
     }
 
+    @Override
     public CompletableFuture<Path> synthesize(TtsRequest request) {
         Objects.requireNonNull(request, "request");
 
-        HttpRequest httpRequest = HttpRequest.newBuilder()
-                .uri(endpoint(TTS_PATH))
-                .timeout(config.getRequestTimeout())
-                .header("Content-Type", "application/json")
-                .header("Accept", "audio/wav")
-                .POST(HttpRequest.BodyPublishers.ofString(toTtsJson(request), StandardCharsets.UTF_8))
-                .build();
-
-        return httpClient
-                .sendAsync(httpRequest, HttpResponse.BodyHandlers.ofByteArray())
+        return sendTtsRequest(ttsPostRequest(request))
+                .thenCompose(response -> {
+                    if (isMissingBodyValidationError(response)) {
+                        return sendTtsRequest(ttsGetRequest(request));
+                    }
+                    return CompletableFuture.completedFuture(response);
+                })
                 .thenApply(response -> requireWavResponse(response, "语音合成"))
                 .thenApply(this::writeTempWav);
+    }
+
+    private CompletableFuture<HttpResponse<byte[]>> sendTtsRequest(HttpRequest httpRequest) {
+        return httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    private HttpRequest ttsPostRequest(TtsRequest request) {
+        byte[] requestBody = toTtsJson(request).getBytes(StandardCharsets.UTF_8);
+        return HttpRequest.newBuilder()
+                .uri(endpoint(TTS_PATH))
+                .timeout(config.getRequestTimeout())
+                .header("Content-Type", "application/json; charset=utf-8")
+                .header("Accept", "audio/wav")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
+                .build();
+    }
+
+    private HttpRequest ttsGetRequest(TtsRequest request) {
+        return HttpRequest.newBuilder()
+                .uri(endpoint(TTS_PATH + "?" + toTtsQuery(request)))
+                .timeout(config.getRequestTimeout())
+                .header("Accept", "audio/wav")
+                .GET()
+                .build();
     }
 
     private CompletableFuture<Void> setWeights(String endpointPath, Path weightPath) {
@@ -129,9 +152,11 @@ public final class GptSovitsClient {
                 + "\"ref_audio_path\":\"" + escapeJson(profile.getReferenceAudioPath().toString()) + "\","
                 + "\"prompt_text\":\"" + escapeJson(profile.getPromptText()) + "\","
                 + "\"prompt_lang\":\"" + escapeJson(profile.getPromptLanguage()) + "\","
-                + "\"top_k\":15,"
-                + "\"top_p\":1.0,"
-                + "\"temperature\":1.0,"
+                + "\"top_k\":" + profile.getTopK() + ","
+                + "\"top_p\":" + profile.getTopP() + ","
+                + "\"temperature\":" + profile.getTemperature() + ","
+                + "\"seed\":" + profile.getSeed() + ","
+                + "\"repetition_penalty\":" + profile.getRepetitionPenalty() + ","
                 + "\"text_split_method\":\"cut5\","
                 + "\"batch_size\":1,"
                 + "\"speed_factor\":" + request.getSpeedFactor() + ","
@@ -139,6 +164,47 @@ public final class GptSovitsClient {
                 + "\"streaming_mode\":false,"
                 + "\"parallel_infer\":true"
                 + "}";
+    }
+
+    private String toTtsQuery(TtsRequest request) {
+        VoiceProfile profile = request.getVoiceProfile();
+        StringBuilder query = new StringBuilder();
+
+        appendQueryParam(query, "text", request.getText());
+        appendQueryParam(query, "text_lang", request.getTextLanguage());
+        appendQueryParam(query, "ref_audio_path", profile.getReferenceAudioPath().toString());
+        appendQueryParam(query, "prompt_text", profile.getPromptText());
+        appendQueryParam(query, "prompt_lang", profile.getPromptLanguage());
+        appendQueryParam(query, "top_k", Integer.toString(profile.getTopK()));
+        appendQueryParam(query, "top_p", Double.toString(profile.getTopP()));
+        appendQueryParam(query, "temperature", Double.toString(profile.getTemperature()));
+        appendQueryParam(query, "seed", Integer.toString(profile.getSeed()));
+        appendQueryParam(query, "repetition_penalty", Double.toString(profile.getRepetitionPenalty()));
+        appendQueryParam(query, "text_split_method", "cut5");
+        appendQueryParam(query, "batch_size", "1");
+        appendQueryParam(query, "speed_factor", Double.toString(request.getSpeedFactor()));
+        appendQueryParam(query, "media_type", "wav");
+        appendQueryParam(query, "streaming_mode", "false");
+        appendQueryParam(query, "parallel_infer", "true");
+
+        return query.toString();
+    }
+
+    private void appendQueryParam(StringBuilder query, String name, String value) {
+        if (!query.isEmpty()) {
+            query.append("&");
+        }
+
+        query.append(urlEncode(name)).append("=").append(urlEncode(value));
+    }
+
+    private boolean isMissingBodyValidationError(HttpResponse<byte[]> response) {
+        if (response.statusCode() != 422) {
+            return false;
+        }
+
+        String errorBody = new String(response.body(), StandardCharsets.UTF_8);
+        return errorBody.contains("\"loc\":[\"body\"]") && errorBody.contains("\"Field required\"");
     }
 
     private String urlEncode(String value) {

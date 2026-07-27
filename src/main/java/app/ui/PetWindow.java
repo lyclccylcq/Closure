@@ -1,6 +1,7 @@
 package app.ui;
 
 import app.reminder.WorkBreakReminder;
+import app.service.ChatSpeechController;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
@@ -83,7 +84,7 @@ public class PetWindow extends JFrame {
     /**
      * 打开模型时播放的语音路径。
      */
-    private static final String OPEN_AUDIO_PATH = "/audio/open.wav";
+    private static final String OPEN_AUDIO_PATH = "/audio/Japanese/open.wav";
 
     /**
      * 聊天窗口对象。
@@ -92,6 +93,12 @@ public class PetWindow extends JFrame {
      * 这样可以避免程序一启动就创建聊天窗口。
      */
     private ChatWindow chatWindow;
+
+    /**
+     * 桌宠和聊天窗口共用的自动朗读控制器。
+     * 这样戳一戳气泡和 AI 回复不会叠在一起播放。
+     */
+    private ChatSpeechController speechController;
 
     /**
      * 贴在桌宠旁边的点击互动对白气泡。
@@ -160,6 +167,9 @@ public class PetWindow extends JFrame {
 
         // 初始化后台工作提醒
         initWorkBreakReminder();
+
+        // 初始化自动朗读控制器
+        initSpeechController();
 
         // 初始化右键菜单
         initPopupMenu();
@@ -369,7 +379,9 @@ public class PetWindow extends JFrame {
     }
 
     private void showInteractionSpeechBubble() {
-        showSpeechBubble(randomInteractionLine());
+        String interactionLine = randomInteractionLine();
+        showSpeechBubble(interactionLine);
+        speakSpeechBubble(interactionLine);
     }
 
     private String randomInteractionLine() {
@@ -385,10 +397,22 @@ public class PetWindow extends JFrame {
         speechBubbleWindow.showNextTo(getBounds(), text);
     }
 
+    private void speakSpeechBubble(String text) {
+        if (speechController != null) {
+            speechController.speakText(text);
+        }
+    }
+
     private void initWorkBreakReminder() {
         workBreakReminder = new WorkBreakReminder(
                 WORK_REMINDER_INTERVAL,
                 this::showWorkBreakReminder
+        );
+    }
+
+    private void initSpeechController() {
+        speechController = ChatSpeechController.fromEnvironment(
+                message -> System.out.println("语音朗读警告：" + message)
         );
     }
 
@@ -593,7 +617,7 @@ public class PetWindow extends JFrame {
          * 这样可以避免程序一启动就 new ChatWindow。
          */
         if (chatWindow == null) {
-            chatWindow = new ChatWindow();
+            chatWindow = new ChatWindow(speechController);
 
             /*
              * 第一次打开聊天窗口时，
@@ -687,6 +711,12 @@ public class PetWindow extends JFrame {
         }
         if (speechBubbleWindow != null) {
             speechBubbleWindow.dispose();
+        }
+        if (chatWindow != null) {
+            chatWindow.dispose();
+        }
+        if (speechController != null) {
+            speechController.close();
         }
         System.exit(0);
     }

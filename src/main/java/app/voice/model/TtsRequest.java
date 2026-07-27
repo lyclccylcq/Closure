@@ -11,6 +11,10 @@ public final class TtsRequest {
     private final VoiceProfile voiceProfile;
     private final double speedFactor;
 
+    public TtsRequest(String text, String textLanguage, VoiceProfile voiceProfile) {
+        this(text, textLanguage, voiceProfile, Objects.requireNonNull(voiceProfile, "voiceProfile").getSpeedFactor());
+    }
+
     public TtsRequest(String text, String textLanguage, VoiceProfile voiceProfile, double speedFactor) {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("text 不能为空");

@@ -13,7 +13,7 @@ public final class SoundPlayer {
     private static final String SEND_SOUND="/audio/send.wav";
     private static final String RECEIVE_SOUND="/audio/receive.wav";
     private static final String CLICK_SOUND="/audio/click.wav";
-    private static final String OPEN_SOUND="/audio/open.wav";
+    private static final String OPEN_SOUND= "/audio/Japanese/open.wav";
 
     private final Map<String, AudioClip> clipCache=new HashMap<>();
     private MediaPlayer currentVoicePlayer;

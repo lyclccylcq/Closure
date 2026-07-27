@@ -51,6 +51,11 @@ class GptSovitsClientTest {
         assertArrayEquals(fakeWav, Files.readAllBytes(outputPath));
         assertTrue(requestBody.get().contains("\"text\":\"博士，测试一下。\""));
         assertTrue(requestBody.get().contains("\"media_type\":\"wav\""));
+        assertTrue(requestBody.get().contains("\"top_k\":8"));
+        assertTrue(requestBody.get().contains("\"top_p\":0.85"));
+        assertTrue(requestBody.get().contains("\"temperature\":0.7"));
+        assertTrue(requestBody.get().contains("\"seed\":42"));
+        assertTrue(requestBody.get().contains("\"repetition_penalty\":1.35"));
 
         Files.deleteIfExists(outputPath);
     }
@@ -65,6 +70,39 @@ class GptSovitsClientTest {
         );
 
         assertTrue(exception.getCause().getMessage().contains("bad request from server"));
+    }
+
+    @Test
+    void synthesizeFallsBackToGetWhenPostBodyIsRejectedAsMissing() throws Exception {
+        byte[] fakeWav = "RIFF-fallback-WAVE".getBytes(StandardCharsets.US_ASCII);
+        List<String> requestMethods = Collections.synchronizedList(new ArrayList<>());
+        AtomicReference<String> getQuery = new AtomicReference<>();
+
+        startServer(exchange -> {
+            requestMethods.add(exchange.getRequestMethod());
+            if ("POST".equals(exchange.getRequestMethod())) {
+                writeResponse(
+                        exchange,
+                        422,
+                        "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null}]}".getBytes(StandardCharsets.UTF_8)
+                );
+                return;
+            }
+
+            getQuery.set(exchange.getRequestURI().getRawQuery());
+            writeResponse(exchange, 200, fakeWav);
+        });
+
+        Path outputPath = client().synthesize(ttsRequest("博士，回退测试。")).get(3, TimeUnit.SECONDS);
+
+        assertArrayEquals(fakeWav, Files.readAllBytes(outputPath));
+        assertEquals(List.of("POST", "GET"), requestMethods);
+        assertTrue(getQuery.get().contains("text=" + URLEncoder.encode("博士，回退测试。", StandardCharsets.UTF_8)));
+        assertTrue(getQuery.get().contains("media_type=wav"));
+        assertTrue(getQuery.get().contains("seed=42"));
+        assertTrue(getQuery.get().contains("repetition_penalty=1.35"));
+
+        Files.deleteIfExists(outputPath);
     }
 
     @Test

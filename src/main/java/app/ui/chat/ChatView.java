@@ -1,8 +1,11 @@
 package app.ui.chat;
 
+import app.chat.model.AssistantReply;
 import app.chat.model.ChatMessage;
 import app.chat.model.MessageRole;
+import app.service.AssistantReplyParser;
 import app.service.ChatService;
+import app.service.ChatSpeechController;
 import app.service.ChatStreamListener;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -15,15 +18,20 @@ import javafx.util.Duration;
 
 final class ChatView extends BorderPane {
     private static final Duration STREAM_INTERVAL=Duration.millis(60);
+    private static final String CHAT_START_VOICE="/audio.Chinese/Hello.wav";
 
     private final ChatService chatService;
     private final SoundPlayer soundPlayer;
+    private final ChatSpeechController chatSpeechController;
+    private final AssistantReplyParser assistantReplyParser;
     private final VBox messageBox;
     private final ScrollPane scrollPane;
 
-    ChatView(ChatService chatService,SoundPlayer soundPlayer){
+    ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController){
         this.chatService=chatService;
         this.soundPlayer=soundPlayer;
+        this.chatSpeechController=chatSpeechController;
+        assistantReplyParser=new AssistantReplyParser();
 
         setStyle(ChatStyles.BACKGROUND_STYLE);
 
@@ -46,7 +54,7 @@ final class ChatView extends BorderPane {
         setBottom(new ChatInputBar(this::handleUserMessage));
 
         addStreamingPetMessage("给，咖啡。看你那黑眼圈，昨晚又熬夜了吧？");
-        soundPlayer.playVoice("/audio/chatstart.wav");
+        soundPlayer.playVoice(CHAT_START_VOICE);
     }
 
     private void handleUserMessage(String userText) {
@@ -78,25 +86,26 @@ final class ChatView extends BorderPane {
         chatService.streamReply(userText,new ChatStreamListener() {
             @Override
             public void onToken(String token){
-                Platform.runLater(() -> {
-                    if(!receivedToken[0]){
-                        receivedToken[0]=true;
-                        replyText.setLength(0);
-                    }
+                if(!receivedToken[0]){
+                    receivedToken[0]=true;
+                    replyText.setLength(0);
+                }
 
-                    replyText.append(token);
-                    bubble.setContent(replyText.toString());
-                    scrollToLatestMessage();
-                });
+                replyText.append(token);
             }
 
             @Override
             public void onComplete(){
                 Platform.runLater(() -> {
+                    AssistantReply assistantReply;
                     if(!receivedToken[0]){
-                        bubble.setContent("工程部暂时没有收到模型回复。");
+                        assistantReply=new AssistantReply("工程部暂时没有收到模型回复。", java.util.List.of());
+                    }else{
+                        assistantReply=assistantReplyParser.parse(replyText.toString());
                     }
+                    bubble.setContent(assistantReply.getDisplayText());
                     scrollToLatestMessage();
+                    chatSpeechController.speakAssistantReply(assistantReply);
                 });
             }
 
@@ -136,5 +145,10 @@ final class ChatView extends BorderPane {
             scrollPane.layout();
             scrollPane.setVvalue(scrollPane.getVmax());
         });
+    }
+
+    void dispose(){
+        chatService.close();
+        soundPlayer.stopVoice();
     }
 }

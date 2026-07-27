@@ -1,9 +1,64 @@
-# 复制本文件内容到 config/local-voice.properties，然后填写你本机的真实路径。
-# config/local-voice.properties 已加入 .gitignore，不会提交到仓库。
+# Copy this file to config/local-voice.properties, then fill in your local paths.
+# config/local-voice.properties is ignored by git.
+# Chinese prompt text can be written as Java properties unicode escapes to avoid editor encoding issues.
 
 gptSovits.baseUrl=http://127.0.0.1:9880
-gptSovits.gptWeightPath=/Users/example/GPT-SoVITS/GPT_weights_v2ProPlus/closure_zh-e15.ckpt
-gptSovits.sovitsWeightPath=/Users/example/GPT-SoVITS/SoVITS_weights_v2ProPlus/closure_zh_e8_s304.pth
-gptSovits.neutral.refAudioPath=<neutral.wav 的绝对路径>
-gptSovits.neutral.promptText=六号无人机起飞，视野正常……可以出发。
-gptSovits.neutral.promptLang=zh
+gptSovits.gptWeightPath=<absolute-path-to-gpt-ckpt>
+gptSovits.sovitsWeightPath=<absolute-path-to-sovits-pth>
+
+# Whether to auto-speak AI replies after displayText is shown.
+voice.autoSpeak=true
+
+# Current active voice profiles are neutral, question and teasing.
+# Cheerful and serious configs are kept for later, but playback falls back to neutral for now.
+
+gptSovits.profile.neutral.refAudioPath=<absolute-path-to-neutral-wav>
+# Example: \u516d\u53f7\u65e0\u4eba\u673a\u8d77\u98de\uff0c\u89c6\u91ce\u6b63\u5e38\u2026\u2026\u53ef\u4ee5\u51fa\u53d1\u3002
+gptSovits.profile.neutral.promptText=<exact-neutral-reference-line>
+gptSovits.profile.neutral.promptLang=zh
+gptSovits.profile.neutral.speedFactor=0.95
+gptSovits.profile.neutral.topK=8
+gptSovits.profile.neutral.topP=0.85
+gptSovits.profile.neutral.temperature=0.7
+gptSovits.profile.neutral.seed=42
+gptSovits.profile.neutral.repetitionPenalty=1.35
+
+gptSovits.profile.question.refAudioPath=<absolute-path-to-question-wav>
+gptSovits.profile.question.promptText=<exact-question-reference-line>
+gptSovits.profile.question.promptLang=zh
+gptSovits.profile.question.speedFactor=0.95
+gptSovits.profile.question.topK=8
+gptSovits.profile.question.topP=0.85
+gptSovits.profile.question.temperature=0.7
+gptSovits.profile.question.seed=42
+gptSovits.profile.question.repetitionPenalty=1.35
+
+gptSovits.profile.cheerful.refAudioPath=<absolute-path-to-cheerful-wav>
+gptSovits.profile.cheerful.promptText=<exact-cheerful-reference-line>
+gptSovits.profile.cheerful.promptLang=zh
+gptSovits.profile.cheerful.speedFactor=0.95
+gptSovits.profile.cheerful.topK=8
+gptSovits.profile.cheerful.topP=0.85
+gptSovits.profile.cheerful.temperature=0.7
+gptSovits.profile.cheerful.seed=42
+gptSovits.profile.cheerful.repetitionPenalty=1.35
+
+gptSovits.profile.teasing.refAudioPath=<absolute-path-to-teasing-wav>
+gptSovits.profile.teasing.promptText=<exact-teasing-reference-line>
+gptSovits.profile.teasing.promptLang=zh
+gptSovits.profile.teasing.speedFactor=0.95
+gptSovits.profile.teasing.topK=8
+gptSovits.profile.teasing.topP=0.85
+gptSovits.profile.teasing.temperature=0.7
+gptSovits.profile.teasing.seed=42
+gptSovits.profile.teasing.repetitionPenalty=1.35
+
+gptSovits.profile.serious.refAudioPath=<absolute-path-to-serious-wav>
+gptSovits.profile.serious.promptText=<exact-serious-reference-line>
+gptSovits.profile.serious.promptLang=zh
+gptSovits.profile.serious.speedFactor=0.95
+gptSovits.profile.serious.topK=8
+gptSovits.profile.serious.topP=0.85
+gptSovits.profile.serious.temperature=0.7
+gptSovits.profile.serious.seed=42
+gptSovits.profile.serious.repetitionPenalty=1.35
