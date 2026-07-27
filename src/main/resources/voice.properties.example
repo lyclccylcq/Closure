@@ -1,0 +1,9 @@
+# 复制本文件内容到 config/local-voice.properties，然后填写你本机的真实路径。
+# config/local-voice.properties 已加入 .gitignore，不会提交到仓库。
+
+gptSovits.baseUrl=http://127.0.0.1:9880
+gptSovits.gptWeightPath=/Users/example/GPT-SoVITS/GPT_weights_v2ProPlus/closure_zh-e15.ckpt
+gptSovits.sovitsWeightPath=/Users/example/GPT-SoVITS/SoVITS_weights_v2ProPlus/closure_zh_e8_s304.pth
+gptSovits.neutral.refAudioPath=<neutral.wav 的绝对路径>
+gptSovits.neutral.promptText=六号无人机起飞，视野正常……可以出发。
+gptSovits.neutral.promptLang=zh
