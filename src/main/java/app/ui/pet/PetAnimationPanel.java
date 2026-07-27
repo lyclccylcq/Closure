@@ -71,6 +71,11 @@ public final class PetAnimationPanel extends JPanel {
             }
 
             ImageIcon originalIcon = new ImageIcon(frameUrl);
+            if (originalIcon.getIconWidth() == targetWidth && originalIcon.getIconHeight() == targetHeight) {
+                loadedFrames.add(originalIcon);
+                continue;
+            }
+
             Image scaledImage = originalIcon.getImage().getScaledInstance(
                     targetWidth,
                     targetHeight,

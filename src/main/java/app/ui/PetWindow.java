@@ -41,7 +41,7 @@ public class PetWindow extends JFrame {
     /**
      * 动态模型显示大小。
      */
-    private static final int MODEL_SIZE = 280;
+    private static final int MODEL_SIZE = 220;
 
     /**
      * 模型打开后默认放在屏幕右侧靠上位置。
