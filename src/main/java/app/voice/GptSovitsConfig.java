@@ -25,6 +25,14 @@ public final class GptSovitsConfig {
     public static final String ENV_NEUTRAL_PROMPT_TEXT = "CLOSURE_GPT_SOVITS_NEUTRAL_PROMPT_TEXT";
     public static final String ENV_NEUTRAL_PROMPT_LANG = "CLOSURE_GPT_SOVITS_NEUTRAL_PROMPT_LANG";
     public static final String ENV_AUTO_SPEAK = "CLOSURE_VOICE_AUTO_SPEAK";
+    public static final String ENV_SHORT_TEXT_MAX_CHARS = "CLOSURE_GPT_SOVITS_SHORT_TEXT_MAX_CHARS";
+    public static final String ENV_SHORT_TEXT_SPLIT_METHOD = "CLOSURE_GPT_SOVITS_SHORT_TEXT_SPLIT_METHOD";
+    public static final String ENV_LONG_TEXT_SPLIT_METHOD = "CLOSURE_GPT_SOVITS_LONG_TEXT_SPLIT_METHOD";
+    public static final String ENV_FRAGMENT_INTERVAL = "CLOSURE_GPT_SOVITS_FRAGMENT_INTERVAL";
+    public static final String ENV_SEED = "CLOSURE_GPT_SOVITS_SEED";
+    public static final String ENV_PARALLEL_INFER = "CLOSURE_GPT_SOVITS_PARALLEL_INFER";
+    public static final String ENV_SPLIT_BUCKET = "CLOSURE_GPT_SOVITS_SPLIT_BUCKET";
+    public static final String ENV_BATCH_SIZE = "CLOSURE_GPT_SOVITS_BATCH_SIZE";
 
     public static final String PROPERTY_BASE_URL = "gptSovits.baseUrl";
     public static final String PROPERTY_GPT_WEIGHT_PATH = "gptSovits.gptWeightPath";
@@ -33,6 +41,14 @@ public final class GptSovitsConfig {
     public static final String PROPERTY_NEUTRAL_PROMPT_TEXT = "gptSovits.neutral.promptText";
     public static final String PROPERTY_NEUTRAL_PROMPT_LANG = "gptSovits.neutral.promptLang";
     public static final String PROPERTY_AUTO_SPEAK = "voice.autoSpeak";
+    public static final String PROPERTY_SHORT_TEXT_MAX_CHARS = "gptSovits.shortTextMaxChars";
+    public static final String PROPERTY_SHORT_TEXT_SPLIT_METHOD = "gptSovits.shortTextSplitMethod";
+    public static final String PROPERTY_LONG_TEXT_SPLIT_METHOD = "gptSovits.longTextSplitMethod";
+    public static final String PROPERTY_FRAGMENT_INTERVAL = "gptSovits.fragmentInterval";
+    public static final String PROPERTY_SEED = "gptSovits.seed";
+    public static final String PROPERTY_PARALLEL_INFER = "gptSovits.parallelInfer";
+    public static final String PROPERTY_SPLIT_BUCKET = "gptSovits.splitBucket";
+    public static final String PROPERTY_BATCH_SIZE = "gptSovits.batchSize";
 
     private static final String PROFILE_PROPERTY_PREFIX = "gptSovits.profile.";
 
@@ -40,6 +56,14 @@ public final class GptSovitsConfig {
     private static final String DEFAULT_BASE_URL = "http://127.0.0.1:9880";
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(120);
+    private static final int DEFAULT_SHORT_TEXT_MAX_CHARS = 80;
+    private static final String DEFAULT_SHORT_TEXT_SPLIT_METHOD = "cut0";
+    private static final String DEFAULT_LONG_TEXT_SPLIT_METHOD = "cut5";
+    private static final double DEFAULT_FRAGMENT_INTERVAL = 0.12;
+    private static final int DEFAULT_SEED = 42;
+    private static final boolean DEFAULT_PARALLEL_INFER = true;
+    private static final boolean DEFAULT_SPLIT_BUCKET = true;
+    private static final int DEFAULT_BATCH_SIZE = 1;
 
     private final URI baseUri;
     private final Path gptWeightPath;
@@ -49,6 +73,14 @@ public final class GptSovitsConfig {
     private final Duration connectTimeout;
     private final Duration requestTimeout;
     private final boolean autoSpeakEnabled;
+    private final int shortTextMaxChars;
+    private final String shortTextSplitMethod;
+    private final String longTextSplitMethod;
+    private final double fragmentInterval;
+    private final int seed;
+    private final boolean parallelInfer;
+    private final boolean splitBucket;
+    private final int batchSize;
 
     public GptSovitsConfig(
             URI baseUri,
@@ -90,6 +122,42 @@ public final class GptSovitsConfig {
             Duration requestTimeout,
             boolean autoSpeakEnabled
     ) {
+        this(
+                baseUri,
+                gptWeightPath,
+                sovitsWeightPath,
+                voiceProfiles,
+                connectTimeout,
+                requestTimeout,
+                autoSpeakEnabled,
+                DEFAULT_SHORT_TEXT_MAX_CHARS,
+                DEFAULT_SHORT_TEXT_SPLIT_METHOD,
+                DEFAULT_LONG_TEXT_SPLIT_METHOD,
+                DEFAULT_FRAGMENT_INTERVAL,
+                DEFAULT_SEED,
+                DEFAULT_PARALLEL_INFER,
+                DEFAULT_SPLIT_BUCKET,
+                DEFAULT_BATCH_SIZE
+        );
+    }
+
+    public GptSovitsConfig(
+            URI baseUri,
+            Path gptWeightPath,
+            Path sovitsWeightPath,
+            Map<SpeechEmotion, VoiceProfile> voiceProfiles,
+            Duration connectTimeout,
+            Duration requestTimeout,
+            boolean autoSpeakEnabled,
+            int shortTextMaxChars,
+            String shortTextSplitMethod,
+            String longTextSplitMethod,
+            double fragmentInterval,
+            int seed,
+            boolean parallelInfer,
+            boolean splitBucket,
+            int batchSize
+    ) {
         this.baseUri = requireUri(baseUri);
         this.gptWeightPath = requirePath(gptWeightPath, "gptWeightPath");
         this.sovitsWeightPath = requirePath(sovitsWeightPath, "sovitsWeightPath");
@@ -98,6 +166,14 @@ public final class GptSovitsConfig {
         this.connectTimeout = connectTimeout == null ? DEFAULT_CONNECT_TIMEOUT : connectTimeout;
         this.requestTimeout = requestTimeout == null ? DEFAULT_REQUEST_TIMEOUT : requestTimeout;
         this.autoSpeakEnabled = autoSpeakEnabled;
+        this.shortTextMaxChars = requirePositive(shortTextMaxChars, "shortTextMaxChars");
+        this.shortTextSplitMethod = requireText(shortTextSplitMethod, "shortTextSplitMethod");
+        this.longTextSplitMethod = requireText(longTextSplitMethod, "longTextSplitMethod");
+        this.fragmentInterval = requirePositive(fragmentInterval, "fragmentInterval");
+        this.seed = requireNonNegative(seed, "seed");
+        this.parallelInfer = parallelInfer;
+        this.splitBucket = splitBucket;
+        this.batchSize = requirePositive(batchSize, "batchSize");
     }
 
     public static GptSovitsConfig fromEnvironment() {
@@ -123,7 +199,45 @@ public final class GptSovitsConfig {
                 voiceProfiles,
                 DEFAULT_CONNECT_TIMEOUT,
                 DEFAULT_REQUEST_TIMEOUT,
-                autoSpeakEnabled(localProperties)
+                autoSpeakEnabled(localProperties),
+                configInt(
+                        ENV_SHORT_TEXT_MAX_CHARS,
+                        PROPERTY_SHORT_TEXT_MAX_CHARS,
+                        localProperties,
+                        DEFAULT_SHORT_TEXT_MAX_CHARS
+                ),
+                configValueOrDefault(
+                        ENV_SHORT_TEXT_SPLIT_METHOD,
+                        PROPERTY_SHORT_TEXT_SPLIT_METHOD,
+                        localProperties,
+                        DEFAULT_SHORT_TEXT_SPLIT_METHOD
+                ),
+                configValueOrDefault(
+                        ENV_LONG_TEXT_SPLIT_METHOD,
+                        PROPERTY_LONG_TEXT_SPLIT_METHOD,
+                        localProperties,
+                        DEFAULT_LONG_TEXT_SPLIT_METHOD
+                ),
+                configDouble(
+                        ENV_FRAGMENT_INTERVAL,
+                        PROPERTY_FRAGMENT_INTERVAL,
+                        localProperties,
+                        DEFAULT_FRAGMENT_INTERVAL
+                ),
+                configInt(ENV_SEED, PROPERTY_SEED, localProperties, DEFAULT_SEED),
+                configBoolean(
+                        ENV_PARALLEL_INFER,
+                        PROPERTY_PARALLEL_INFER,
+                        localProperties,
+                        DEFAULT_PARALLEL_INFER
+                ),
+                configBoolean(
+                        ENV_SPLIT_BUCKET,
+                        PROPERTY_SPLIT_BUCKET,
+                        localProperties,
+                        DEFAULT_SPLIT_BUCKET
+                ),
+                configInt(ENV_BATCH_SIZE, PROPERTY_BATCH_SIZE, localProperties, DEFAULT_BATCH_SIZE)
         );
     }
 
@@ -182,6 +296,38 @@ public final class GptSovitsConfig {
 
     public boolean isAutoSpeakEnabled() {
         return autoSpeakEnabled;
+    }
+
+    public int getShortTextMaxChars() {
+        return shortTextMaxChars;
+    }
+
+    public String getShortTextSplitMethod() {
+        return shortTextSplitMethod;
+    }
+
+    public String getLongTextSplitMethod() {
+        return longTextSplitMethod;
+    }
+
+    public double getFragmentInterval() {
+        return fragmentInterval;
+    }
+
+    public int getSeed() {
+        return seed;
+    }
+
+    public boolean isParallelInfer() {
+        return parallelInfer;
+    }
+
+    public boolean isSplitBucket() {
+        return splitBucket;
+    }
+
+    public int getBatchSize() {
+        return batchSize;
     }
 
     private static Properties loadLocalProperties() {
@@ -342,6 +488,68 @@ public final class GptSovitsConfig {
         return "CLOSURE_GPT_SOVITS_PROFILE_" + emotion.name() + "_" + suffix;
     }
 
+    private static int configInt(
+            String environmentName,
+            String propertyName,
+            Properties localProperties,
+            int defaultValue
+    ) {
+        String value = configValue(environmentName, propertyName, localProperties);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new VoiceSynthesisException(propertyName + " 必须是整数", exception);
+        }
+    }
+
+    private static double configDouble(
+            String environmentName,
+            String propertyName,
+            Properties localProperties,
+            double defaultValue
+    ) {
+        String value = configValue(environmentName, propertyName, localProperties);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new VoiceSynthesisException(propertyName + " 必须是数字", exception);
+        }
+    }
+
+    private static boolean configBoolean(
+            String environmentName,
+            String propertyName,
+            Properties localProperties,
+            boolean defaultValue
+    ) {
+        String value = configValue(environmentName, propertyName, localProperties);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        if ("true".equalsIgnoreCase(value)
+                || "1".equals(value)
+                || "yes".equalsIgnoreCase(value)
+                || "on".equalsIgnoreCase(value)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(value)
+                || "0".equals(value)
+                || "no".equalsIgnoreCase(value)
+                || "off".equalsIgnoreCase(value)) {
+            return false;
+        }
+
+        throw new VoiceSynthesisException(propertyName + " 必须是 true 或 false");
+    }
+
     private static int profileInt(
             Properties localProperties,
             SpeechEmotion emotion,
@@ -455,6 +663,38 @@ public final class GptSovitsConfig {
         }
 
         return path;
+    }
+
+    private static String requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " 不能为空");
+        }
+
+        return value.trim();
+    }
+
+    private static int requirePositive(int value, String fieldName) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(fieldName + " 必须大于 0");
+        }
+
+        return value;
+    }
+
+    private static double requirePositive(double value, String fieldName) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(fieldName + " 必须大于 0");
+        }
+
+        return value;
+    }
+
+    private static int requireNonNegative(int value, String fieldName) {
+        if (value < 0) {
+            throw new IllegalArgumentException(fieldName + " 不能小于 0");
+        }
+
+        return value;
     }
 
     private static VoiceProfile requireVoiceProfile(VoiceProfile voiceProfile) {

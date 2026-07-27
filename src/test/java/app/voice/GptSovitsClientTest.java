@@ -1,5 +1,7 @@
 package app.voice;
 
+import app.voice.model.FileTtsAudioResult;
+import app.voice.model.TtsAudioResult;
 import app.voice.model.TtsRequest;
 import app.voice.model.VoiceProfile;
 import com.sun.net.httpserver.HttpExchange;
@@ -24,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,7 +49,7 @@ class GptSovitsClientTest {
             writeResponse(exchange, 200, fakeWav);
         });
 
-        Path outputPath = client().synthesize(ttsRequest("博士，测试一下。")).get(3, TimeUnit.SECONDS);
+        Path outputPath = synthesizeToFile(client(), ttsRequest("博士，测试一下。"));
 
         assertArrayEquals(fakeWav, Files.readAllBytes(outputPath));
         assertTrue(requestBody.get().contains("\"text\":\"博士，测试一下。\""));
@@ -56,6 +59,68 @@ class GptSovitsClientTest {
         assertTrue(requestBody.get().contains("\"temperature\":0.7"));
         assertTrue(requestBody.get().contains("\"seed\":42"));
         assertTrue(requestBody.get().contains("\"repetition_penalty\":1.35"));
+        assertTrue(requestBody.get().contains("\"fragment_interval\":0.12"));
+        assertTrue(requestBody.get().contains("\"parallel_infer\":true"));
+        assertTrue(requestBody.get().contains("\"split_bucket\":true"));
+
+        Files.deleteIfExists(outputPath);
+    }
+
+    @Test
+    void shortTextUsesCut0() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        startServer(exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            writeResponse(exchange, 200, "RIFF-short".getBytes(StandardCharsets.US_ASCII));
+        });
+
+        Path outputPath = synthesizeToFile(client(), ttsRequest("短句。"));
+
+        assertTrue(requestBody.get().contains("\"text_split_method\":\"cut0\""));
+        Files.deleteIfExists(outputPath);
+    }
+
+    @Test
+    void longTextUsesCut5() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        startServer(exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            writeResponse(exchange, 200, "RIFF-long".getBytes(StandardCharsets.US_ASCII));
+        });
+
+        Path outputPath = synthesizeToFile(client(), ttsRequest("长".repeat(81)));
+
+        assertTrue(requestBody.get().contains("\"text_split_method\":\"cut5\""));
+        Files.deleteIfExists(outputPath);
+    }
+
+    @Test
+    void cut0UnsupportedFallsBackToCut5() throws Exception {
+        byte[] fakeWav = "RIFF-fallback-cut5".getBytes(StandardCharsets.US_ASCII);
+        List<String> requestBodies = Collections.synchronizedList(new ArrayList<>());
+        List<String> warnings = Collections.synchronizedList(new ArrayList<>());
+        startServer(exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            requestBodies.add(body);
+            if (body.contains("\"text_split_method\":\"cut0\"")) {
+                writeResponse(exchange, 400, "cut0 unsupported".getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+            writeResponse(exchange, 200, fakeWav);
+        });
+
+        GptSovitsClient client = new GptSovitsClient(
+                config(Path.of("/tmp/closure-gpt.ckpt"), Path.of("/tmp/closure-sovits.pth")),
+                java.net.http.HttpClient.newHttpClient(),
+                warnings::add
+        );
+        Path outputPath = synthesizeToFile(client, ttsRequest("短句。"));
+
+        assertArrayEquals(fakeWav, Files.readAllBytes(outputPath));
+        assertEquals(2, requestBodies.size());
+        assertTrue(requestBodies.getFirst().contains("\"text_split_method\":\"cut0\""));
+        assertTrue(requestBodies.get(1).contains("\"text_split_method\":\"cut5\""));
+        assertEquals(1, warnings.size());
 
         Files.deleteIfExists(outputPath);
     }
@@ -93,7 +158,7 @@ class GptSovitsClientTest {
             writeResponse(exchange, 200, fakeWav);
         });
 
-        Path outputPath = client().synthesize(ttsRequest("博士，回退测试。")).get(3, TimeUnit.SECONDS);
+        Path outputPath = synthesizeToFile(client(), ttsRequest("博士，回退测试。"));
 
         assertArrayEquals(fakeWav, Files.readAllBytes(outputPath));
         assertEquals(List.of("POST", "GET"), requestMethods);
@@ -101,6 +166,7 @@ class GptSovitsClientTest {
         assertTrue(getQuery.get().contains("media_type=wav"));
         assertTrue(getQuery.get().contains("seed=42"));
         assertTrue(getQuery.get().contains("repetition_penalty=1.35"));
+        assertTrue(getQuery.get().contains("text_split_method=cut0"));
 
         Files.deleteIfExists(outputPath);
     }
@@ -189,6 +255,12 @@ class GptSovitsClientTest {
                 "六号无人机起飞，视野正常……可以出发。",
                 "zh"
         );
+    }
+
+    private Path synthesizeToFile(GptSovitsClient client, TtsRequest request) throws Exception {
+        TtsAudioResult result = client.synthesize(request).get(3, TimeUnit.SECONDS);
+        FileTtsAudioResult fileResult = assertInstanceOf(FileTtsAudioResult.class, result);
+        return fileResult.getAudioFile();
     }
 
     private void writeResponse(HttpExchange exchange, int statusCode, byte[] body) throws IOException {

@@ -1,38 +1,46 @@
 package app.service;
 
+import app.chat.model.AssistantReply;
 import app.voice.GptSovitsClient;
 import app.voice.GptSovitsConfig;
 import app.voice.VoiceProfileRegistry;
 import app.voice.VoiceSynthesisClient;
 import app.voice.VoiceSynthesisException;
-import app.voice.model.SpeechSegment;
+import app.voice.model.FileTtsAudioResult;
+import app.voice.model.TtsAudioResult;
 import app.voice.model.TtsRequest;
 import app.voice.model.VoiceProfile;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 文字转语音业务编排。
  * 负责初始化 GPT-SoVITS、合成 WAV，并交给 JavaFX 播放器播放。
  */
 public final class SpeechService implements AssistantSpeechService {
+    private static final String WARMUP_TEXT = "工程部在线。";
+    private static final int WARMUP_MAX_ATTEMPTS = 3;
+    private static final long WARMUP_RETRY_DELAY_MILLIS = 2_000L;
+
     private final VoiceSynthesisClient ttsClient;
     private final VoiceAudioPlayer audioPlayerService;
-    private final VoiceProfileRegistry voiceProfileRegistry;
     private final Throwable unavailableCause;
     private CompletableFuture<Void> initializationFuture;
     private CompletableFuture<Void> activeSpeechFuture;
     private long speechGeneration;
+    private volatile boolean ready;
 
     public SpeechService(VoiceSynthesisClient ttsClient, VoiceAudioPlayer audioPlayerService) {
-        this(ttsClient, audioPlayerService, null);
+        this.ttsClient = Objects.requireNonNull(ttsClient, "ttsClient");
+        this.audioPlayerService = Objects.requireNonNull(audioPlayerService, "audioPlayerService");
+        unavailableCause = null;
     }
 
     public SpeechService(
@@ -40,16 +48,12 @@ public final class SpeechService implements AssistantSpeechService {
             VoiceAudioPlayer audioPlayerService,
             VoiceProfileRegistry voiceProfileRegistry
     ) {
-        this.ttsClient = Objects.requireNonNull(ttsClient, "ttsClient");
-        this.audioPlayerService = Objects.requireNonNull(audioPlayerService, "audioPlayerService");
-        this.voiceProfileRegistry = voiceProfileRegistry;
-        unavailableCause = null;
+        this(ttsClient, audioPlayerService);
     }
 
     private SpeechService(Throwable unavailableCause) {
         ttsClient = null;
         audioPlayerService = new AudioPlayerService();
-        voiceProfileRegistry = null;
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
     }
 
@@ -58,8 +62,7 @@ public final class SpeechService implements AssistantSpeechService {
             GptSovitsConfig config = GptSovitsConfig.fromEnvironment();
             return new SpeechService(
                     new GptSovitsClient(config),
-                    new AudioPlayerService(),
-                    VoiceProfileRegistry.fromConfig(config, message -> System.out.println("语音 profile 警告：" + message))
+                    new AudioPlayerService()
             );
         } catch (RuntimeException exception) {
             return new SpeechService(exception);
@@ -67,7 +70,21 @@ public final class SpeechService implements AssistantSpeechService {
     }
 
     @Override
+    public CompletableFuture<Void> warmUp(VoiceProfile profile) {
+        return warmUp(profile, 1);
+    }
+
+    public boolean isReady() {
+        return ready;
+    }
+
+    @Override
     public CompletableFuture<Void> speak(String text, VoiceProfile profile) {
+        String speechText = SpeechTextSanitizer.sanitize(text, AssistantReply.MAX_SPEECH_TEXT_CODE_POINTS);
+        if (speechText.isBlank()) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         long generation = startNewSpeechRequest();
 
         if (unavailableCause != null) {
@@ -84,12 +101,17 @@ public final class SpeechService implements AssistantSpeechService {
         }
 
         CompletableFuture<Void> speechFuture = initializeOnce()
-                .thenCompose(unused -> ttsClient.synthesize(new TtsRequest(text, "zh", profile, profile.getSpeedFactor())))
-                .thenCompose(audioFile -> {
+                .thenCompose(unused -> ttsClient.synthesize(new TtsRequest(
+                        speechText,
+                        "zh",
+                        profile,
+                        profile.getSpeedFactor()
+                )))
+                .thenCompose(audioResult -> {
                     if (isCurrentSpeech(generation)) {
-                        return playAndDelete(generation, audioFile);
+                        return playAndDelete(generation, audioResult);
                     }
-                    deleteTempAudio(audioFile);
+                    deleteAudioResult(audioResult);
                     return CompletableFuture.completedFuture(null);
                 });
 
@@ -97,28 +119,40 @@ public final class SpeechService implements AssistantSpeechService {
         return speechFuture;
     }
 
-    @Override
-    public CompletableFuture<Void> speakSegments(List<SpeechSegment> segments) {
-        long generation = startNewSpeechRequest();
-
+    private CompletableFuture<Void> warmUp(VoiceProfile profile, int attempt) {
         if (unavailableCause != null) {
             return CompletableFuture.failedFuture(new VoiceSynthesisException(
                     "语音服务不可用：" + unavailableCause.getMessage(),
                     unavailableCause
             ));
         }
-        if (segments == null || segments.isEmpty()) {
-            return CompletableFuture.completedFuture(null);
-        }
-        if (voiceProfileRegistry == null || !voiceProfileRegistry.isAvailable()) {
-            return CompletableFuture.completedFuture(null);
+        Objects.requireNonNull(profile, "profile");
+        if (!Files.isRegularFile(profile.getReferenceAudioPath())) {
+            return CompletableFuture.failedFuture(new VoiceSynthesisException(
+                    "参考音频不存在：" + profile.getReferenceAudioPath()
+            ));
         }
 
-        CompletableFuture<Void> speechFuture = initializeOnce()
-                .thenCompose(unused -> speakSegmentChain(generation, segments, 0));
-
-        rememberActiveSpeech(generation, speechFuture);
-        return speechFuture;
+        return ttsClient.checkAvailable()
+                .thenCompose(unused -> initializeOnce())
+                .thenCompose(unused -> ttsClient.synthesize(new TtsRequest(
+                        WARMUP_TEXT,
+                        "zh",
+                        profile,
+                        profile.getSpeedFactor()
+                )))
+                .thenAccept(this::deleteAudioResult)
+                .thenRun(() -> ready = true)
+                .handle((unused, error) -> {
+                    if (error == null) {
+                        return CompletableFuture.<Void>completedFuture(null);
+                    }
+                    if (shouldRetryWarmUp(attempt)) {
+                        return delayedWarmUp(profile, attempt + 1);
+                    }
+                    return CompletableFuture.<Void>failedFuture(unwrapCompletion(error));
+                })
+                .thenCompose(future -> future);
     }
 
     @Override
@@ -130,70 +164,51 @@ public final class SpeechService implements AssistantSpeechService {
             activeSpeechFuture = null;
         }
 
-        if (speechFuture != null) {
-            speechFuture.cancel(true);
-        }
         audioPlayerService.stop();
     }
 
     private synchronized CompletableFuture<Void> initializeOnce() {
-        if (initializationFuture == null
-                || initializationFuture.isCancelled()
-                || initializationFuture.isCompletedExceptionally()) {
+        if (initializationFuture == null) {
             initializationFuture = ttsClient.initializeModels();
         }
 
         return initializationFuture;
     }
 
-    private CompletableFuture<Void> speakSegmentChain(
-            long generation,
-            List<SpeechSegment> segments,
-            int segmentIndex
-    ) {
-        if (!isCurrentSpeech(generation) || segmentIndex >= segments.size()) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        SpeechSegment segment = segments.get(segmentIndex);
-        String text = SpeechTextSanitizer.sanitizeSegment(segment.getText());
-        if (text.isBlank()) {
-            return speakSegmentChain(generation, segments, segmentIndex + 1);
-        }
-
-        VoiceProfile profile = voiceProfileRegistry.get(segment.getEmotion());
-        if (profile == null) {
-            return speakSegmentChain(generation, segments, segmentIndex + 1);
-        }
-
-        CompletableFuture<Void> currentSegmentFuture = ttsClient
-                .synthesize(new TtsRequest(text, "zh", profile, profile.getSpeedFactor()))
-                .thenCompose(audioFile -> {
-                    if (!isCurrentSpeech(generation)) {
-                        deleteTempAudio(audioFile);
-                        return CompletableFuture.completedFuture(null);
-                    }
-
-                    return playAndDelete(generation, audioFile);
-                })
-                .exceptionally(error -> {
-                    if (!isCancellation(error)) {
-                        System.out.println("语音分段朗读失败：" + safeMessage(error));
-                    }
-                    return null;
-                });
-
-        return currentSegmentFuture.thenCompose(unused -> speakSegmentChain(generation, segments, segmentIndex + 1));
+    private CompletableFuture<Void> delayedWarmUp(VoiceProfile profile, int attempt) {
+        return CompletableFuture
+                .runAsync(
+                        () -> {
+                        },
+                        CompletableFuture.delayedExecutor(WARMUP_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+                )
+                .thenCompose(unused -> warmUp(profile, attempt));
     }
 
-    private CompletableFuture<Void> playAndDelete(long generation, Path audioFile) {
+    private boolean shouldRetryWarmUp(int attempt) {
+        return attempt < WARMUP_MAX_ATTEMPTS
+                && (initializationFuture == null || !initializationFuture.isCompletedExceptionally());
+    }
+
+    private CompletableFuture<Void> playAndDelete(long generation, TtsAudioResult audioResult) {
         if (!isCurrentSpeech(generation)) {
-            deleteTempAudio(audioFile);
+            deleteAudioResult(audioResult);
             return CompletableFuture.completedFuture(null);
         }
 
-        return audioPlayerService.playAndWait(audioFile)
-                .whenComplete((unused, error) -> deleteTempAudio(audioFile));
+        if (audioResult instanceof FileTtsAudioResult fileResult) {
+            Path audioFile = fileResult.getAudioFile();
+            return audioPlayerService.playAndWait(audioFile)
+                    .whenComplete((unused, error) -> deleteTempAudio(audioFile));
+        }
+
+        return CompletableFuture.failedFuture(new VoiceSynthesisException("暂不支持的 TTS 音频结果类型"));
+    }
+
+    private void deleteAudioResult(TtsAudioResult audioResult) {
+        if (audioResult instanceof FileTtsAudioResult fileResult) {
+            deleteTempAudio(fileResult.getAudioFile());
+        }
     }
 
     private void deleteTempAudio(Path audioFile) {
@@ -218,9 +233,6 @@ public final class SpeechService implements AssistantSpeechService {
             activeSpeechFuture = null;
         }
 
-        if (previousSpeechFuture != null) {
-            previousSpeechFuture.cancel(true);
-        }
         audioPlayerService.stop();
         return generation;
     }
@@ -231,7 +243,6 @@ public final class SpeechService implements AssistantSpeechService {
 
     private synchronized void rememberActiveSpeech(long generation, CompletableFuture<Void> speechFuture) {
         if (speechGeneration != generation) {
-            speechFuture.cancel(true);
             return;
         }
 
@@ -257,11 +268,17 @@ public final class SpeechService implements AssistantSpeechService {
         return false;
     }
 
-    private String safeMessage(Throwable error) {
+    private Throwable unwrapCompletion(Throwable error) {
         Throwable current = error;
         while (current instanceof CompletionException && current.getCause() != null) {
             current = current.getCause();
         }
+
+        return current == null ? new VoiceSynthesisException("未知语音错误") : current;
+    }
+
+    private String safeMessage(Throwable error) {
+        Throwable current = unwrapCompletion(error);
 
         String message = current == null ? null : current.getMessage();
         if (message == null || message.isBlank()) {

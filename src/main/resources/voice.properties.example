@@ -9,6 +9,15 @@ gptSovits.sovitsWeightPath=<absolute-path-to-sovits-pth>
 # Whether to auto-speak AI replies after displayText is shown.
 voice.autoSpeak=true
 
+gptSovits.shortTextMaxChars=80
+gptSovits.shortTextSplitMethod=cut0
+gptSovits.longTextSplitMethod=cut5
+gptSovits.fragmentInterval=0.12
+gptSovits.seed=42
+gptSovits.parallelInfer=true
+gptSovits.splitBucket=true
+gptSovits.batchSize=1
+
 # Current active voice profiles are neutral, question and teasing.
 # Cheerful and serious configs are kept for later, but playback falls back to neutral for now.
 

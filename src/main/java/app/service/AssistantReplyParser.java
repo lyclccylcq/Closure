@@ -2,13 +2,9 @@ package app.service;
 
 import app.chat.model.AssistantReply;
 import app.voice.model.SpeechEmotion;
-import app.voice.model.SpeechSegment;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
- * 把模型原始响应解析成聊天显示文本和语音分段。
+ * 把模型原始响应解析成聊天显示文本、朗读文本和整条回复的主情绪。
  */
 public final class AssistantReplyParser {
     public AssistantReply parse(String rawModelResponse) {
@@ -18,7 +14,7 @@ public final class AssistantReplyParser {
         } catch (RuntimeException exception) {
             System.out.println("AssistantReply JSON 解析失败，使用降级文本：" + exception.getMessage());
             String displayText = fallbackDisplayText(normalizedResponse);
-            return new AssistantReply(displayText, fallbackSegments(displayText));
+            return new AssistantReply(displayText, displayText, SpeechEmotion.NEUTRAL);
         }
     }
 
@@ -29,19 +25,11 @@ public final class AssistantReplyParser {
             throw new IllegalArgumentException("displayText 缺失");
         }
 
-        List<SpeechSegment> segments = new ArrayList<>();
-        String segmentsJson = extractArrayField(objectJson, "speechSegments");
-        if (segmentsJson != null) {
-            for (String segmentJson : splitJsonObjects(segmentsJson)) {
-                String text = extractStringField(segmentJson, "text");
-                if (text == null || text.isBlank()) {
-                    continue;
-                }
-                segments.add(new SpeechSegment(text, SpeechEmotion.fromString(extractStringField(segmentJson, "emotion"))));
-            }
-        }
+        String speechText = extractStringField(objectJson, "speechText");
+        SpeechEmotion declaredEmotion = SpeechEmotion.fromString(extractStringField(objectJson, "dominantEmotion"));
+        SpeechEmotion dominantEmotion = normalizeDominantEmotion(displayText + "\n" + speechText, declaredEmotion);
 
-        return new AssistantReply(displayText, segments);
+        return new AssistantReply(displayText, speechText, dominantEmotion);
     }
 
     private String fallbackDisplayText(String response) {
@@ -52,41 +40,54 @@ public final class AssistantReplyParser {
         return response.trim();
     }
 
-    private List<SpeechSegment> fallbackSegments(String displayText) {
-        List<SpeechSegment> segments = new ArrayList<>();
-        for (String sentence : splitSentences(displayText)) {
-            if (segments.size() >= AssistantReply.MAX_SEGMENTS) {
-                break;
-            }
-
-            String text = SpeechTextSanitizer.sanitizeSegment(sentence);
-            if (!text.isBlank()) {
-                segments.add(new SpeechSegment(text, fallbackEmotion(text)));
-            }
+    private SpeechEmotion normalizeDominantEmotion(String text, SpeechEmotion declaredEmotion) {
+        if (declaredEmotion == SpeechEmotion.NEUTRAL) {
+            return SpeechEmotion.NEUTRAL;
         }
 
-        return segments;
+        int obviousEmotionKinds = 0;
+        if (looksTeasing(text)) {
+            obviousEmotionKinds++;
+        }
+        if (looksSerious(text)) {
+            obviousEmotionKinds++;
+        }
+        if (looksQuestion(text)) {
+            obviousEmotionKinds++;
+        }
+        if (looksCheerful(text)) {
+            obviousEmotionKinds++;
+        }
+
+        if (obviousEmotionKinds > 1) {
+            return SpeechEmotion.NEUTRAL;
+        }
+
+        return declaredEmotion == null ? SpeechEmotion.NEUTRAL : declaredEmotion;
     }
 
-    private SpeechEmotion fallbackEmotion(String text) {
-        String trimmedText = text.trim();
-        if (containsAny(trimmedText, "维修费", "收费", "打折", "采购", "别戳", "偷懒", "摸鱼", "补觉", "逗", "催工期", "不是吧", "哼")) {
-            return SpeechEmotion.TEASING;
-        }
-        if (containsAny(trimmedText, "立即停止", "立刻停止", "马上停止", "禁止继续", "不要继续", "会删除", "删除数据", "危险操作", "严重风险", "高风险")) {
-            return SpeechEmotion.SERIOUS;
-        }
-        if (trimmedText.endsWith("？") || trimmedText.endsWith("?")) {
-            return SpeechEmotion.QUESTION;
-        }
-        if (containsAny(trimmedText, "太好了", "好耶", "恭喜", "欢迎", "太棒了", "真棒")) {
-            return SpeechEmotion.CHEERFUL;
-        }
+    private boolean looksTeasing(String text) {
+        return containsAny(text, "维修费", "收费", "打折", "采购", "别戳", "偷懒", "摸鱼", "补觉", "催工期", "不是吧", "哼");
+    }
 
-        return SpeechEmotion.NEUTRAL;
+    private boolean looksSerious(String text) {
+        return containsAny(text, "立即停止", "立刻停止", "马上停止", "禁止继续", "不要继续", "会删除", "删除数据", "危险操作", "严重风险", "高风险");
+    }
+
+    private boolean looksQuestion(String text) {
+        String trimmedText = text == null ? "" : text.trim();
+        return trimmedText.endsWith("？") || trimmedText.endsWith("?");
+    }
+
+    private boolean looksCheerful(String text) {
+        return containsAny(text, "太好了", "好耶", "恭喜", "欢迎", "太棒了", "真棒");
     }
 
     private boolean containsAny(String text, String... candidates) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+
         for (String candidate : candidates) {
             if (text.contains(candidate)) {
                 return true;
@@ -94,38 +95,6 @@ public final class AssistantReplyParser {
         }
 
         return false;
-    }
-
-    private List<String> splitSentences(String text) {
-        List<String> sentences = new ArrayList<>();
-        if (text == null || text.isBlank()) {
-            return sentences;
-        }
-
-        StringBuilder currentSentence = new StringBuilder();
-        text.codePoints().forEach(codePoint -> {
-            currentSentence.appendCodePoint(codePoint);
-            if (isSentenceBoundary(codePoint)) {
-                sentences.add(currentSentence.toString().trim());
-                currentSentence.setLength(0);
-            }
-        });
-
-        if (!currentSentence.isEmpty()) {
-            sentences.add(currentSentence.toString().trim());
-        }
-
-        return sentences;
-    }
-
-    private boolean isSentenceBoundary(int codePoint) {
-        return codePoint == '。'
-                || codePoint == '？'
-                || codePoint == '?'
-                || codePoint == '！'
-                || codePoint == '!'
-                || codePoint == '；'
-                || codePoint == ';';
     }
 
     private String stripCodeFence(String text) {
@@ -167,39 +136,6 @@ public final class AssistantReplyParser {
         return readJsonString(json, valueStart);
     }
 
-    private String extractArrayField(String json, String fieldName) {
-        int fieldIndex = findField(json, fieldName);
-        if (fieldIndex < 0) {
-            return null;
-        }
-
-        int colonIndex = json.indexOf(':', fieldIndex);
-        int valueStart = skipWhitespace(json, colonIndex + 1);
-        if (valueStart >= json.length() || json.charAt(valueStart) != '[') {
-            return null;
-        }
-
-        int valueEnd = findMatchingBracket(json, valueStart, '[', ']');
-        return json.substring(valueStart + 1, valueEnd);
-    }
-
-    private List<String> splitJsonObjects(String arrayJson) {
-        List<String> objects = new ArrayList<>();
-        int index = 0;
-        while (index < arrayJson.length()) {
-            int objectStart = arrayJson.indexOf('{', index);
-            if (objectStart < 0) {
-                break;
-            }
-
-            int objectEnd = findMatchingBracket(arrayJson, objectStart, '{', '}');
-            objects.add(arrayJson.substring(objectStart, objectEnd + 1));
-            index = objectEnd + 1;
-        }
-
-        return objects;
-    }
-
     private int findField(String json, String fieldName) {
         return json.indexOf("\"" + fieldName + "\"");
     }
@@ -211,40 +147,6 @@ public final class AssistantReplyParser {
         }
 
         return index;
-    }
-
-    private int findMatchingBracket(String text, int openIndex, char openBracket, char closeBracket) {
-        int depth = 0;
-        boolean inString = false;
-        boolean escaped = false;
-        for (int index = openIndex; index < text.length(); index++) {
-            char character = text.charAt(index);
-            if (inString) {
-                if (escaped) {
-                    escaped = false;
-                } else if (character == '\\') {
-                    escaped = true;
-                } else if (character == '"') {
-                    inString = false;
-                }
-                continue;
-            }
-
-            if (character == '"') {
-                inString = true;
-                continue;
-            }
-            if (character == openBracket) {
-                depth++;
-            } else if (character == closeBracket) {
-                depth--;
-                if (depth == 0) {
-                    return index;
-                }
-            }
-        }
-
-        throw new IllegalArgumentException("JSON 括号不完整");
     }
 
     private String readJsonString(String json, int quoteIndex) {
@@ -286,6 +188,6 @@ public final class AssistantReplyParser {
             }
         }
 
-        throw new IllegalArgumentException("JSON 字符串没有结束");
+        throw new IllegalArgumentException("JSON 字符串没有闭合");
     }
 }

@@ -71,24 +71,23 @@
 - JSON 结构必须是：
 {
   "displayText": "聊天窗口显示的完整自然回复",
-  "speechSegments": [
-    {
-      "text": "第一个适合连续朗读的短句",
-      "emotion": "NEUTRAL"
-    }
-  ]
+  "speechText": "适合自然朗读的简短口语版本",
+  "dominantEmotion": "NEUTRAL"
 }
 - displayText 是给博士看的自然回复。
-- speechSegments 是 displayText 的朗读分段，只用于语音合成。
-- speechSegments 每段通常为一句话，一次回复最多 5 段。
-- 不要为了展示所有情绪而强行拆分，同一种语气的相邻句子可以合并。
-- displayText 与 speechSegments 的语义和内容必须一致。
+- speechText 是 displayText 的朗读版本，只用于语音合成。
+- speechText 必须与 displayText 语义一致，不包含 Markdown。
+- speechText 一般为 1 至 3 句话，推荐 20 至 80 个中文字符，最多 120 个中文字符。
+- 对长代码说明、技术说明，只朗读总结，不逐字朗读代码、URL、路径和 Markdown。
+- dominantEmotion 决定整条回复的唯一朗读语气；同一条回复只能选择一个 VoiceProfile。
+- 不得因为句号、问号或感叹号在同一条回复里切换情绪。
+- 存在多种混合语气时返回 NEUTRAL。
+- displayText 与 speechText 的语义和内容必须一致。
 - 不得在文本中输出括号式表演说明，例如“（开心地）”“（严肃）”“笑着说”。
-- emotion 只能使用：NEUTRAL、QUESTION、CHEERFUL、TEASING、SERIOUS。
+- dominantEmotion 只能使用：NEUTRAL、QUESTION、CHEERFUL、TEASING、SERIOUS。
 - 默认优先使用 NEUTRAL；无法确定时返回 NEUTRAL。
 - 普通完成通知、事实说明、建议和一般提醒均为 NEUTRAL。
 - 只有情绪非常明确时才使用非 NEUTRAL。
-- 一条回复最多允许一个明显情绪分段，其余分段优先 NEUTRAL。
 - NEUTRAL：普通陈述、日常闲聊、信息说明、完成通知、一般提醒。
 - QUESTION：真实疑问、确认、反问，尤其是需要明显疑问语气的句子；问号只是弱提示。
 - CHEERFUL：非常明确的开心、欢迎、祝贺或夸奖，不得仅根据感叹号判断。

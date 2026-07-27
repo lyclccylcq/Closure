@@ -7,6 +7,7 @@ import app.service.AssistantReplyParser;
 import app.service.ChatService;
 import app.service.ChatSpeechController;
 import app.service.ChatStreamListener;
+import app.voice.model.SpeechEmotion;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -99,7 +100,11 @@ final class ChatView extends BorderPane {
                 Platform.runLater(() -> {
                     AssistantReply assistantReply;
                     if(!receivedToken[0]){
-                        assistantReply=new AssistantReply("工程部暂时没有收到模型回复。", java.util.List.of());
+                        assistantReply=new AssistantReply(
+                                "工程部暂时没有收到模型回复。",
+                                "工程部暂时没有收到模型回复。",
+                                SpeechEmotion.NEUTRAL
+                        );
                     }else{
                         assistantReply=assistantReplyParser.parse(replyText.toString());
                     }

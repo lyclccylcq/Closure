@@ -1,9 +1,8 @@
 package app.service;
 
-import app.voice.VoiceProfileRegistry;
 import app.voice.VoiceSynthesisClient;
-import app.voice.model.SpeechEmotion;
-import app.voice.model.SpeechSegment;
+import app.voice.model.FileTtsAudioResult;
+import app.voice.model.TtsAudioResult;
 import app.voice.model.TtsRequest;
 import app.voice.model.VoiceProfile;
 import org.junit.jupiter.api.Test;
@@ -15,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,63 +25,78 @@ class SpeechServiceTest {
     Path tempDir;
 
     @Test
-    void speaksMultipleSegmentsInOrder() throws Exception {
+    void oneReplyWithThreeSentencesCallsSynthesizeOnce() throws Exception {
         FakeTtsClient ttsClient = new FakeTtsClient();
         FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
-        SpeechService speechService = speechService(ttsClient, audioPlayer);
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
 
-        CompletableFuture<Void> result = speechService.speakSegments(List.of(
-                new SpeechSegment("第一段。", SpeechEmotion.NEUTRAL),
-                new SpeechSegment("第二段？", SpeechEmotion.QUESTION)
-        ));
+        CompletableFuture<Void> result = speechService.speak("第一句。第二句？第三句！", profile("neutral", "neutral.wav"));
 
+        assertEquals(1, ttsClient.initializeCount);
         assertEquals(1, ttsClient.requests.size());
-        Path firstAudio = outputAudio("first.wav");
-        ttsClient.synthesisFutures.getFirst().complete(firstAudio);
-        assertEquals(List.of(firstAudio), audioPlayer.playedFiles);
-        assertEquals(1, ttsClient.requests.size());
-
+        Path audio = outputAudio("single.wav");
+        ttsClient.synthesisFutures.getFirst().complete(new FileTtsAudioResult(audio));
+        assertEquals(List.of(audio), audioPlayer.playedFiles);
         audioPlayer.playbackFutures.getFirst().complete(null);
-        assertEquals(2, ttsClient.requests.size());
-
-        Path secondAudio = outputAudio("second.wav");
-        ttsClient.synthesisFutures.get(1).complete(secondAudio);
-        assertEquals(List.of(firstAudio, secondAudio), audioPlayer.playedFiles);
-        audioPlayer.playbackFutures.get(1).complete(null);
 
         assertTrue(result.isDone());
     }
 
     @Test
-    void usesProfileForEachEmotion() throws Exception {
+    void modelInitializationOnlyRunsOnceAcrossWarmupAndSpeak() throws Exception {
         FakeTtsClient ttsClient = new FakeTtsClient();
         FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
-        SpeechService speechService = speechService(ttsClient, audioPlayer);
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
 
-        speechService.speakSegments(List.of(
-                new SpeechSegment("普通。", SpeechEmotion.NEUTRAL),
-                new SpeechSegment("真的？", SpeechEmotion.QUESTION)
-        ));
+        CompletableFuture<Void> warmUp = speechService.warmUp(neutral);
+        Path warmupAudio = outputAudio("warmup.wav");
+        ttsClient.synthesisFutures.getFirst().complete(new FileTtsAudioResult(warmupAudio));
+        warmUp.join();
 
-        ttsClient.synthesisFutures.getFirst().complete(outputAudio("neutral-output.wav"));
-        audioPlayer.playbackFutures.getFirst().complete(null);
-        ttsClient.synthesisFutures.get(1).complete(outputAudio("question-output.wav"));
+        speechService.speak("博士，测试。", neutral);
 
-        assertEquals("neutral", ttsClient.requests.getFirst().getVoiceProfile().getId());
-        assertEquals("question", ttsClient.requests.get(1).getVoiceProfile().getId());
+        assertEquals(1, ttsClient.checkCount);
+        assertEquals(1, ttsClient.initializeCount);
+        assertEquals(2, ttsClient.requests.size());
+        assertTrue(speechService.isReady());
+        assertFalse(Files.exists(warmupAudio));
+    }
+
+    @Test
+    void warmupFailureDoesNotPreventLaterSpeech() throws Exception {
+        FakeTtsClient ttsClient = new FakeTtsClient();
+        FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
+        VoiceProfile missingProfile = new VoiceProfile(
+                "missing",
+                tempDir.resolve("missing.wav"),
+                "参考文本。",
+                "zh"
+        );
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
+
+        CompletableFuture<Void> warmUp = speechService.warmUp(missingProfile);
+        assertTrue(warmUp.isCompletedExceptionally());
+
+        speechService.speak("博士，后续朗读。", neutral);
+
+        assertEquals(1, ttsClient.requests.size());
+        assertEquals("博士，后续朗读。", ttsClient.requests.getFirst().getText());
     }
 
     @Test
     void newRequestInvalidatesOldRequest() throws Exception {
         FakeTtsClient ttsClient = new FakeTtsClient();
         FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
-        SpeechService speechService = speechService(ttsClient, audioPlayer);
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
 
-        speechService.speakSegments(List.of(new SpeechSegment("旧回复。", SpeechEmotion.NEUTRAL)));
+        speechService.speak("旧回复。", neutral);
         Path oldAudio = outputAudio("old.wav");
-        speechService.speakSegments(List.of(new SpeechSegment("新回复。", SpeechEmotion.NEUTRAL)));
+        speechService.speak("新回复。", neutral);
 
-        ttsClient.synthesisFutures.getFirst().complete(oldAudio);
+        ttsClient.synthesisFutures.getFirst().complete(new FileTtsAudioResult(oldAudio));
 
         assertTrue(audioPlayer.playedFiles.isEmpty());
         assertFalse(Files.exists(oldAudio));
@@ -93,51 +106,16 @@ class SpeechServiceTest {
     void oldLateResultDoesNotPlay() throws Exception {
         FakeTtsClient ttsClient = new FakeTtsClient();
         FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
-        SpeechService speechService = speechService(ttsClient, audioPlayer);
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
 
-        speechService.speakSegments(List.of(new SpeechSegment("第一条。", SpeechEmotion.NEUTRAL)));
-        CompletableFuture<Path> firstFuture = ttsClient.synthesisFutures.getFirst();
-        speechService.speakSegments(List.of(new SpeechSegment("第二条。", SpeechEmotion.NEUTRAL)));
+        speechService.speak("第一条。", neutral);
+        CompletableFuture<TtsAudioResult> firstFuture = ttsClient.synthesisFutures.getFirst();
+        speechService.speak("第二条。", neutral);
 
-        firstFuture.complete(outputAudio("late.wav"));
+        firstFuture.complete(new FileTtsAudioResult(outputAudio("late.wav")));
 
         assertTrue(audioPlayer.playedFiles.isEmpty());
-    }
-
-    @Test
-    void segmentFailureContinuesWithNextSegment() throws Exception {
-        FakeTtsClient ttsClient = new FakeTtsClient();
-        FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
-        SpeechService speechService = speechService(ttsClient, audioPlayer);
-
-        CompletableFuture<Void> result = speechService.speakSegments(List.of(
-                new SpeechSegment("坏掉。", SpeechEmotion.NEUTRAL),
-                new SpeechSegment("继续。", SpeechEmotion.QUESTION)
-        ));
-
-        ttsClient.synthesisFutures.getFirst().completeExceptionally(new RuntimeException("tts failed"));
-        assertEquals(2, ttsClient.requests.size());
-
-        Path secondAudio = outputAudio("continue.wav");
-        ttsClient.synthesisFutures.get(1).complete(secondAudio);
-        audioPlayer.playbackFutures.getFirst().complete(null);
-
-        assertTrue(result.isDone());
-        assertEquals(List.of(secondAudio), audioPlayer.playedFiles);
-    }
-
-    private SpeechService speechService(FakeTtsClient ttsClient, FakeAudioPlayer audioPlayer) throws IOException {
-        VoiceProfile neutral = profile("neutral", "neutral-ref.wav");
-        VoiceProfile question = profile("question", "question-ref.wav");
-        VoiceProfileRegistry registry = new VoiceProfileRegistry(
-                Map.of(
-                        SpeechEmotion.NEUTRAL, neutral,
-                        SpeechEmotion.QUESTION, question
-                ),
-                message -> {
-                }
-        );
-        return new SpeechService(ttsClient, audioPlayer, registry);
     }
 
     private VoiceProfile profile(String id, String fileName) throws IOException {
@@ -154,17 +132,26 @@ class SpeechServiceTest {
 
     private static final class FakeTtsClient implements VoiceSynthesisClient {
         private final List<TtsRequest> requests = new ArrayList<>();
-        private final List<CompletableFuture<Path>> synthesisFutures = new ArrayList<>();
+        private final List<CompletableFuture<TtsAudioResult>> synthesisFutures = new ArrayList<>();
+        private int checkCount;
+        private int initializeCount;
 
         @Override
-        public CompletableFuture<Void> initializeModels() {
+        public CompletableFuture<Void> checkAvailable() {
+            checkCount++;
             return CompletableFuture.completedFuture(null);
         }
 
         @Override
-        public CompletableFuture<Path> synthesize(TtsRequest request) {
+        public CompletableFuture<Void> initializeModels() {
+            initializeCount++;
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<TtsAudioResult> synthesize(TtsRequest request) {
             requests.add(request);
-            CompletableFuture<Path> future = new CompletableFuture<>();
+            CompletableFuture<TtsAudioResult> future = new CompletableFuture<>();
             synthesisFutures.add(future);
             return future;
         }

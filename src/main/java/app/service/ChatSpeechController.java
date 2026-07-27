@@ -6,13 +6,11 @@ import app.voice.GptSovitsConfig;
 import app.voice.VoiceProfileRegistry;
 import app.voice.VoiceSynthesisException;
 import app.voice.model.SpeechEmotion;
-import app.voice.model.SpeechSegment;
 import app.voice.model.VoiceProfile;
 
 import java.net.ConnectException;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -26,7 +24,7 @@ import java.util.function.Consumer;
  */
 public final class ChatSpeechController implements AutoCloseable {
     private final AssistantSpeechService speechService;
-    private final VoiceProfile neutralVoiceProfile;
+    private final VoiceProfileRegistry voiceProfileRegistry;
     private final Consumer<String> warningSink;
     private final Throwable unavailableCause;
 
@@ -37,12 +35,12 @@ public final class ChatSpeechController implements AutoCloseable {
 
     public ChatSpeechController(
             AssistantSpeechService speechService,
-            VoiceProfile neutralVoiceProfile,
+            VoiceProfileRegistry voiceProfileRegistry,
             boolean autoSpeakEnabled,
             Consumer<String> warningSink
     ) {
         this.speechService = Objects.requireNonNull(speechService, "speechService");
-        this.neutralVoiceProfile = Objects.requireNonNull(neutralVoiceProfile, "neutralVoiceProfile");
+        this.voiceProfileRegistry = Objects.requireNonNull(voiceProfileRegistry, "voiceProfileRegistry");
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         unavailableCause = null;
@@ -50,7 +48,7 @@ public final class ChatSpeechController implements AutoCloseable {
 
     private ChatSpeechController(boolean autoSpeakEnabled, Consumer<String> warningSink, Throwable unavailableCause) {
         speechService = null;
-        neutralVoiceProfile = null;
+        voiceProfileRegistry = null;
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
@@ -72,16 +70,18 @@ public final class ChatSpeechController implements AutoCloseable {
 
         try {
             GptSovitsConfig config = GptSovitsConfig.fromEnvironment();
-            return new ChatSpeechController(
+            VoiceProfileRegistry voiceProfileRegistry = VoiceProfileRegistry.fromConfig(config, warningSink);
+            ChatSpeechController controller = new ChatSpeechController(
                     new SpeechService(
                             new GptSovitsClient(config),
-                            new AudioPlayerService(),
-                            VoiceProfileRegistry.fromConfig(config, warningSink)
+                            new AudioPlayerService()
                     ),
-                    config.getNeutralVoiceProfile(),
+                    voiceProfileRegistry,
                     config.isAutoSpeakEnabled(),
                     warningSink
             );
+            controller.startWarmUp();
+            return controller;
         } catch (RuntimeException exception) {
             return unavailable(autoSpeakEnabled, warningSink, exception);
         }
@@ -126,41 +126,64 @@ public final class ChatSpeechController implements AutoCloseable {
 
     public void speakAssistantReply(AssistantReply assistantReply) {
         if (assistantReply != null) {
-            speakSegments(assistantReply.getSpeechSegments());
+            speakWithEmotion(assistantReply.getSpeechText(), assistantReply.getDominantEmotion());
         }
     }
 
     public void speakText(String text) {
         String speechText = SpeechTextSanitizer.sanitizeSegment(text);
         if (!speechText.isBlank()) {
-            speakSegments(List.of(new SpeechSegment(speechText, SpeechEmotion.NEUTRAL)));
+            speakWithEmotion(speechText, SpeechEmotion.NEUTRAL);
         }
     }
 
-    public void speakSegments(List<SpeechSegment> segments) {
+    public void speakWithEmotion(String speechText, SpeechEmotion emotion) {
         if (!isAutoSpeakEnabled()) {
             return;
         }
 
-        if (segments == null || segments.isEmpty()) {
+        if (speechText == null || speechText.isBlank()) {
             return;
         }
 
-        if (unavailableCause != null || speechService == null || neutralVoiceProfile == null) {
+        if (unavailableCause != null || speechService == null || voiceProfileRegistry == null) {
             warnOnce("unavailable", warningMessage(unavailableCause));
+            return;
+        }
+
+        VoiceProfile profile = voiceProfileRegistry.get(emotion);
+        if (profile == null) {
             return;
         }
 
         long requestId = startNewRequest();
         CompletableFuture<Void> speechFuture;
         try {
-            speechFuture = speechService.speakSegments(segments);
+            speechFuture = speechService.speak(speechText, profile);
         } catch (RuntimeException exception) {
             warnOnce(errorKey(exception), warningMessage(exception));
             return;
         }
 
         rememberActiveFuture(requestId, speechFuture);
+    }
+
+    private void startWarmUp() {
+        if (speechService == null || voiceProfileRegistry == null) {
+            return;
+        }
+
+        VoiceProfile neutralProfile = voiceProfileRegistry.get(SpeechEmotion.NEUTRAL);
+        if (neutralProfile == null) {
+            return;
+        }
+
+        speechService.warmUp(neutralProfile)
+                .whenComplete((unused, error) -> {
+                    if (error != null && !isCancellation(error)) {
+                        warnOnce("warmup", "自动朗读预热失败，第一次朗读可能会稍慢。文字聊天不受影响。");
+                    }
+                });
     }
 
     public void stop() {
@@ -171,9 +194,6 @@ public final class ChatSpeechController implements AutoCloseable {
             activeSpeechFuture = null;
         }
 
-        if (speechFuture != null) {
-            speechFuture.cancel(true);
-        }
         if (speechService != null) {
             speechService.stop();
         }
@@ -194,9 +214,6 @@ public final class ChatSpeechController implements AutoCloseable {
             activeSpeechFuture = null;
         }
 
-        if (previousFuture != null) {
-            previousFuture.cancel(true);
-        }
         speechService.stop();
         return requestId;
     }
@@ -204,7 +221,6 @@ public final class ChatSpeechController implements AutoCloseable {
     private void rememberActiveFuture(long requestId, CompletableFuture<Void> speechFuture) {
         synchronized (this) {
             if (requestGeneration != requestId) {
-                speechFuture.cancel(true);
                 return;
             }
             activeSpeechFuture = speechFuture;
