@@ -3,11 +3,13 @@ package app.ui.chat;
 import app.chat.model.AssistantReply;
 import app.chat.model.ChatMessage;
 import app.chat.model.MessageRole;
+import app.service.AssistantDisplayTextStreamExtractor;
 import app.service.AssistantReplyParser;
 import app.service.ChatService;
 import app.service.ChatSpeechController;
 import app.service.ChatStreamListener;
 import app.voice.model.SpeechEmotion;
+import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -18,7 +20,8 @@ import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
 final class ChatView extends BorderPane {
-    private static final Duration STREAM_INTERVAL=Duration.millis(60);
+    private static final Duration STARTUP_STREAM_INTERVAL=Duration.millis(60);
+    private static final Duration REPLY_STREAM_INTERVAL=Duration.millis(95);
     private static final String CHAT_START_VOICE="/audio.Chinese/Hello.wav";
 
     private final ChatService chatService;
@@ -83,6 +86,7 @@ final class ChatView extends BorderPane {
     private void streamReplyInto(MessageBubble bubble,String userText){
         StringBuilder replyText=new StringBuilder();
         boolean[] receivedToken={false};
+        StreamingContentRenderer renderer=new StreamingContentRenderer(bubble,REPLY_STREAM_INTERVAL);
 
         chatService.streamReply(userText,new ChatStreamListener() {
             @Override
@@ -93,33 +97,29 @@ final class ChatView extends BorderPane {
                 }
 
                 replyText.append(token);
+                AssistantDisplayTextStreamExtractor
+                        .visibleText(replyText.toString())
+                        .ifPresent(renderer::setTargetText);
             }
 
             @Override
             public void onComplete(){
-                Platform.runLater(() -> {
-                    AssistantReply assistantReply;
-                    if(!receivedToken[0]){
-                        assistantReply=new AssistantReply(
-                                "工程部暂时没有收到模型回复。",
-                                "工程部暂时没有收到模型回复。",
-                                SpeechEmotion.NEUTRAL
-                        );
-                    }else{
-                        assistantReply=assistantReplyParser.parse(replyText.toString());
-                    }
-                    bubble.setContent(assistantReply.getDisplayText());
-                    scrollToLatestMessage();
-                    chatSpeechController.speakAssistantReply(assistantReply);
-                });
+                AssistantReply assistantReply;
+                if(!receivedToken[0]){
+                    assistantReply=new AssistantReply(
+                            "工程部暂时没有收到模型回复。",
+                            "工程部暂时没有收到模型回复。",
+                            SpeechEmotion.NEUTRAL
+                    );
+                }else{
+                    assistantReply=assistantReplyParser.parse(replyText.toString());
+                }
+                renderer.finishWith(assistantReply);
             }
 
             @Override
             public void onError(Throwable error){
-                Platform.runLater(() -> {
-                    bubble.setContent("模型连接失败：" + error.getMessage());
-                    scrollToLatestMessage();
-                });
+                renderer.showError("模型连接失败：" + error.getMessage());
             }
         });
     }
@@ -134,7 +134,7 @@ final class ChatView extends BorderPane {
         StringBuilder visibleText=new StringBuilder();
         int[] nextIndex={0};
 
-        Timeline timeline=new Timeline(new KeyFrame(STREAM_INTERVAL,event -> {
+        Timeline timeline=new Timeline(new KeyFrame(STARTUP_STREAM_INTERVAL,event -> {
             visibleText.appendCodePoint(codePoints[nextIndex[0]]);
             nextIndex[0]++;
             bubble.setContent(visibleText.toString());
@@ -155,5 +155,93 @@ final class ChatView extends BorderPane {
     void dispose(){
         chatService.close();
         soundPlayer.stopVoice();
+    }
+
+    private final class StreamingContentRenderer {
+        private final MessageBubble bubble;
+        private final Duration interval;
+        private final Timeline timeline;
+
+        private String targetText="";
+        private String renderedText="";
+        private int renderedCodePoints;
+        private AssistantReply pendingFinalReply;
+
+        private StreamingContentRenderer(MessageBubble bubble,Duration interval){
+            this.bubble=bubble;
+            this.interval=interval;
+            timeline=new Timeline(new KeyFrame(interval,event -> renderNextCodePoint()));
+            timeline.setCycleCount(Animation.INDEFINITE);
+        }
+
+        private void setTargetText(String text){
+            if(text==null || text.isBlank()){
+                return;
+            }
+
+            Platform.runLater(() -> setTargetTextOnFx(text));
+        }
+
+        private void finishWith(AssistantReply assistantReply){
+            Platform.runLater(() -> {
+                pendingFinalReply=assistantReply;
+                setTargetTextOnFx(assistantReply.getDisplayText());
+                completeIfFinalTextRendered();
+            });
+        }
+
+        private void showError(String message){
+            Platform.runLater(() -> {
+                timeline.stop();
+                pendingFinalReply=null;
+                bubble.setContent(message);
+                scrollToLatestMessage();
+            });
+        }
+
+        private void setTargetTextOnFx(String text){
+            if(text.equals(targetText)){
+                return;
+            }
+
+            if(!text.startsWith(renderedText)){
+                renderedText="";
+                renderedCodePoints=0;
+                bubble.setContent("");
+            }
+
+            targetText=text;
+            if(timeline.getStatus()!=Animation.Status.RUNNING){
+                timeline.play();
+            }
+        }
+
+        private void renderNextCodePoint(){
+            int targetCodePoints=targetText.codePointCount(0,targetText.length());
+            if(renderedCodePoints>=targetCodePoints){
+                timeline.stop();
+                completeIfFinalTextRendered();
+                return;
+            }
+
+            renderedCodePoints++;
+            int nextCharIndex=targetText.offsetByCodePoints(0,renderedCodePoints);
+            renderedText=targetText.substring(0,nextCharIndex);
+            bubble.setContent(renderedText);
+            scrollToLatestMessage();
+
+            completeIfFinalTextRendered();
+        }
+
+        private void completeIfFinalTextRendered(){
+            if(pendingFinalReply==null || !renderedText.equals(pendingFinalReply.getDisplayText())){
+                return;
+            }
+
+            AssistantReply assistantReply=pendingFinalReply;
+            pendingFinalReply=null;
+            timeline.stop();
+            chatSpeechController.speakAssistantReply(assistantReply);
+        }
     }
 }
