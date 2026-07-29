@@ -22,10 +22,12 @@ public class ChatService {
     private final AiModelClient aiClient;
     private final ExecutorService fallbackExecutor;
     private final String systemPrompt;
+    private final PromptEnvironmentContext environmentContext;
 
     public ChatService(){
         aiClient=createAiClient();
         systemPrompt=loadSystemPrompt();
+        environmentContext=new PromptEnvironmentContext();
         fallbackExecutor=Executors.newSingleThreadExecutor(command -> {
             Thread thread=new Thread(command,"chat-service-fallback");
             thread.setDaemon(true);
@@ -47,7 +49,7 @@ public class ChatService {
         }
 
         AiChatRequest request=AiChatRequest
-                .singleTurn(systemPrompt,input)
+                .singleTurn(systemPromptForCurrentRequest(),input)
                 .withTemperature(0.8);
 
         aiClient.streamChat(request,new AiStreamListener() {
@@ -142,5 +144,9 @@ public class ChatService {
             System.out.println("读取角色 prompt 失败，使用默认 prompt：" + exception.getMessage());
             return DEFAULT_SYSTEM_PROMPT;
         }
+    }
+
+    private String systemPromptForCurrentRequest() {
+        return systemPrompt + environmentContext.currentContextPrompt();
     }
 }
