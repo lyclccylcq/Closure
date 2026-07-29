@@ -1,11 +1,15 @@
 package app.ui;
 
+import app.reminder.CourseScheduleEntry;
+import app.reminder.CourseScheduleReminder;
+import app.reminder.CourseScheduleRepository;
 import app.reminder.WorkBreakReminder;
 import app.service.ChatSpeechController;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
 import app.ui.quick.PetSpeechBubbleWindow;
+import app.ui.reminder.CourseScheduleWindow;
 import app.ui.reminder.ReminderSettingsWindow;
 import app.util.AvatarLoader;
 
@@ -22,7 +26,9 @@ import java.awt.event.WindowEvent;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -112,9 +118,20 @@ public class PetWindow extends JFrame {
     private WorkBreakReminder workBreakReminder;
 
     /**
+     * 课程表本地保存和后台提醒。
+     */
+    private CourseScheduleRepository courseScheduleRepository;
+    private CourseScheduleReminder courseScheduleReminder;
+
+    /**
      * 工作提醒时间设置窗口。
      */
     private ReminderSettingsWindow reminderSettingsWindow;
+
+    /**
+     * 课程表上传和查看窗口。
+     */
+    private CourseScheduleWindow courseScheduleWindow;
 
     /**
      * 动态桌宠组件。
@@ -167,6 +184,9 @@ public class PetWindow extends JFrame {
 
         // 初始化后台工作提醒
         initWorkBreakReminder();
+
+        // 初始化课程表提醒
+        initCourseScheduleReminder();
 
         // 初始化自动朗读控制器
         initSpeechController();
@@ -410,6 +430,16 @@ public class PetWindow extends JFrame {
         );
     }
 
+    private void initCourseScheduleReminder() {
+        courseScheduleRepository = CourseScheduleRepository.userDefault();
+        List<CourseScheduleEntry> savedEntries = loadSavedCourseSchedule();
+        courseScheduleReminder = new CourseScheduleReminder(
+                savedEntries,
+                this::showCourseScheduleReminder
+        );
+        courseScheduleReminder.start();
+    }
+
     private void initSpeechController() {
         speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
@@ -468,6 +498,44 @@ public class PetWindow extends JFrame {
 
     private void showWorkBreakReminder(String reminderText) {
         showSpeechBubble(reminderText);
+    }
+
+    private void showCourseScheduleReminder(String reminderText) {
+        showSpeechBubble(reminderText);
+        speakSpeechBubble(reminderText);
+    }
+
+    private List<CourseScheduleEntry> loadSavedCourseSchedule() {
+        try {
+            return courseScheduleRepository.load();
+        } catch (IOException | IllegalArgumentException exception) {
+            System.out.println("课程表读取失败：" + exception.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<CourseScheduleEntry> importCourseSchedule(Path schedulePath) {
+        try {
+            List<CourseScheduleEntry> importedEntries = courseScheduleRepository.importAndSave(schedulePath);
+            courseScheduleReminder.setEntries(importedEntries);
+            return importedEntries;
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new IllegalArgumentException(exception.getMessage(), exception);
+        }
+    }
+
+    private void openCourseScheduleWindow() {
+        if (courseScheduleWindow == null) {
+            courseScheduleWindow = new CourseScheduleWindow(
+                    this::importCourseSchedule,
+                    status -> SwingUtilities.invokeLater(() -> showSpeechBubble(status))
+            );
+        }
+
+        courseScheduleWindow.show(
+                courseScheduleReminder.entries(),
+                getBounds()
+        );
     }
 
     private String workReminderIntervalText() {
@@ -552,6 +620,9 @@ public class PetWindow extends JFrame {
         // 创建工作提醒设置菜单项
         JMenuItem workReminderSettingsItem = new JMenuItem("提醒设置...");
 
+        // 创建课程表提醒菜单项
+        JMenuItem courseScheduleItem = new JMenuItem("课程表提醒...");
+
         // 创建“下线”菜单项
         JMenuItem exitItem = new JMenuItem("下线");
 
@@ -560,6 +631,9 @@ public class PetWindow extends JFrame {
 
         // 打开工作提醒设置窗口
         workReminderSettingsItem.addActionListener(e -> openWorkReminderSettingsWindow());
+
+        // 打开课程表提醒窗口
+        courseScheduleItem.addActionListener(e -> openCourseScheduleWindow());
 
         // 点击“下线”时退出程序
         exitItem.addActionListener(e -> exitApplication());
@@ -572,6 +646,7 @@ public class PetWindow extends JFrame {
 
         // 把工作提醒设置项加入菜单
         popupMenu.add(workReminderSettingsItem);
+        popupMenu.add(courseScheduleItem);
 
         // 添加一条分隔线
         popupMenu.addSeparator();
@@ -705,6 +780,12 @@ public class PetWindow extends JFrame {
         }
         if (reminderSettingsWindow != null) {
             reminderSettingsWindow.dispose();
+        }
+        if (courseScheduleReminder != null) {
+            courseScheduleReminder.dispose();
+        }
+        if (courseScheduleWindow != null) {
+            courseScheduleWindow.dispose();
         }
         if (petAnimationPanel != null) {
             petAnimationPanel.dispose();
