@@ -528,7 +528,8 @@ public class PetWindow extends JFrame {
         if (courseScheduleWindow == null) {
             courseScheduleWindow = new CourseScheduleWindow(
                     this::importCourseSchedule,
-                    status -> SwingUtilities.invokeLater(() -> showSpeechBubble(status))
+                    status -> SwingUtilities.invokeLater(() -> showSpeechBubble(status)),
+                    () -> SwingUtilities.invokeLater(this::showTestCourseScheduleReminder)
             );
         }
 
@@ -536,6 +537,23 @@ public class PetWindow extends JFrame {
                 courseScheduleReminder.entries(),
                 getBounds()
         );
+    }
+
+    private void showTestCourseScheduleReminder() {
+        CourseScheduleReminder testReminder = new CourseScheduleReminder(
+                List.of(new CourseScheduleEntry(
+                        "提醒系统自检",
+                        java.time.LocalDateTime.now().plusMinutes(1),
+                        null,
+                        app.reminder.CourseReminderType.CLASS,
+                        Duration.ofMinutes(1),
+                        "桌面终端",
+                        "测试提醒"
+                )),
+                this::showCourseScheduleReminder
+        );
+        testReminder.checkNow();
+        testReminder.dispose();
     }
 
     private String workReminderIntervalText() {
