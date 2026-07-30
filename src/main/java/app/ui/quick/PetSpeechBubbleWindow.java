@@ -25,10 +25,10 @@ import java.util.List;
  */
 public class PetSpeechBubbleWindow {
     private static final Object FX_START_LOCK = new Object();
-    private static final int WINDOW_WIDTH = 280;
-    private static final int WINDOW_HEIGHT = 84;
-    private static final int DIALOG_BOTTOM_OVERLAP = 58;
-    private static final int DIALOG_RIGHT_SHIFT = 64;
+    private static final int WINDOW_WIDTH = 360;
+    private static final int WINDOW_HEIGHT = 132;
+    private static final int DIALOG_BOTTOM_OVERLAP = 76;
+    private static final int DIALOG_RIGHT_SHIFT = 80;
     private static final int DIALOG_EDGE_GAP = 10;
     private static final Duration STREAM_INTERVAL = Duration.millis(55);
     private static final Duration AUTO_HIDE_DELAY = Duration.millis(3200);

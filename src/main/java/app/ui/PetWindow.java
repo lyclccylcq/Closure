@@ -80,6 +80,23 @@ public class PetWindow extends JFrame {
     };
 
     /**
+     * 桌宠闲置时偶尔自己冒出来的短对白。
+     * 这些台词只显示气泡，不触发语音。
+     */
+    private static final String[] IDLE_CHATTER_LINES = {
+            "无人机整备完毕。离出发还有多长时间？我看看能不能补个觉......",
+            "博士，你这次体检的指标怎么回事？什么，觉得最近很虚弱，怕自己时日无多？！报告是假的？逗我玩？华法琳！",
+            "烧烤味饼干，来一片？",
+            "罗德岛干员过生日均有机会获得采购部免单券，你也不例外！来这里摇奖，免单券就在特等奖等着你！",
+            "全体无人机，挂钩释放，功率解锁，钩住博士的兜帽——起飞!",
+            "别急，我还在算呢。"
+    };
+
+    private static final int IDLE_CHATTER_MIN_DELAY_MILLIS = (int) Duration.ofMinutes(8).toMillis();
+    private static final int IDLE_CHATTER_MAX_DELAY_MILLIS = (int) Duration.ofMinutes(18).toMillis();
+    private static final long IDLE_CHATTER_MIN_IDLE_MILLIS = Duration.ofMinutes(5).toMillis();
+
+    /**
      * 桌宠图片路径。
      * 注意：
      * 这个图片不再作为程序启动后的第一屏，
@@ -152,6 +169,12 @@ public class PetWindow extends JFrame {
     private Timer interactionClickTimer;
 
     /**
+     * 桌面闲置随机对白计时器。
+     */
+    private Timer idleChatterTimer;
+    private long lastDesktopActivityMillis;
+
+    /**
      * 记录鼠标按下时的位置。
      * 用于计算拖动桌宠时窗口应该移动到哪里。
      */
@@ -194,10 +217,14 @@ public class PetWindow extends JFrame {
         // 初始化右键菜单
         initPopupMenu();
 
+        // 初始化桌面闲置随机对白
+        initIdleChatterTimer();
+
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
         playOpenVoice();
         startWorkBreakReminder();
+        startIdleChatterTimer();
     }
 
     /**
@@ -258,6 +285,8 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mousePressed(MouseEvent event) {
+                registerDesktopActivity();
+
                 /*
                  * 记录鼠标按下时的位置。
                  *
@@ -286,6 +315,8 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseDragged(MouseEvent event) {
+                registerDesktopActivity();
+
                 // 获取窗口当前在屏幕上的位置
                 Point currentLocation = getLocation();
 
@@ -410,6 +441,8 @@ public class PetWindow extends JFrame {
     }
 
     private void showSpeechBubble(String text) {
+        registerDesktopActivity();
+
         if (speechBubbleWindow == null) {
             speechBubbleWindow = new PetSpeechBubbleWindow();
         }
@@ -440,6 +473,12 @@ public class PetWindow extends JFrame {
         courseScheduleReminder.start();
     }
 
+    private void initIdleChatterTimer() {
+        lastDesktopActivityMillis = System.currentTimeMillis();
+        idleChatterTimer = new Timer(randomIdleChatterDelayMillis(), event -> showIdleChatterIfDesktopIsIdle());
+        idleChatterTimer.setRepeats(false);
+    }
+
     private void initSpeechController() {
         speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
@@ -448,6 +487,60 @@ public class PetWindow extends JFrame {
 
     private void startWorkBreakReminder() {
         workBreakReminder.start();
+    }
+
+    private void startIdleChatterTimer() {
+        scheduleNextIdleChatter();
+    }
+
+    private void scheduleNextIdleChatter() {
+        if (idleChatterTimer == null) {
+            return;
+        }
+
+        int delayMillis = randomIdleChatterDelayMillis();
+        idleChatterTimer.stop();
+        idleChatterTimer.setDelay(delayMillis);
+        idleChatterTimer.setInitialDelay(delayMillis);
+        idleChatterTimer.start();
+    }
+
+    private int randomIdleChatterDelayMillis() {
+        return ThreadLocalRandom.current().nextInt(
+                IDLE_CHATTER_MIN_DELAY_MILLIS,
+                IDLE_CHATTER_MAX_DELAY_MILLIS + 1
+        );
+    }
+
+    private void showIdleChatterIfDesktopIsIdle() {
+        try {
+            if (isDesktopIdleForChatter()) {
+                showSpeechBubble(randomIdleChatterLine());
+            }
+        } finally {
+            scheduleNextIdleChatter();
+        }
+    }
+
+    private boolean isDesktopIdleForChatter() {
+        if (!isShowing()) {
+            return false;
+        }
+        if (chatWindow != null && chatWindow.isVisible()) {
+            return false;
+        }
+
+        long idleMillis = System.currentTimeMillis() - lastDesktopActivityMillis;
+        return idleMillis >= IDLE_CHATTER_MIN_IDLE_MILLIS;
+    }
+
+    private String randomIdleChatterLine() {
+        int lineIndex = ThreadLocalRandom.current().nextInt(IDLE_CHATTER_LINES.length);
+        return IDLE_CHATTER_LINES[lineIndex];
+    }
+
+    private void registerDesktopActivity() {
+        lastDesktopActivityMillis = System.currentTimeMillis();
     }
 
     private void pauseWorkBreakReminder() {
@@ -795,6 +888,9 @@ public class PetWindow extends JFrame {
         cancelInteractionBubble();
         if (workBreakReminder != null) {
             workBreakReminder.dispose();
+        }
+        if (idleChatterTimer != null) {
+            idleChatterTimer.stop();
         }
         if (reminderSettingsWindow != null) {
             reminderSettingsWindow.dispose();

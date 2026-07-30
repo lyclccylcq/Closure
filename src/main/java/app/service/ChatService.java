@@ -5,7 +5,6 @@ import app.ai.AiModelClient;
 import app.ai.AiModelConfig;
 import app.ai.AiStreamListener;
 import app.ai.OpenAiCompatibleChatClient;
-import app.chat.model.ChatReply;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,6 +17,7 @@ public class ChatService {
     private static final int FALLBACK_TOKEN_DELAY_MILLIS=45;
     private static final String SYSTEM_PROMPT_PATH="/prompts/closure-system-prompt.txt";
     private static final String DEFAULT_SYSTEM_PROMPT="你是可露希尔，罗德岛工程部成员，也是博士桌面上的工程支援助手。";
+    private static final String AI_UNAVAILABLE_REPLY="通讯模块还没接上。检查一下本地 AI 配置，别让我对着空气发报。";
 
     private final AiModelClient aiClient;
     private final ExecutorService fallbackExecutor;
@@ -70,27 +70,6 @@ public class ChatService {
         });
     }
 
-    public ChatReply getReply(String input){
-        if(input.contains("你好")){
-            // 每条假回复把文字和语音资源路径放在一起，后续新增语音只需要补这里。
-            return new ChatReply("无人机整备完毕。离出发还有多长时间？我看看能不能补个觉......", "/audio/Japanese/hello.wav");
-        }
-        if (input.contains("累")){
-            return new ChatReply("博士，你这次体检的指标怎么回事？什么，觉得最近很虚弱，怕自己时日无多？！我这就把这些年多收你的钱给医疗部当特别经费，放心，一块钱都没动过——报告是假的？逗我玩？华法琳！", "/audio/Japanese/tired.wav");
-        }
-        if (input.contains("饿")){
-            return new ChatReply("烧烤味饼干，来一片？", "/audio/Japanese/hungry.wav");
-        }
-        if (input.contains("生日")){
-            return new ChatReply("罗德岛干员过生日均有机会获得采购部免单券，你也不例外！来这里摇奖，免单券就在特等奖等着你！什么？谁中过特等奖？这个——别担心，第一位特等奖得主没准就是你！", "/audio/Japanese/birthday.wav");
-        }
-        if (input.contains("飞起来")){
-            return new ChatReply("全体无人机，挂钩释放，功率解锁，钩住博士的兜帽——起飞!", "/audio/Japanese/fly.wav");
-        }
-
-        return new ChatReply("别急，我还在算呢。", "/audio/Japanese/touch.wav");
-    }
-
     public void close(){
         if(aiClient!=null){
             aiClient.close();
@@ -110,8 +89,7 @@ public class ChatService {
     private void streamFallbackReply(String input,ChatStreamListener listener){
         fallbackExecutor.submit(() -> {
             try{
-                String text=getReply(input).getText();
-                int[] codePoints=text.codePoints().toArray();
+                int[] codePoints=AI_UNAVAILABLE_REPLY.codePoints().toArray();
                 for(int codePoint:codePoints){
                     Thread.sleep(FALLBACK_TOKEN_DELAY_MILLIS);
                     listener.onToken(new String(Character.toChars(codePoint)));
