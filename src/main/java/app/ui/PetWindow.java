@@ -498,8 +498,27 @@ public class PetWindow extends JFrame {
 
     private void initVoiceServerProcess() {
         voiceServerProcessFuture = GptSovitsServerProcess.startConfiguredAsync(
-                message -> System.out.println("语音服务启动：" + message)
+                this::showVoiceServerStatus
         );
+    }
+
+    private void showVoiceServerStatus(String message) {
+        System.out.println("语音服务启动：" + message);
+        if (!isVoiceServerWarningVisible(message)) {
+            return;
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            if (petAnimationPanel != null && isShowing()) {
+                showSpeechBubble(message);
+            }
+        });
+    }
+
+    private boolean isVoiceServerWarningVisible(String message) {
+        return message.contains("失败")
+                || message.contains("缺少")
+                || message.contains("过早退出");
     }
 
     private void startWorkBreakReminder() {
