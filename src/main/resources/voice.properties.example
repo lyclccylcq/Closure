@@ -6,6 +6,13 @@ gptSovits.baseUrl=http://127.0.0.1:9880
 gptSovits.gptWeightPath=<absolute-path-to-gpt-ckpt>
 gptSovits.sovitsWeightPath=<absolute-path-to-sovits-pth>
 
+# Optional: start the local GPT-SoVITS API when the desktop pet starts.
+# If baseUrl is already reachable, Closure will skip starting another process.
+# Prefer a small shell script for complex environment setup such as conda/venv activation.
+# gptSovits.server.command=/absolute-path-to/start-gpt-sovits-api.sh
+# gptSovits.server.workingDir=/absolute-path-to/GPT-SoVITS
+# gptSovits.server.autoStart=true
+
 # Whether to auto-speak AI replies after displayText is shown.
 voice.autoSpeak=true
 

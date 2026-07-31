@@ -12,6 +12,7 @@ import app.ui.quick.PetSpeechBubbleWindow;
 import app.ui.reminder.CourseScheduleWindow;
 import app.ui.reminder.ReminderSettingsWindow;
 import app.util.AvatarLoader;
+import app.voice.GptSovitsServerProcess;
 
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
@@ -29,6 +30,8 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -124,6 +127,11 @@ public class PetWindow extends JFrame {
     private ChatSpeechController speechController;
 
     /**
+     * 如果本地配置开启了自动启动，这里保存桌宠拉起的 GPT-SoVITS 进程。
+     */
+    private CompletableFuture<Optional<GptSovitsServerProcess>> voiceServerProcessFuture;
+
+    /**
      * 贴在桌宠旁边的点击互动对白气泡。
      * 它不负责聊天输入，只显示可露希尔自己的短台词。
      */
@@ -210,6 +218,9 @@ public class PetWindow extends JFrame {
 
         // 初始化课程表提醒
         initCourseScheduleReminder();
+
+        // 尝试自动启动本地 GPT-SoVITS API
+        initVoiceServerProcess();
 
         // 初始化自动朗读控制器
         initSpeechController();
@@ -482,6 +493,12 @@ public class PetWindow extends JFrame {
     private void initSpeechController() {
         speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
+        );
+    }
+
+    private void initVoiceServerProcess() {
+        voiceServerProcessFuture = GptSovitsServerProcess.startConfiguredAsync(
+                message -> System.out.println("语音服务启动：" + message)
         );
     }
 
@@ -913,6 +930,15 @@ public class PetWindow extends JFrame {
         if (speechController != null) {
             speechController.close();
         }
+        closeVoiceServerProcess();
         System.exit(0);
+    }
+
+    private void closeVoiceServerProcess() {
+        if (voiceServerProcessFuture == null) {
+            return;
+        }
+
+        voiceServerProcessFuture.thenAccept(process -> process.ifPresent(GptSovitsServerProcess::close));
     }
 }

@@ -86,6 +86,24 @@ class SpeechServiceTest {
     }
 
     @Test
+    void failedInitializationIsRetriedForLaterSpeech() throws Exception {
+        FakeTtsClient ttsClient = new FakeTtsClient();
+        ttsClient.initializationFailuresRemaining = 1;
+        FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
+
+        CompletableFuture<Void> firstSpeech = speechService.speak("第一次。", neutral);
+        assertTrue(firstSpeech.isCompletedExceptionally());
+
+        speechService.speak("第二次。", neutral);
+
+        assertEquals(2, ttsClient.initializeCount);
+        assertEquals(1, ttsClient.requests.size());
+        assertEquals("第二次。", ttsClient.requests.getFirst().getText());
+    }
+
+    @Test
     void newRequestInvalidatesOldRequest() throws Exception {
         FakeTtsClient ttsClient = new FakeTtsClient();
         FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
@@ -135,6 +153,7 @@ class SpeechServiceTest {
         private final List<CompletableFuture<TtsAudioResult>> synthesisFutures = new ArrayList<>();
         private int checkCount;
         private int initializeCount;
+        private int initializationFailuresRemaining;
 
         @Override
         public CompletableFuture<Void> checkAvailable() {
@@ -145,6 +164,11 @@ class SpeechServiceTest {
         @Override
         public CompletableFuture<Void> initializeModels() {
             initializeCount++;
+            if (initializationFailuresRemaining > 0) {
+                initializationFailuresRemaining--;
+                return CompletableFuture.failedFuture(new RuntimeException("models are still loading"));
+            }
+
             return CompletableFuture.completedFuture(null);
         }
 

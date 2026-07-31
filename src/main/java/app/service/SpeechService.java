@@ -168,11 +168,25 @@ public final class SpeechService implements AssistantSpeechService {
     }
 
     private synchronized CompletableFuture<Void> initializeOnce() {
-        if (initializationFuture == null) {
-            initializationFuture = ttsClient.initializeModels();
+        CompletableFuture<Void> currentInitializationFuture = initializationFuture;
+        if (initializationFuture == null || initializationFuture.isCompletedExceptionally()) {
+            currentInitializationFuture = ttsClient.initializeModels();
+            initializationFuture = currentInitializationFuture;
+            CompletableFuture<Void> trackedInitializationFuture = currentInitializationFuture;
+            currentInitializationFuture.whenComplete((unused, error) -> {
+                if (error != null) {
+                    clearFailedInitialization(trackedInitializationFuture);
+                }
+            });
         }
 
-        return initializationFuture;
+        return currentInitializationFuture;
+    }
+
+    private synchronized void clearFailedInitialization(CompletableFuture<Void> failedInitializationFuture) {
+        if (initializationFuture == failedInitializationFuture) {
+            initializationFuture = null;
+        }
     }
 
     private CompletableFuture<Void> delayedWarmUp(VoiceProfile profile, int attempt) {
