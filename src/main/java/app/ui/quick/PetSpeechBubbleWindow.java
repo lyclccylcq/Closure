@@ -46,8 +46,13 @@ public class PetSpeechBubbleWindow {
     }
 
     public void showNextTo(Rectangle petBounds, String speechText) {
+        showNextTo(petBounds, speechText, AUTO_HIDE_DELAY);
+    }
+
+    public void showNextTo(Rectangle petBounds, String speechText, Duration autoHideDelay) {
         Rectangle bounds = new Rectangle(petBounds);
         String normalizedSpeech = normalizeSpeech(speechText);
+        Duration normalizedAutoHideDelay = normalizeAutoHideDelay(autoHideDelay);
 
         runOnFxThread(() -> {
             ensureStage();
@@ -55,7 +60,7 @@ public class PetSpeechBubbleWindow {
             moveStageNextTo(bounds);
             stage.show();
             stage.toFront();
-            streamSpeech(normalizedSpeech);
+            streamSpeech(normalizedSpeech, normalizedAutoHideDelay);
         });
     }
 
@@ -234,12 +239,12 @@ public class PetSpeechBubbleWindow {
         }
     }
 
-    private void streamSpeech(String speechText) {
+    private void streamSpeech(String speechText, Duration autoHideDelay) {
         int generation = ++presentationGeneration;
         int[] codePoints = speechText.codePoints().toArray();
         if (codePoints.length == 0) {
             speechLabel.setText("");
-            scheduleAutoHide(generation);
+            scheduleAutoHide(generation, autoHideDelay);
             return;
         }
 
@@ -253,12 +258,12 @@ public class PetSpeechBubbleWindow {
             speechLabel.setText(visibleText.toString());
         }));
         streamTimeline.setCycleCount(codePoints.length);
-        streamTimeline.setOnFinished(event -> scheduleAutoHide(generation));
+        streamTimeline.setOnFinished(event -> scheduleAutoHide(generation, autoHideDelay));
         streamTimeline.play();
     }
 
-    private void scheduleAutoHide(int generation) {
-        autoHideDelay = new PauseTransition(AUTO_HIDE_DELAY);
+    private void scheduleAutoHide(int generation, Duration delay) {
+        autoHideDelay = new PauseTransition(delay);
         autoHideDelay.setOnFinished(event -> {
             if (generation == presentationGeneration && stage != null) {
                 stage.hide();
@@ -273,5 +278,13 @@ public class PetSpeechBubbleWindow {
         }
 
         return speechText.trim();
+    }
+
+    private Duration normalizeAutoHideDelay(Duration delay) {
+        if (delay == null || delay.lessThanOrEqualTo(Duration.ZERO)) {
+            return AUTO_HIDE_DELAY;
+        }
+
+        return delay;
     }
 }

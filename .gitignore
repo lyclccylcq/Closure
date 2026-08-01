@@ -40,3 +40,4 @@ build/
 ### Local AI Secrets ###
 config/local-ai.properties
 config/local-voice.properties
+config/local-weather.properties

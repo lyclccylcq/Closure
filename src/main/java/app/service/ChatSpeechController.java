@@ -131,29 +131,55 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     public void speakText(String text) {
+        speakTextAsync(text);
+    }
+
+    public CompletableFuture<Void> speakTextAsync(String text) {
         String speechText = SpeechTextSanitizer.sanitizeSegment(text);
         if (!speechText.isBlank()) {
-            speakWithEmotion(speechText, SpeechEmotion.NEUTRAL);
+            return speakWithEmotionAsync(speechText, SpeechEmotion.NEUTRAL);
         }
+
+        return CompletableFuture.completedFuture(null);
+    }
+
+    public void speakFullText(String text) {
+        speakFullTextAsync(text);
+    }
+
+    public CompletableFuture<Void> speakFullTextAsync(String text) {
+        String speechText = SpeechTextSanitizer.sanitizeFull(text);
+        if (!speechText.isBlank()) {
+            return speakWithEmotionAsync(speechText, SpeechEmotion.NEUTRAL);
+        }
+
+        return CompletableFuture.completedFuture(null);
     }
 
     public void speakWithEmotion(String speechText, SpeechEmotion emotion) {
+        speakWithEmotionAsync(speechText, emotion);
+    }
+
+    public CompletableFuture<Void> speakWithEmotionAsync(String speechText, SpeechEmotion emotion) {
         if (!isAutoSpeakEnabled()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         if (speechText == null || speechText.isBlank()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         if (unavailableCause != null || speechService == null || voiceProfileRegistry == null) {
-            warnOnce("unavailable", warningMessage(unavailableCause));
-            return;
+            Throwable cause = unavailableCause == null
+                    ? new VoiceSynthesisException("语音服务未初始化")
+                    : unavailableCause;
+            warnOnce("unavailable", warningMessage(cause));
+            return CompletableFuture.failedFuture(cause);
         }
 
         VoiceProfile profile = voiceProfileRegistry.get(emotion);
         if (profile == null) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         long requestId = startNewRequest();
@@ -162,10 +188,11 @@ public final class ChatSpeechController implements AutoCloseable {
             speechFuture = speechService.speak(speechText, profile);
         } catch (RuntimeException exception) {
             warnOnce(errorKey(exception), warningMessage(exception));
-            return;
+            return CompletableFuture.failedFuture(exception);
         }
 
         rememberActiveFuture(requestId, speechFuture);
+        return speechFuture;
     }
 
     private void startWarmUp() {

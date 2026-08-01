@@ -18,6 +18,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChatSpeechControllerTest {
@@ -126,6 +127,35 @@ class ChatSpeechControllerTest {
                 "文字已经显示。",
                 SpeechEmotion.NEUTRAL
         )));
+    }
+
+    @Test
+    void speakTextAsyncReturnsFailedFutureWhenTtsFails() throws Exception {
+        FakeSpeechService speechService = new FakeSpeechService();
+        speechService.failureMessage = "Connection refused";
+        ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
+
+        CompletableFuture<Void> speechFuture = controller.speakTextAsync("博士，启动问候测试。");
+
+        assertTrue(speechFuture.isCompletedExceptionally());
+    }
+
+    @Test
+    void fullTextSpeechKeepsDisplayedBubbleTextIntact() throws Exception {
+        FakeSpeechService speechService = new FakeSpeechService();
+        ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
+        String bubbleText = "天气有点冷，出门记得加一件外套。".repeat(8) + "最后这句也应该被朗读。";
+
+        controller.speakText(bubbleText);
+        controller.speakFullText(bubbleText);
+
+        assertEquals(2, speechService.spokenTexts.size());
+        assertTrue(speechService.spokenTexts.getFirst()
+                .codePointCount(0, speechService.spokenTexts.getFirst().length())
+                <= SpeechTextSanitizer.MAX_SEGMENT_CODE_POINTS);
+        assertFalse(speechService.spokenTexts.getFirst().contains("最后这句也应该被朗读。"));
+        assertEquals(SpeechTextSanitizer.sanitizeFull(bubbleText), speechService.spokenTexts.getLast());
+        assertTrue(speechService.spokenTexts.getLast().contains("最后这句也应该被朗读。"));
     }
 
     private ChatSpeechController controller(

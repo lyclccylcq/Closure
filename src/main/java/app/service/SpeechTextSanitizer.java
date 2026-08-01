@@ -30,6 +30,10 @@ public final class SpeechTextSanitizer {
         return sanitizeText(text, Math.max(1, maxCodePoints));
     }
 
+    public static String sanitizeFull(String text) {
+        return sanitizeText(text, Integer.MAX_VALUE);
+    }
+
     public static String sanitizeSegment(String text) {
         return sanitizeSegment(text, MAX_SEGMENT_CODE_POINTS);
     }

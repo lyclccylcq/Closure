@@ -68,4 +68,14 @@ class SpeechTextSanitizerTest {
         assertTrue(sanitized.endsWith("。"));
         assertFalse(sanitized.contains("尾巴不能出现"));
     }
+
+    @Test
+    void sanitizeFullCleansTextWithoutTruncating() {
+        String longText = "第一句。第二句。第三句。第四句。".repeat(20) + "尾巴也要朗读。";
+
+        String sanitized = SpeechTextSanitizer.sanitizeFull(longText);
+
+        assertEquals(longText, sanitized);
+        assertTrue(sanitized.contains("尾巴也要朗读。"));
+    }
 }
