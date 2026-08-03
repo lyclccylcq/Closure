@@ -26,8 +26,8 @@ import java.util.concurrent.TimeUnit;
  */
 public final class SpeechService implements AssistantSpeechService {
     private static final String WARMUP_TEXT = "工程部在线。";
-    private static final int WARMUP_MAX_ATTEMPTS = 3;
-    private static final long WARMUP_RETRY_DELAY_MILLIS = 2_000L;
+    private static final int WARMUP_MAX_ATTEMPTS = 12;
+    private static final long WARMUP_RETRY_DELAY_MILLIS = 5_000L;
 
     private final VoiceSynthesisClient ttsClient;
     private final VoiceAudioPlayer audioPlayerService;

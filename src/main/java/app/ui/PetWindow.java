@@ -250,7 +250,7 @@ public class PetWindow extends JFrame {
 
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
-        playOpenVoice(this::showStartupWeatherGreeting);
+        playOpenVoice(this::showStartupWeatherGreetingAfterSpeechReady);
         startWorkBreakReminder();
         startIdleChatterTimer();
     }
@@ -777,6 +777,19 @@ public class PetWindow extends JFrame {
                         speakStartupGreeting(greeting, 1);
                     }
                 }));
+    }
+
+    private void showStartupWeatherGreetingAfterSpeechReady() {
+        if (speechController == null) {
+            return;
+        }
+
+        speechController.readyForSpeechFuture()
+                .thenRun(this::showStartupWeatherGreeting)
+                .exceptionally(error -> {
+                    System.out.println("启动天气问候等待语音暖机失败：" + safeErrorMessage(error));
+                    return null;
+                });
     }
 
     private void speakStartupGreeting(String greeting, int attempt) {

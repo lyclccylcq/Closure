@@ -158,6 +158,22 @@ class ChatSpeechControllerTest {
         assertTrue(speechService.spokenTexts.getLast().contains("最后这句也应该被朗读。"));
     }
 
+    @Test
+    void readyFutureCompletesAfterWarmup() throws Exception {
+        FakeSpeechService speechService = new FakeSpeechService();
+        CompletableFuture<Void> warmUpFuture = new CompletableFuture<>();
+        speechService.warmUpFuture = warmUpFuture;
+
+        ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
+
+        assertEquals(1, speechService.warmUpCount);
+        assertFalse(controller.readyForSpeechFuture().isDone());
+
+        warmUpFuture.complete(null);
+
+        assertTrue(controller.readyForSpeechFuture().isDone());
+    }
+
     private ChatSpeechController controller(
             FakeSpeechService speechService,
             boolean autoSpeakEnabled,
@@ -194,8 +210,16 @@ class ChatSpeechControllerTest {
         private final List<String> spokenTexts = new ArrayList<>();
         private final List<VoiceProfile> spokenProfiles = new ArrayList<>();
         private final List<CompletableFuture<Void>> futures = new ArrayList<>();
+        private CompletableFuture<Void> warmUpFuture = CompletableFuture.completedFuture(null);
+        private int warmUpCount;
         private int stopCount;
         private String failureMessage;
+
+        @Override
+        public CompletableFuture<Void> warmUp(VoiceProfile profile) {
+            warmUpCount++;
+            return warmUpFuture;
+        }
 
         @Override
         public CompletableFuture<Void> speak(String text, VoiceProfile profile) {

@@ -29,6 +29,7 @@ public final class ChatSpeechController implements AutoCloseable {
     private final Throwable unavailableCause;
 
     private CompletableFuture<Void> activeSpeechFuture;
+    private CompletableFuture<Void> readyForSpeechFuture;
     private String lastWarningKey;
     private boolean autoSpeakEnabled;
     private long requestGeneration;
@@ -44,6 +45,7 @@ public final class ChatSpeechController implements AutoCloseable {
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         unavailableCause = null;
+        readyForSpeechFuture = startWarmUp();
     }
 
     private ChatSpeechController(boolean autoSpeakEnabled, Consumer<String> warningSink, Throwable unavailableCause) {
@@ -52,6 +54,7 @@ public final class ChatSpeechController implements AutoCloseable {
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
+        readyForSpeechFuture = CompletableFuture.failedFuture(unavailableCause);
     }
 
     public static ChatSpeechController fromEnvironment() {
@@ -71,7 +74,7 @@ public final class ChatSpeechController implements AutoCloseable {
         try {
             GptSovitsConfig config = GptSovitsConfig.fromEnvironment();
             VoiceProfileRegistry voiceProfileRegistry = VoiceProfileRegistry.fromConfig(config, warningSink);
-            ChatSpeechController controller = new ChatSpeechController(
+            return new ChatSpeechController(
                     new SpeechService(
                             new GptSovitsClient(config),
                             new AudioPlayerService()
@@ -80,8 +83,6 @@ public final class ChatSpeechController implements AutoCloseable {
                     config.isAutoSpeakEnabled(),
                     warningSink
             );
-            controller.startWarmUp();
-            return controller;
         } catch (RuntimeException exception) {
             return unavailable(autoSpeakEnabled, warningSink, exception);
         }
@@ -118,6 +119,10 @@ public final class ChatSpeechController implements AutoCloseable {
         if (shouldStop) {
             stop();
         }
+    }
+
+    public CompletableFuture<Void> readyForSpeechFuture() {
+        return readyForSpeechFuture;
     }
 
     public void speakAssistantReply(String replyText) {
@@ -195,17 +200,17 @@ public final class ChatSpeechController implements AutoCloseable {
         return speechFuture;
     }
 
-    private void startWarmUp() {
+    private CompletableFuture<Void> startWarmUp() {
         if (speechService == null || voiceProfileRegistry == null) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         VoiceProfile neutralProfile = voiceProfileRegistry.get(SpeechEmotion.NEUTRAL);
         if (neutralProfile == null) {
-            return;
+            return CompletableFuture.failedFuture(new VoiceSynthesisException("neutral 语音 profile 不可用"));
         }
 
-        speechService.warmUp(neutralProfile)
+        return speechService.warmUp(neutralProfile)
                 .whenComplete((unused, error) -> {
                     if (error != null && !isCancellation(error)) {
                         warnOnce("warmup", "自动朗读预热失败，第一次朗读可能会稍慢。文字聊天不受影响。");
