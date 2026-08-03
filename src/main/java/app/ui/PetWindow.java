@@ -89,7 +89,7 @@ public class PetWindow extends JFrame {
 
     /**
      * 桌宠闲置时偶尔自己冒出来的短对白。
-     * 这些台词只显示气泡，不触发语音。
+     * 这些台词会显示气泡，并在桌面空闲时偶尔触发语音。
      */
     private static final String[] IDLE_CHATTER_LINES = {
             "无人机整备完毕。离出发还有多长时间？我看看能不能补个觉......",
@@ -581,7 +581,9 @@ public class PetWindow extends JFrame {
     private void showIdleChatterIfDesktopIsIdle() {
         try {
             if (isDesktopIdleForChatter()) {
-                showSpeechBubble(randomIdleChatterLine());
+                String idleChatterLine = randomIdleChatterLine();
+                showSpeechBubble(idleChatterLine);
+                speakSpeechBubble(idleChatterLine);
             }
         } finally {
             scheduleNextIdleChatter();
