@@ -134,7 +134,7 @@ cp config/local-weather.example.properties config/local-weather.properties
 示例：
 
 ```properties
-weather.locationName=Canberra
+weather.locationName=堪培拉
 weather.latitude=-35.2809
 weather.longitude=149.1300
 ```

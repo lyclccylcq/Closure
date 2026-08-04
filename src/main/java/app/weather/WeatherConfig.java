@@ -28,7 +28,7 @@ public record WeatherConfig(
     private static final Path LOCAL_CONFIG_PATH = Path.of("config", "local-weather.properties");
     private static final double DEFAULT_LATITUDE = -35.2809;
     private static final double DEFAULT_LONGITUDE = 149.1300;
-    private static final String DEFAULT_LOCATION_NAME = "Canberra";
+    private static final String DEFAULT_LOCATION_NAME = "堪培拉";
     private static final URI DEFAULT_FORECAST_ENDPOINT = URI.create("https://api.open-meteo.com/v1/forecast");
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(8);
 

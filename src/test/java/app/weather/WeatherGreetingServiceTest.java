@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.IntUnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WeatherGreetingServiceTest {
@@ -34,17 +35,16 @@ class WeatherGreetingServiceTest {
 
         String greeting = service.startupGreeting().join();
 
+        assertNaturalStartupGreeting(greeting);
         assertTrue(greeting.contains("早上好，博士"));
-        assertTrue(greeting.contains("Canberra 今天下雨"));
-        assertTrue(greeting.contains("早晚会冷"));
-        assertTrue(greeting.contains("外套"));
-        assertTrue(greeting.contains("围巾"));
-        assertTrue(greeting.contains("伞带上"));
-        assertTrue(greeting.contains("烘干费"));
+        assertTrue(greeting.contains("堪培拉今天可能会下雨"));
+        assertTrue(greeting.contains("带一把伞"));
+        assertTrue(greeting.indexOf("下雨") < greeting.indexOf("伞"));
+        assertDoesNotUseWeatherReportTone(greeting);
     }
 
     @Test
-    void suggestsLightJacketForCoolDryDay() {
+    void suggestsLightJacketForColdDay() {
         WeatherSnapshot snapshot = new WeatherSnapshot(
                 "Canberra",
                 14.0,
@@ -65,10 +65,11 @@ class WeatherGreetingServiceTest {
 
         String greeting = service.startupGreeting().join();
 
-        assertTrue(greeting.contains("Canberra 今天局部多云"));
-        assertTrue(greeting.contains("加件外套"));
-        assertTrue(greeting.contains("别和冷风较劲"));
-        assertTrue(!greeting.contains("降雨概率"));
+        assertNaturalStartupGreeting(greeting);
+        assertTrue(greeting.contains("堪培拉今天温度有点低"));
+        assertTrue(greeting.contains("多穿一件"));
+        assertTrue(greeting.indexOf("冷") < greeting.indexOf("多穿"));
+        assertDoesNotUseWeatherReportTone(greeting);
     }
 
     @Test
@@ -93,10 +94,69 @@ class WeatherGreetingServiceTest {
 
         String greeting = service.startupGreeting().join();
 
-        assertTrue(greeting.contains("Canberra 今天晴"));
-        assertTrue(greeting.contains("水带上"));
-        assertTrue(greeting.contains("防晒"));
-        assertTrue(!greeting.contains("°C"));
+        assertNaturalStartupGreeting(greeting);
+        assertTrue(greeting.contains("堪培拉今天外面挺热"));
+        assertTrue(greeting.contains("带水"));
+        assertTrue(greeting.indexOf("热") < greeting.indexOf("水"));
+        assertDoesNotUseWeatherReportTone(greeting);
+    }
+
+    @Test
+    void suggestsWalkingForComfortableSunnyDay() {
+        WeatherSnapshot snapshot = new WeatherSnapshot(
+                "Canberra",
+                20.0,
+                19.0,
+                0,
+                8.0,
+                24.0,
+                13.0,
+                0,
+                5,
+                0
+        );
+        WeatherGreetingService service = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                firstVariant()
+        );
+
+        String greeting = service.startupGreeting().join();
+
+        assertNaturalStartupGreeting(greeting);
+        assertTrue(greeting.contains("堪培拉今天是晴天"));
+        assertTrue(greeting.contains("出去走走"));
+        assertTrue(greeting.indexOf("晴天") < greeting.indexOf("走走"));
+        assertDoesNotUseWeatherReportTone(greeting);
+    }
+
+    @Test
+    void suggestsWindCareForWindyDay() {
+        WeatherSnapshot snapshot = new WeatherSnapshot(
+                "Canberra",
+                18.4,
+                17.8,
+                3,
+                30.0,
+                22.1,
+                14.3,
+                3,
+                5,
+                0
+        );
+        WeatherGreetingService service = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                firstVariant()
+        );
+
+        String greeting = service.startupGreeting().join();
+
+        assertNaturalStartupGreeting(greeting);
+        assertTrue(greeting.contains("风有点大"));
+        assertTrue(greeting.contains("东西也收好"));
+        assertTrue(greeting.indexOf("风") < greeting.indexOf("收好"));
+        assertDoesNotUseWeatherReportTone(greeting);
     }
 
     @Test
@@ -110,22 +170,23 @@ class WeatherGreetingServiceTest {
         String greeting = service.startupGreeting().join();
 
         assertTrue(greeting.contains("早上好，博士"));
-        assertTrue(greeting.contains("天气模块暂时没连上"));
+        assertTrue(greeting.contains("天气"));
+        assertDoesNotUseWeatherReportTone(greeting);
     }
 
     @Test
-    void variesStartupGreetingTemplates() {
+    void variesStartupGreetingTemplatesWithoutChangingMeaning() {
         WeatherSnapshot snapshot = new WeatherSnapshot(
                 "Canberra",
                 18.4,
-                5.6,
-                61,
-                14.2,
-                22.1,
-                12.3,
-                63,
-                70,
-                4.8
+                18.0,
+                0,
+                8.0,
+                23.0,
+                13.0,
+                0,
+                5,
+                0
         );
         WeatherGreetingService firstService = new WeatherGreetingService(
                 () -> CompletableFuture.completedFuture(snapshot),
@@ -142,8 +203,12 @@ class WeatherGreetingServiceTest {
         String secondGreeting = secondService.startupGreeting().join();
 
         assertNotEquals(firstGreeting, secondGreeting);
-        assertTrue(firstGreeting.contains("Canberra"));
-        assertTrue(secondGreeting.contains("Canberra"));
+        assertTrue(firstGreeting.contains("堪培拉"));
+        assertTrue(secondGreeting.contains("堪培拉"));
+        assertTrue(firstGreeting.contains("晴") || firstGreeting.contains("天气不错"));
+        assertTrue(secondGreeting.contains("晴") || secondGreeting.contains("天气不错"));
+        assertDoesNotUseWeatherReportTone(firstGreeting);
+        assertDoesNotUseWeatherReportTone(secondGreeting);
     }
 
     private Clock fixedMorningClock() {
@@ -159,5 +224,24 @@ class WeatherGreetingServiceTest {
 
     private IntUnaryOperator secondVariant() {
         return bound -> 1;
+    }
+
+    private void assertNaturalStartupGreeting(String greeting) {
+        int length = greeting.codePointCount(0, greeting.length());
+        assertTrue(length >= 30, "greeting is too short: " + greeting);
+        assertTrue(length <= 60, "greeting is too long: " + greeting);
+    }
+
+    private void assertDoesNotUseWeatherReportTone(String greeting) {
+        assertFalse(greeting.contains("当前天气状况"));
+        assertFalse(greeting.contains("最高气温"));
+        assertFalse(greeting.contains("降水概率"));
+        assertFalse(greeting.contains("摄氏度"));
+        assertFalse(greeting.contains("°C"));
+        assertFalse(greeting.contains("请根据天气情况"));
+        assertFalse(greeting.contains("出门按这个准备"));
+        assertFalse(greeting.contains("烘干费"));
+        assertFalse(greeting.contains("终端"));
+        assertFalse(greeting.contains("维修"));
     }
 }
