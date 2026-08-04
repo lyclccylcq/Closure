@@ -6,7 +6,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.IntUnaryOperator;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WeatherGreetingServiceTest {
@@ -26,7 +28,8 @@ class WeatherGreetingServiceTest {
         );
         WeatherGreetingService service = new WeatherGreetingService(
                 () -> CompletableFuture.completedFuture(snapshot),
-                fixedMorningClock()
+                fixedMorningClock(),
+                firstVariant()
         );
 
         String greeting = service.startupGreeting().join();
@@ -56,7 +59,8 @@ class WeatherGreetingServiceTest {
         );
         WeatherGreetingService service = new WeatherGreetingService(
                 () -> CompletableFuture.completedFuture(snapshot),
-                fixedMorningClock()
+                fixedMorningClock(),
+                firstVariant()
         );
 
         String greeting = service.startupGreeting().join();
@@ -83,7 +87,8 @@ class WeatherGreetingServiceTest {
         );
         WeatherGreetingService service = new WeatherGreetingService(
                 () -> CompletableFuture.completedFuture(snapshot),
-                fixedMorningClock()
+                fixedMorningClock(),
+                firstVariant()
         );
 
         String greeting = service.startupGreeting().join();
@@ -98,7 +103,8 @@ class WeatherGreetingServiceTest {
     void fallsBackWhenWeatherFails() {
         WeatherGreetingService service = new WeatherGreetingService(
                 () -> CompletableFuture.failedFuture(new WeatherException("offline")),
-                fixedMorningClock()
+                fixedMorningClock(),
+                firstVariant()
         );
 
         String greeting = service.startupGreeting().join();
@@ -107,10 +113,51 @@ class WeatherGreetingServiceTest {
         assertTrue(greeting.contains("天气模块暂时没连上"));
     }
 
+    @Test
+    void variesStartupGreetingTemplates() {
+        WeatherSnapshot snapshot = new WeatherSnapshot(
+                "Canberra",
+                18.4,
+                5.6,
+                61,
+                14.2,
+                22.1,
+                12.3,
+                63,
+                70,
+                4.8
+        );
+        WeatherGreetingService firstService = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                firstVariant()
+        );
+        WeatherGreetingService secondService = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                secondVariant()
+        );
+
+        String firstGreeting = firstService.startupGreeting().join();
+        String secondGreeting = secondService.startupGreeting().join();
+
+        assertNotEquals(firstGreeting, secondGreeting);
+        assertTrue(firstGreeting.contains("Canberra"));
+        assertTrue(secondGreeting.contains("Canberra"));
+    }
+
     private Clock fixedMorningClock() {
         return Clock.fixed(
                 Instant.parse("2026-08-01T22:30:00Z"),
                 ZoneId.of("Australia/Sydney")
         );
+    }
+
+    private IntUnaryOperator firstVariant() {
+        return bound -> 0;
+    }
+
+    private IntUnaryOperator secondVariant() {
+        return bound -> 1;
     }
 }

@@ -1,6 +1,5 @@
 package app.service;
 
-import app.chat.model.AssistantReply;
 import app.voice.GptSovitsClient;
 import app.voice.GptSovitsConfig;
 import app.voice.VoiceProfileRegistry;
@@ -80,7 +79,7 @@ public final class SpeechService implements AssistantSpeechService {
 
     @Override
     public CompletableFuture<Void> speak(String text, VoiceProfile profile) {
-        String speechText = SpeechTextSanitizer.sanitize(text, AssistantReply.MAX_SPEECH_TEXT_CODE_POINTS);
+        String speechText = SpeechTextSanitizer.sanitizeFull(text);
         if (speechText.isBlank()) {
             return CompletableFuture.completedFuture(null);
         }

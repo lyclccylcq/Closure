@@ -104,6 +104,21 @@ class SpeechServiceTest {
     }
 
     @Test
+    void speakDoesNotTruncateAlreadyPreparedLongText() throws Exception {
+        FakeTtsClient ttsClient = new FakeTtsClient();
+        FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
+        SpeechService speechService = new SpeechService(ttsClient, audioPlayer);
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
+        String longBubbleText = "博士，天气和课程提醒我都看着。".repeat(20) + "最后一句也要完整念出来。";
+
+        speechService.speak(longBubbleText, neutral);
+
+        assertEquals(1, ttsClient.requests.size());
+        assertEquals(longBubbleText, ttsClient.requests.getFirst().getText());
+        assertTrue(ttsClient.requests.getFirst().getText().contains("最后一句也要完整念出来。"));
+    }
+
+    @Test
     void newRequestInvalidatesOldRequest() throws Exception {
         FakeTtsClient ttsClient = new FakeTtsClient();
         FakeAudioPlayer audioPlayer = new FakeAudioPlayer();
