@@ -5,10 +5,10 @@ import app.reminder.CourseScheduleReminder;
 import app.reminder.CourseScheduleRepository;
 import app.reminder.AiEventReminderTextGenerator;
 import app.reminder.EventReminder;
-import app.reminder.EventReminderDateTimeParser;
 import app.reminder.EventReminderEntry;
 import app.reminder.EventReminderRepository;
 import app.reminder.EventReminderTextGenerator;
+import app.reminder.TodayReminderTime;
 import app.reminder.WorkBreakReminder;
 import app.service.ChatSpeechController;
 import app.ui.chat.ChatWindow;
@@ -16,8 +16,7 @@ import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
 import app.ui.quick.PetSpeechBubbleWindow;
 import app.ui.reminder.CourseScheduleWindow;
-import app.ui.reminder.EventReminderWindow;
-import app.ui.reminder.ReminderSettingsWindow;
+import app.ui.reminder.TimedReminderWindow;
 import app.util.AvatarLoader;
 import app.voice.GptSovitsServerProcess;
 import app.weather.WeatherGreetingService;
@@ -37,6 +36,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -74,7 +74,7 @@ public class PetWindow extends JFrame {
 
     /**
      * 默认工作提醒间隔。
-     * 用户可以在提醒设置窗口里改成 5 分钟到 2 小时。
+     * 用户可以在定时提醒窗口里改成 5 分钟到 2 小时。
      */
     private static final Duration WORK_REMINDER_INTERVAL = Duration.ofHours(2);
 
@@ -174,19 +174,14 @@ public class PetWindow extends JFrame {
     private EventReminderTextGenerator eventReminderTextGenerator;
 
     /**
-     * 工作提醒时间设置窗口。
+     * 定时提醒窗口。
      */
-    private ReminderSettingsWindow reminderSettingsWindow;
+    private TimedReminderWindow timedReminderWindow;
 
     /**
      * 课程表上传和查看窗口。
      */
     private CourseScheduleWindow courseScheduleWindow;
-
-    /**
-     * 手动事件提醒窗口。
-     */
-    private EventReminderWindow eventReminderWindow;
 
     /**
      * 动态桌宠组件。
@@ -228,7 +223,7 @@ public class PetWindow extends JFrame {
      * 右键菜单。
      * 包含：
      * 1. 通讯
-     * 2. 提醒设置
+     * 2. 定时提醒
      * 3. 下线
      */
     private JPopupMenu popupMenu;
@@ -654,18 +649,21 @@ public class PetWindow extends JFrame {
         showSpeechBubble("重新计时了。" + workReminderIntervalText() + " 后我再来查岗。");
     }
 
-    private void openWorkReminderSettingsWindow() {
-        if (reminderSettingsWindow == null) {
-            reminderSettingsWindow = new ReminderSettingsWindow(
+    private void openTimedReminderWindow() {
+        if (timedReminderWindow == null) {
+            timedReminderWindow = new TimedReminderWindow(
                     interval -> SwingUtilities.invokeLater(() -> applyWorkReminderInterval(interval)),
                     enabled -> SwingUtilities.invokeLater(() -> setWorkReminderEnabled(enabled)),
-                    () -> SwingUtilities.invokeLater(this::restartWorkBreakReminder)
+                    () -> SwingUtilities.invokeLater(this::restartWorkBreakReminder),
+                    this::createEventReminder,
+                    status -> SwingUtilities.invokeLater(() -> showSpeechBubble(status))
             );
         }
 
-        reminderSettingsWindow.show(
+        timedReminderWindow.show(
                 workBreakReminder.workInterval(),
                 workBreakReminder.isRunning(),
+                eventReminder.entries(),
                 getBounds()
         );
     }
@@ -692,6 +690,7 @@ public class PetWindow extends JFrame {
 
     private void showWorkBreakReminder(String reminderText) {
         showSpeechBubble(reminderText);
+        speakSpeechBubble(reminderText);
     }
 
     private void showCourseScheduleReminder(String reminderText) {
@@ -721,7 +720,7 @@ public class PetWindow extends JFrame {
 
     private List<EventReminderEntry> loadSavedEventReminders() {
         try {
-            return eventReminderRepository.load();
+            return eventReminderRepository.loadForDate(LocalDate.now());
         } catch (IOException | IllegalArgumentException exception) {
             System.out.println("事件提醒读取失败：" + exception.getMessage());
             return List.of();
@@ -753,26 +752,13 @@ public class PetWindow extends JFrame {
         );
     }
 
-    private void openEventReminderWindow() {
-        if (eventReminderWindow == null) {
-            eventReminderWindow = new EventReminderWindow(
-                    this::createEventReminder,
-                    status -> SwingUtilities.invokeLater(() -> showSpeechBubble(status))
-            );
-        }
-
-        eventReminderWindow.show(
-                eventReminder.entries(),
-                getBounds()
-        );
-    }
-
-    private CompletableFuture<List<EventReminderEntry>> createEventReminder(String eventText, String remindAtText) {
+    private CompletableFuture<List<EventReminderEntry>> createEventReminder(String eventText, int hour, int minute) {
         String normalizedEventText;
         LocalDateTime remindAt;
         try {
             normalizedEventText = normalizeEventText(eventText);
-            remindAt = EventReminderDateTimeParser.parse(remindAtText);
+            remindAt = TodayReminderTime.atToday(hour, minute);
+            requireFutureTodayReminderTime(remindAt);
         } catch (IllegalArgumentException exception) {
             return CompletableFuture.failedFuture(exception);
         }
@@ -820,6 +806,13 @@ public class PetWindow extends JFrame {
         }
 
         return eventText.trim();
+    }
+
+    private void requireFutureTodayReminderTime(LocalDateTime remindAt) {
+        LocalDateTime currentMinute = LocalDateTime.now().withSecond(0).withNano(0);
+        if (remindAt.isBefore(currentMinute)) {
+            throw new IllegalArgumentException("今天这个时间已经过去了");
+        }
     }
 
     private void showTestCourseScheduleReminder() {
@@ -1002,14 +995,11 @@ public class PetWindow extends JFrame {
         // 创建“通讯”菜单项
         JMenuItem chatItem = new JMenuItem("通讯");
 
-        // 创建工作提醒设置菜单项
-        JMenuItem workReminderSettingsItem = new JMenuItem("提醒设置...");
+        // 创建定时提醒菜单项
+        JMenuItem timedReminderItem = new JMenuItem("定时提醒...");
 
         // 创建课程表提醒菜单项
         JMenuItem courseScheduleItem = new JMenuItem("课程表提醒...");
-
-        // 创建手动事件提醒菜单项
-        JMenuItem eventReminderItem = new JMenuItem("事件提醒...");
 
         // 创建“下线”菜单项
         JMenuItem exitItem = new JMenuItem("下线");
@@ -1017,14 +1007,11 @@ public class PetWindow extends JFrame {
         // 点击“通讯”时打开聊天窗口
         chatItem.addActionListener(e -> openChatWindow());
 
-        // 打开工作提醒设置窗口
-        workReminderSettingsItem.addActionListener(e -> openWorkReminderSettingsWindow());
+        // 打开定时提醒窗口
+        timedReminderItem.addActionListener(e -> openTimedReminderWindow());
 
         // 打开课程表提醒窗口
         courseScheduleItem.addActionListener(e -> openCourseScheduleWindow());
-
-        // 打开手动事件提醒窗口
-        eventReminderItem.addActionListener(e -> openEventReminderWindow());
 
         // 点击“下线”时退出程序
         exitItem.addActionListener(e -> exitApplication());
@@ -1035,10 +1022,9 @@ public class PetWindow extends JFrame {
         // 添加一条分隔线
         popupMenu.addSeparator();
 
-        // 把工作提醒设置项加入菜单
-        popupMenu.add(workReminderSettingsItem);
+        // 把定时提醒项加入菜单
+        popupMenu.add(timedReminderItem);
         popupMenu.add(courseScheduleItem);
-        popupMenu.add(eventReminderItem);
 
         // 添加一条分隔线
         popupMenu.addSeparator();
@@ -1173,9 +1159,6 @@ public class PetWindow extends JFrame {
         if (idleChatterTimer != null) {
             idleChatterTimer.stop();
         }
-        if (reminderSettingsWindow != null) {
-            reminderSettingsWindow.dispose();
-        }
         if (courseScheduleReminder != null) {
             courseScheduleReminder.dispose();
         }
@@ -1185,8 +1168,8 @@ public class PetWindow extends JFrame {
         if (eventReminder != null) {
             eventReminder.dispose();
         }
-        if (eventReminderWindow != null) {
-            eventReminderWindow.dispose();
+        if (timedReminderWindow != null) {
+            timedReminderWindow.dispose();
         }
         if (petAnimationPanel != null) {
             petAnimationPanel.dispose();
