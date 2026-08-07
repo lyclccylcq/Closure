@@ -45,6 +45,35 @@ class CourseScheduleParserTest {
     }
 
     @Test
+    void parsesUnpaddedAndIsoSimpleTextScheduleTimes() {
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "2026-8-4 9:00 | 数据结构 | class | 15 | B203",
+                "2026-08-05T14:30:00 | Lab due | deadline | 2h"
+        ));
+
+        assertEquals(2, entries.size());
+        assertEquals(LocalDateTime.of(2026, 8, 4, 9, 0), entries.getFirst().startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 5, 14, 30), entries.get(1).startsAt());
+        assertEquals(CourseReminderType.DEADLINE, entries.get(1).type());
+    }
+
+    @Test
+    void parsesCsvScheduleWithBomAndCalendarExportHeaders() {
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "\uFEFFSubject,Start Date,Start Time,End Date,End Time,Location,Description",
+                "\"COMP6710 Lecture\",7/8/2026,9:00 AM,7/8/2026,10:30 AM,\"Room A\",\"Bring laptop\""
+        ));
+
+        assertEquals(1, entries.size());
+        CourseScheduleEntry entry = entries.getFirst();
+        assertEquals("COMP6710 Lecture", entry.title());
+        assertEquals(LocalDateTime.of(2026, 8, 7, 9, 0), entry.startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 7, 10, 30), entry.endsAt());
+        assertEquals("Room A", entry.location());
+        assertEquals("Bring laptop", entry.notes());
+    }
+
+    @Test
     void parsesIcsSchedule() {
         List<CourseScheduleEntry> entries = parser.parseLines(List.of(
                 "BEGIN:VCALENDAR",
@@ -67,5 +96,21 @@ class CourseScheduleParserTest {
         assertEquals("Lab 2", entries.getFirst().location());
         assertEquals(CourseReminderType.DEADLINE, entries.get(1).type());
         assertEquals(Duration.ofHours(24), entries.get(1).remindBefore());
+    }
+
+    @Test
+    void parsesIcsScheduleWithBom() {
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "\uFEFFBEGIN:VCALENDAR",
+                "BEGIN:VEVENT",
+                "SUMMARY:Computer Systems",
+                "DTSTART;TZID=Australia/Sydney:20260805T090000",
+                "END:VEVENT",
+                "END:VCALENDAR"
+        ));
+
+        assertEquals(1, entries.size());
+        assertEquals("Computer Systems", entries.getFirst().title());
+        assertEquals(LocalDateTime.of(2026, 8, 5, 9, 0), entries.getFirst().startsAt());
     }
 }
