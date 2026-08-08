@@ -44,7 +44,7 @@ class WeatherGreetingServiceTest {
     }
 
     @Test
-    void suggestsLightJacketForColdDay() {
+    void variesCareAdviceForColdDay() {
         WeatherSnapshot snapshot = new WeatherSnapshot(
                 "Canberra",
                 14.0,
@@ -57,19 +57,40 @@ class WeatherGreetingServiceTest {
                 10,
                 0
         );
-        WeatherGreetingService service = new WeatherGreetingService(
+        WeatherGreetingService firstService = new WeatherGreetingService(
                 () -> CompletableFuture.completedFuture(snapshot),
                 fixedMorningClock(),
                 firstVariant()
         );
+        WeatherGreetingService secondService = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                secondVariant()
+        );
+        WeatherGreetingService thirdService = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                thirdVariant()
+        );
 
-        String greeting = service.startupGreeting().join();
+        String firstGreeting = firstService.startupGreeting().join();
+        String secondGreeting = secondService.startupGreeting().join();
+        String thirdGreeting = thirdService.startupGreeting().join();
 
-        assertNaturalStartupGreeting(greeting);
-        assertTrue(greeting.contains("堪培拉今天温度有点低"));
-        assertTrue(greeting.contains("多穿一件"));
-        assertTrue(greeting.indexOf("冷") < greeting.indexOf("多穿"));
-        assertDoesNotUseWeatherReportTone(greeting);
+        assertNaturalStartupGreeting(firstGreeting);
+        assertNaturalStartupGreeting(secondGreeting);
+        assertNaturalStartupGreeting(thirdGreeting);
+        assertTrue(firstGreeting.contains("堪培拉今天温度有点低"));
+        assertTrue(firstGreeting.contains("热水"));
+        assertTrue(firstGreeting.indexOf("冷") < firstGreeting.indexOf("热水"));
+        assertTrue(secondGreeting.contains("温差"));
+        assertTrue(thirdGreeting.contains("外套"));
+        assertFalse(firstGreeting.contains("多穿"));
+        assertNotEquals(firstGreeting, secondGreeting);
+        assertNotEquals(secondGreeting, thirdGreeting);
+        assertDoesNotUseWeatherReportTone(firstGreeting);
+        assertDoesNotUseWeatherReportTone(secondGreeting);
+        assertDoesNotUseWeatherReportTone(thirdGreeting);
     }
 
     @Test
@@ -224,6 +245,10 @@ class WeatherGreetingServiceTest {
 
     private IntUnaryOperator secondVariant() {
         return bound -> 1;
+    }
+
+    private IntUnaryOperator thirdVariant() {
+        return bound -> 2;
     }
 
     private void assertNaturalStartupGreeting(String greeting) {

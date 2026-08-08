@@ -213,19 +213,15 @@ public final class CourseScheduleParser {
     }
 
     private static boolean looksLikeHeader(List<String> columns) {
-        return columns.stream().map(CourseScheduleParser::normalizeHeader).anyMatch(header ->
-                header.equals("title") || header.equals("course") || header.equals("课程")
-                        || header.equals("subject") || header.equals("summary")
-                        || header.equals("start") || header.equals("startdate") || header.equals("starttime")
-                        || header.equals("datetime") || header.equals("时间")
-        );
+        if (!columns.isEmpty() && canParseDateTime(columns.getFirst())) {
+            return false;
+        }
+
+        return columns.stream().map(CourseScheduleParser::normalizeHeader).anyMatch(CourseScheduleParser::isKnownHeader);
     }
 
     static List<String> splitDelimitedLine(String line) {
-        char delimiter = line.contains("\t") ? '\t' : ',';
-        if (!line.contains(String.valueOf(delimiter)) && line.contains("|")) {
-            delimiter = '|';
-        }
+        char delimiter = delimiterFor(line);
 
         List<String> columns = new ArrayList<>();
         StringBuilder currentColumn = new StringBuilder();
@@ -255,6 +251,51 @@ public final class CourseScheduleParser {
         return columns;
     }
 
+    private static char delimiterFor(String line) {
+        char standardDelimiter = delimiterFor(line, new char[]{'\t', ',', ';', '|'});
+        if (countDelimiterOutsideQuotes(line, standardDelimiter) > 0) {
+            return standardDelimiter;
+        }
+
+        return delimiterFor(line, new char[]{'，', '；'});
+    }
+
+    private static char delimiterFor(String line, char[] candidates) {
+        char bestDelimiter = candidates[0];
+        int bestCount = 0;
+        for (char candidate : candidates) {
+            int count = countDelimiterOutsideQuotes(line, candidate);
+            if (count > bestCount) {
+                bestDelimiter = candidate;
+                bestCount = count;
+            }
+        }
+
+        return bestDelimiter;
+    }
+
+    private static int countDelimiterOutsideQuotes(String line, char delimiter) {
+        int count = 0;
+        boolean inQuote = false;
+        for (int index = 0; index < line.length(); index++) {
+            char character = line.charAt(index);
+            if (character == '"') {
+                if (inQuote && index + 1 < line.length() && line.charAt(index + 1) == '"') {
+                    index++;
+                } else {
+                    inQuote = !inQuote;
+                }
+                continue;
+            }
+
+            if (character == delimiter && !inQuote) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static Map<String, Integer> headerIndexes(List<String> headers) {
         Map<String, Integer> indexes = new HashMap<>();
         for (int index = 0; index < headers.size(); index++) {
@@ -265,7 +306,26 @@ public final class CourseScheduleParser {
     }
 
     private static String normalizeHeader(String header) {
-        return stripByteOrderMark(header).trim().toLowerCase(Locale.ROOT).replace(" ", "");
+        return stripByteOrderMark(header).trim().toLowerCase(Locale.ROOT)
+                .replace(" ", "")
+                .replace("_", "")
+                .replace("-", "");
+    }
+
+    private static boolean isKnownHeader(String header) {
+        return switch (header) {
+            case "title", "course", "coursename", "name", "subject", "summary", "event", "eventtitle",
+                 "activity", "module", "unit", "lesson", "class", "课程", "课程名称", "标题", "事项", "活动",
+                 "名称", "科目", "主题", "date", "start", "startsat", "datetime", "startdate", "starttime",
+                 "end", "endsat", "enddate", "endtime", "time", "日期", "开始", "开始日期", "开始时间",
+                 "结束", "结束日期", "结束时间", "时间", "type", "kind", "category", "类型", "location",
+                 "where", "room", "venue", "地点", "教室", "notes", "note", "description", "details",
+                 "备注", "说明" -> true;
+            default -> header.contains("date")
+                    || header.contains("time")
+                    || header.contains("日期")
+                    || header.contains("时间");
+        };
     }
 
     private static String column(List<String> columns, Map<String, Integer> headerIndexes, String... names) {
@@ -305,6 +365,15 @@ public final class CourseScheduleParser {
         }
 
         throw new IllegalArgumentException("第 " + lineNumber + " 行时间格式无法识别：" + text);
+    }
+
+    private static boolean canParseDateTime(String text) {
+        try {
+            parseDateTime(text, 1);
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     private static LocalDateTime parseOptionalDateTime(String text, int lineNumber) {

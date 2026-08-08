@@ -74,6 +74,38 @@ class CourseScheduleParserTest {
     }
 
     @Test
+    void parsesScheduleWithChineseHeaderAliasesAndChineseCommaDelimiter() {
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "名称，开始日期，开始时间，结束日期，结束时间，教室，说明",
+                "算法课，2026-08-07，11:50，2026-08-07，13:00，C101，带电脑"
+        ));
+
+        assertEquals(1, entries.size());
+        CourseScheduleEntry entry = entries.getFirst();
+        assertEquals("算法课", entry.title());
+        assertEquals(LocalDateTime.of(2026, 8, 7, 11, 50), entry.startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 7, 13, 0), entry.endsAt());
+        assertEquals("C101", entry.location());
+        assertEquals("带电脑", entry.notes());
+    }
+
+    @Test
+    void parsesScheduleWithSemicolonDelimiterAndEventTitleHeader() {
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "Event Title;Start Date;Start Time;End Date;End Time;Venue;Details",
+                "Project demo;2026-8-7;11:50;2026-8-7;12:30;Room 4;slides"
+        ));
+
+        assertEquals(1, entries.size());
+        CourseScheduleEntry entry = entries.getFirst();
+        assertEquals("Project demo", entry.title());
+        assertEquals(LocalDateTime.of(2026, 8, 7, 11, 50), entry.startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 7, 12, 30), entry.endsAt());
+        assertEquals("Room 4", entry.location());
+        assertEquals("slides", entry.notes());
+    }
+
+    @Test
     void parsesIcsSchedule() {
         List<CourseScheduleEntry> entries = parser.parseLines(List.of(
                 "BEGIN:VCALENDAR",
