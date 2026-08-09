@@ -112,7 +112,7 @@ public final class WeatherGreetingService {
         }
 
         return choose(
-                place + "今天天气还算平稳。",
+                place + "今天天气还算平常。",
                 place + "今天没有特别明显的坏天气。"
         );
     }
@@ -142,13 +142,13 @@ public final class WeatherGreetingService {
         if (isRainLikely(weather)) {
             return choose(
                     "出门的时候记得带一把伞，路上会安心一点。",
-                    "出门的时候带把伞比较稳。",
+                    "出门的时候带把伞，路上会省心一些。",
                     "路上留点余量，别被雨堵住节奏。"
             );
         }
         if (isSnowy(weather)) {
             return choose(
-                    "路上可能会滑，走慢一点比较稳。",
+                    "路上可能会滑，走慢一点。",
                     "鞋底和路面都注意一下，别赶得太急。",
                     "先把手边的热饮安排上，别硬扛冷。"
             );

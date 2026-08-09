@@ -1,8 +1,6 @@
 package app.reminder;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -33,6 +31,9 @@ public final class CourseScheduleParser {
             formatter("d/M/yyyy H:mm"),
             formatter("d/M/yyyy H:mm:ss"),
             formatter("d/M/yyyy h:mm a"),
+            formatter("d/M/yy H:mm"),
+            formatter("d/M/yy H:mm:ss"),
+            formatter("d/M/yy h:mm a"),
             DateTimeFormatter.ISO_LOCAL_DATE_TIME
     };
     private static final DateTimeFormatter[] DATE_FORMATTERS = {
@@ -40,11 +41,18 @@ public final class CourseScheduleParser {
             formatter("yyyy-M-d"),
             DateTimeFormatter.ofPattern("yyyy/M/d"),
             DateTimeFormatter.ofPattern("yyyy.M.d"),
-            formatter("d/M/yyyy")
+            formatter("yyyy年M月d日"),
+            formatter("d/M/yyyy"),
+            formatter("d/M/yy")
+    };
+    private static final DateTimeFormatter[] TIME_FORMATTERS = {
+            formatter("H:mm"),
+            formatter("H:mm:ss"),
+            formatter("h:mm a")
     };
 
     public List<CourseScheduleEntry> parse(Path scheduleFile) throws IOException {
-        List<String> lines = Files.readAllLines(scheduleFile, StandardCharsets.UTF_8);
+        List<String> lines = CourseScheduleSourceReader.readLines(scheduleFile);
         return parseLines(lines);
     }
 
@@ -52,23 +60,24 @@ public final class CourseScheduleParser {
         List<String> meaningfulLines = lines.stream()
                 .map(CourseScheduleParser::stripByteOrderMark)
                 .map(String::trim)
-                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .filter(line -> !line.isEmpty() && !line.startsWith("#") && !isSpreadsheetSeparatorDirective(line))
                 .toList();
 
         if (meaningfulLines.isEmpty()) {
             return List.of();
         }
 
-        if (meaningfulLines.getFirst().equalsIgnoreCase("BEGIN:VCALENDAR")) {
-            return parseIcs(meaningfulLines);
+        int calendarStartIndex = firstCalendarStartIndex(meaningfulLines);
+        if (calendarStartIndex >= 0) {
+            return parseIcs(meaningfulLines.subList(calendarStartIndex, meaningfulLines.size()));
         }
 
-        List<String> firstColumns = splitDelimitedLine(meaningfulLines.getFirst());
-        if (looksLikeHeader(firstColumns)) {
-            return parseCsv(meaningfulLines);
+        int headerIndex = firstHeaderIndex(meaningfulLines);
+        if (headerIndex >= 0) {
+            return parseCsv(meaningfulLines, headerIndex);
         }
 
-        return parseSimpleText(meaningfulLines);
+        return parseFlexibleText(meaningfulLines);
     }
 
     private List<CourseScheduleEntry> parseIcs(List<String> lines) {
@@ -137,12 +146,12 @@ public final class CourseScheduleParser {
         return unfoldedLines;
     }
 
-    private List<CourseScheduleEntry> parseCsv(List<String> lines) {
-        List<String> headers = splitDelimitedLine(lines.getFirst());
+    private List<CourseScheduleEntry> parseCsv(List<String> lines, int headerIndex) {
+        List<String> headers = splitDelimitedLine(lines.get(headerIndex));
         Map<String, Integer> headerIndexes = headerIndexes(headers);
         List<CourseScheduleEntry> entries = new ArrayList<>();
 
-        for (int index = 1; index < lines.size(); index++) {
+        for (int index = headerIndex + 1; index < lines.size(); index++) {
             List<String> columns = splitDelimitedLine(lines.get(index));
             entries.add(entryFromColumns(headerIndexes, columns, index + 1));
         }
@@ -151,25 +160,32 @@ public final class CourseScheduleParser {
     }
 
     private CourseScheduleEntry entryFromColumns(Map<String, Integer> headerIndexes, List<String> columns, int lineNumber) {
-        String title = column(columns, headerIndexes, "title", "course", "name", "subject", "summary",
-                "event", "eventTitle", "课程", "课程名称", "标题", "事项", "活动", "名称");
+        String title = firstNonBlank(
+                column(columns, headerIndexes, "title", "course", "courseTitle", "name", "subject", "summary",
+                        "event", "eventTitle", "activity", "module", "unit", "lesson", "课程", "课程名称",
+                        "标题", "事项", "活动", "名称", "科目", "主题"),
+                fallbackTitle(columns, List.of())
+        );
+        String date = column(columns, headerIndexes, "date", "startDate", "日期", "开始日期");
+        String startTime = column(columns, headerIndexes, "startTime", "开始时间", "time", "时间");
+        String startDateTime = column(columns, headerIndexes, "start", "startsAt", "datetime", "startDate", "开始", "开始日期", "日期");
+        String endDate = column(columns, headerIndexes, "endDate", "date", "结束日期", "日期");
+        String endTime = column(columns, headerIndexes, "endTime", "结束时间");
+        String endDateTime = column(columns, headerIndexes, "end", "endsAt", "endDate", "结束", "结束日期");
         LocalDateTime startsAt = parseDateTime(
                 firstNonBlank(
-                        combineDateAndTime(
-                                column(columns, headerIndexes, "date", "startDate", "日期", "开始日期"),
-                                column(columns, headerIndexes, "startTime", "开始时间", "time", "时间")
-                        ),
-                        column(columns, headerIndexes, "start", "startsAt", "datetime", "startDate", "开始", "开始日期", "日期")
+                        combineDateAndTime(date, rangeStart(startTime)),
+                        rangeStart(startDateTime)
                 ),
                 lineNumber
         );
         LocalDateTime endsAt = parseOptionalDateTime(
                 firstNonBlank(
                         combineDateAndTime(
-                                column(columns, headerIndexes, "endDate", "date", "结束日期", "日期"),
-                                column(columns, headerIndexes, "endTime", "结束时间")
+                                endDate,
+                                firstNonBlank(endTime, rangeEnd(startTime))
                         ),
-                        column(columns, headerIndexes, "end", "endsAt", "endDate", "结束", "结束日期")
+                        firstNonBlank(endDateTime, dateTimeRangeEnd(startDateTime))
                 ),
                 lineNumber
         );
@@ -193,31 +209,121 @@ public final class CourseScheduleParser {
         );
     }
 
-    private List<CourseScheduleEntry> parseSimpleText(List<String> lines) {
+    private List<CourseScheduleEntry> parseFlexibleText(List<String> lines) {
         List<CourseScheduleEntry> entries = new ArrayList<>();
         for (int index = 0; index < lines.size(); index++) {
             List<String> columns = splitDelimitedLine(lines.get(index));
             if (columns.size() < 2) {
-                throw new IllegalArgumentException("第 " + (index + 1) + " 行至少需要时间和标题");
+                continue;
             }
 
-            LocalDateTime startsAt = parseDateTime(columns.get(0), index + 1);
-            CourseReminderType type = columns.size() >= 3 ? CourseReminderType.fromText(columns.get(2)) : CourseReminderType.CLASS;
-            Duration remindBefore = columns.size() >= 4 ? parseReminderDuration(columns.get(3), type) : CourseScheduleEntry.defaultRemindBefore(type);
-            String location = columns.size() >= 5 ? columns.get(4) : "";
-            String notes = columns.size() >= 6 ? columns.get(5) : "";
-            entries.add(new CourseScheduleEntry(columns.get(1), startsAt, null, type, remindBefore, location, notes));
+            CourseScheduleEntry simpleEntry = entryFromSimpleText(columns, index + 1);
+            if (simpleEntry != null) {
+                entries.add(simpleEntry);
+                continue;
+            }
+
+            FlexibleRowTime rowTime = flexibleRowTime(columns, index + 1);
+            if (rowTime == null) {
+                continue;
+            }
+
+            String title = fallbackTitle(columns, rowTime.usedIndexes());
+            CourseReminderType type = CourseReminderType.fromText(String.join(" ", columns));
+            String location = fallbackLocation(columns, rowTime.usedIndexes(), title);
+            String notes = fallbackNotes(columns, rowTime.usedIndexes(), title, location);
+            entries.add(new CourseScheduleEntry(
+                    title,
+                    rowTime.startsAt(),
+                    rowTime.endsAt(),
+                    type,
+                    CourseScheduleEntry.defaultRemindBefore(type),
+                    location,
+                    notes
+            ));
+        }
+
+        if (entries.isEmpty()) {
+            throw new IllegalArgumentException("没有找到可识别的课程时间。请确认文件里有日期和时间，或导出为 CSV/ICS 后再试。");
         }
 
         return entries;
     }
 
+    private CourseScheduleEntry entryFromSimpleText(List<String> columns, int lineNumber) {
+        if (!canParseFullDateTime(columns.getFirst())) {
+            return null;
+        }
+
+        LocalDateTime startsAt = parseDateTime(columns.getFirst(), lineNumber);
+        String title = firstNonBlank(columns.get(1), "课程表事件");
+        CourseReminderType type = columns.size() >= 3 && looksLikeReminderType(columns.get(2))
+                ? CourseReminderType.fromText(columns.get(2))
+                : CourseReminderType.fromText(title);
+        int nextDetailIndex = columns.size() >= 3 && looksLikeReminderType(columns.get(2)) ? 3 : 2;
+        Duration remindBefore = CourseScheduleEntry.defaultRemindBefore(type);
+        if (nextDetailIndex < columns.size() && canParseReminderDuration(columns.get(nextDetailIndex))) {
+            remindBefore = parseReminderDuration(columns.get(nextDetailIndex), type);
+            nextDetailIndex++;
+        }
+
+        String location = nextDetailIndex < columns.size() ? columns.get(nextDetailIndex) : "";
+        String notes = nextDetailIndex + 1 < columns.size()
+                ? String.join(" ", columns.subList(nextDetailIndex + 1, columns.size()))
+                : "";
+        return new CourseScheduleEntry(title, startsAt, null, type, remindBefore, location, notes);
+    }
+
+    private FlexibleRowTime flexibleRowTime(List<String> columns, int lineNumber) {
+        for (int index = 0; index < columns.size(); index++) {
+            String column = columns.get(index);
+            String nextColumn = index + 1 < columns.size() ? columns.get(index + 1) : "";
+            if (canParseDateOnly(column) && canParseTimeOnly(rangeStart(nextColumn))) {
+                LocalDate date = parseDateOnly(column, lineNumber);
+                LocalDateTime startsAt = date.atTime(parseTimeOnly(rangeStart(nextColumn), lineNumber));
+                LocalDateTime endsAt = null;
+                String rangeEnd = rangeEnd(nextColumn);
+                if (!rangeEnd.isBlank() && canParseTimeOnly(rangeEnd)) {
+                    endsAt = date.atTime(parseTimeOnly(rangeEnd, lineNumber));
+                } else if (index + 2 < columns.size() && canParseTimeOnly(columns.get(index + 2))) {
+                    endsAt = date.atTime(parseTimeOnly(columns.get(index + 2), lineNumber));
+                }
+                return new FlexibleRowTime(startsAt, endsAt, List.of(index, index + 1));
+            }
+        }
+
+        for (int index = 0; index < columns.size(); index++) {
+            String column = columns.get(index);
+            if (canParseFullDateTime(column)) {
+                LocalDateTime startsAt = parseDateTime(column, lineNumber);
+                LocalDateTime endsAt = null;
+                if (index + 1 < columns.size() && canParseFullDateTime(columns.get(index + 1))) {
+                    endsAt = parseDateTime(columns.get(index + 1), lineNumber);
+                }
+                return new FlexibleRowTime(startsAt, endsAt, List.of(index));
+            }
+        }
+
+        for (int index = 0; index < columns.size(); index++) {
+            String column = columns.get(index);
+            if (canParseDateOnly(column)) {
+                return new FlexibleRowTime(parseDateOnly(column, lineNumber).atTime(LocalTime.of(23, 59)), null, List.of(index));
+            }
+        }
+
+        return null;
+    }
+
     private static boolean looksLikeHeader(List<String> columns) {
-        if (!columns.isEmpty() && canParseDateTime(columns.getFirst())) {
+        if (columns.size() < 2 || canParseDateTime(columns.getFirst())) {
             return false;
         }
 
-        return columns.stream().map(CourseScheduleParser::normalizeHeader).anyMatch(CourseScheduleParser::isKnownHeader);
+        long knownHeaderCount = columns.stream()
+                .map(CourseScheduleParser::normalizeHeader)
+                .filter(CourseScheduleParser::isKnownHeader)
+                .count();
+        return knownHeaderCount >= 2;
     }
 
     static List<String> splitDelimitedLine(String line) {
@@ -316,8 +422,10 @@ public final class CourseScheduleParser {
         return switch (header) {
             case "title", "course", "coursename", "name", "subject", "summary", "event", "eventtitle",
                  "activity", "module", "unit", "lesson", "class", "课程", "课程名称", "标题", "事项", "活动",
-                 "名称", "科目", "主题", "date", "start", "startsat", "datetime", "startdate", "starttime",
-                 "end", "endsat", "enddate", "endtime", "time", "日期", "开始", "开始日期", "开始时间",
+                 "名称", "科目", "主题", "date", "day", "when", "start", "from", "begin", "startsat",
+                 "datetime", "startdatetime", "startdate", "startday", "starttime", "begintime",
+                 "end", "to", "until", "finish", "endsat", "enddatetime", "enddate", "endtime",
+                 "finishtime", "time", "日期", "上课日期", "开始", "开始日期", "开始日期时间", "开始时间",
                  "结束", "结束日期", "结束时间", "时间", "type", "kind", "category", "类型", "location",
                  "where", "room", "venue", "地点", "教室", "notes", "note", "description", "details",
                  "备注", "说明" -> true;
@@ -339,13 +447,34 @@ public final class CourseScheduleParser {
         return "";
     }
 
+    private static int firstCalendarStartIndex(List<String> lines) {
+        for (int index = 0; index < lines.size(); index++) {
+            if (lines.get(index).equalsIgnoreCase("BEGIN:VCALENDAR")) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int firstHeaderIndex(List<String> lines) {
+        int maxScanLines = Math.min(lines.size(), 20);
+        for (int index = 0; index < maxScanLines; index++) {
+            if (looksLikeHeader(splitDelimitedLine(lines.get(index)))) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     private static LocalDateTime parseDateTime(String text, int lineNumber) {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("第 " + lineNumber + " 行缺少时间");
         }
 
         String trimmedText = stripByteOrderMark(text).trim();
-        String normalizedText = trimmedText.replace('T', ' ');
+        String normalizedText = normalizeDateTimeText(text);
         for (DateTimeFormatter formatter : DATE_TIME_FORMATTERS) {
             for (String candidate : parseCandidates(normalizedText, trimmedText)) {
                 try {
@@ -374,6 +503,76 @@ public final class CourseScheduleParser {
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private static boolean canParseFullDateTime(String text) {
+        if (text == null || text.isBlank() || canParseDateOnly(text)) {
+            return false;
+        }
+
+        return canParseDateTime(text);
+    }
+
+    private static boolean canParseDateOnly(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+
+        String normalizedText = normalizeDateTimeText(text);
+        for (DateTimeFormatter formatter : DATE_FORMATTERS) {
+            try {
+                LocalDate.parse(normalizedText, formatter);
+                return true;
+            } catch (DateTimeParseException ignored) {
+                // Try the next supported format.
+            }
+        }
+
+        return false;
+    }
+
+    private static LocalDate parseDateOnly(String text, int lineNumber) {
+        String normalizedText = normalizeDateTimeText(text);
+        for (DateTimeFormatter formatter : DATE_FORMATTERS) {
+            try {
+                return LocalDate.parse(normalizedText, formatter);
+            } catch (DateTimeParseException ignored) {
+                // Try the next supported format.
+            }
+        }
+
+        throw new IllegalArgumentException("第 " + lineNumber + " 行日期格式无法识别：" + text);
+    }
+
+    private static boolean canParseTimeOnly(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+
+        String normalizedText = normalizeDateTimeText(text);
+        for (DateTimeFormatter formatter : TIME_FORMATTERS) {
+            try {
+                LocalTime.parse(normalizedText, formatter);
+                return true;
+            } catch (DateTimeParseException ignored) {
+                // Try the next supported format.
+            }
+        }
+
+        return false;
+    }
+
+    private static LocalTime parseTimeOnly(String text, int lineNumber) {
+        String normalizedText = normalizeDateTimeText(text);
+        for (DateTimeFormatter formatter : TIME_FORMATTERS) {
+            try {
+                return LocalTime.parse(normalizedText, formatter);
+            } catch (DateTimeParseException ignored) {
+                // Try the next supported format.
+            }
+        }
+
+        throw new IllegalArgumentException("第 " + lineNumber + " 行时间格式无法识别：" + text);
     }
 
     private static LocalDateTime parseOptionalDateTime(String text, int lineNumber) {
@@ -447,12 +646,177 @@ public final class CourseScheduleParser {
                 .trim()));
     }
 
+    private static boolean canParseReminderDuration(String text) {
+        try {
+            parseReminderDuration(text, CourseReminderType.CLASS);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
     private static String combineDateAndTime(String date, String time) {
         if (date == null || date.isBlank() || time == null || time.isBlank()) {
             return "";
         }
 
         return date.trim() + " " + time.trim();
+    }
+
+    private static String rangeStart(String text) {
+        List<String> parts = splitRange(text);
+        if (parts.isEmpty()) {
+            return "";
+        }
+
+        return parts.getFirst();
+    }
+
+    private static String rangeEnd(String text) {
+        List<String> parts = splitRange(text);
+        if (parts.size() < 2) {
+            return "";
+        }
+
+        return parts.get(1);
+    }
+
+    private static String dateTimeRangeEnd(String text) {
+        String start = rangeStart(text);
+        String end = rangeEnd(text);
+        if (end.isBlank()) {
+            return "";
+        }
+        if (!canParseTimeOnly(end)) {
+            return end;
+        }
+
+        String datePrefix = datePrefix(start);
+        if (datePrefix.isBlank()) {
+            return end;
+        }
+
+        return datePrefix + " " + end;
+    }
+
+    private static List<String> splitRange(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+
+        String normalizedText = normalizeDateTimeText(text)
+                .replace("—", "-")
+                .replace("–", "-")
+                .replace("~", "-")
+                .replace("至", "-")
+                .replace("到", "-");
+        int separatorIndex = rangeSeparatorIndex(normalizedText);
+        if (separatorIndex < 0) {
+            return List.of(normalizedText.trim());
+        }
+
+        String first = normalizedText.substring(0, separatorIndex).trim();
+        String second = normalizedText.substring(separatorIndex + 1).trim();
+        if (endsWithAmPm(second) && !endsWithAmPm(first)) {
+            first = first + " " + amPmSuffix(second);
+        }
+
+        return List.of(first, second);
+    }
+
+    private static int rangeSeparatorIndex(String text) {
+        for (int index = 0; index < text.length(); index++) {
+            if (text.charAt(index) != '-') {
+                continue;
+            }
+
+            String before = text.substring(0, index).trim();
+            if (looksLikeClockText(before)) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static boolean looksLikeClockText(String text) {
+        return text.contains(":") || endsWithAmPm(text);
+    }
+
+    private static String datePrefix(String dateTimeText) {
+        if (dateTimeText == null || dateTimeText.isBlank()) {
+            return "";
+        }
+
+        String[] parts = dateTimeText.trim().split("\\s+");
+        if (parts.length < 2) {
+            return "";
+        }
+
+        int timePartCount = endsWithAmPm(dateTimeText) && parts.length >= 3 ? 2 : 1;
+        return String.join(" ", java.util.Arrays.copyOf(parts, parts.length - timePartCount));
+    }
+
+    private static String fallbackTitle(List<String> columns, List<Integer> excludedIndexes) {
+        for (int index = 0; index < columns.size(); index++) {
+            String value = columns.get(index);
+            if (!excludedIndexes.contains(index) && isUsefulText(value)) {
+                return value.trim();
+            }
+        }
+
+        return "课程表事件";
+    }
+
+    private static String fallbackLocation(List<String> columns, List<Integer> excludedIndexes, String title) {
+        for (int index = 0; index < columns.size(); index++) {
+            String value = columns.get(index);
+            if (!excludedIndexes.contains(index) && !value.equals(title) && isUsefulText(value)) {
+                return value.trim();
+            }
+        }
+
+        return "";
+    }
+
+    private static String fallbackNotes(List<String> columns, List<Integer> excludedIndexes, String title, String location) {
+        List<String> notes = new ArrayList<>();
+        for (int index = 0; index < columns.size(); index++) {
+            String value = columns.get(index);
+            if (!excludedIndexes.contains(index)
+                    && !value.equals(title)
+                    && !value.equals(location)
+                    && isUsefulText(value)) {
+                notes.add(value.trim());
+            }
+        }
+
+        return String.join(" ", notes);
+    }
+
+    private static boolean isUsefulText(String text) {
+        return text != null
+                && !text.isBlank()
+                && !canParseDateTime(text)
+                && !canParseTimeOnly(rangeStart(text));
+    }
+
+    private static boolean looksLikeReminderType(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+
+        String normalizedText = text.trim().toLowerCase(Locale.ROOT);
+        return switch (normalizedText) {
+            case "class", "course", "lesson", "lecture", "tutorial", "lab", "seminar",
+                 "deadline", "due", "ddl", "上课", "课程", "课", "作业", "截止", "截止日期" -> true;
+            default -> normalizedText.contains("deadline")
+                    || normalizedText.contains("due")
+                    || normalizedText.contains("ddl")
+                    || normalizedText.contains("lecture")
+                    || normalizedText.contains("tutorial")
+                    || normalizedText.contains("截止");
+        };
     }
 
     private static String firstNonBlank(String first, String second) {
@@ -478,6 +842,17 @@ public final class CourseScheduleParser {
         return new String[]{first, second};
     }
 
+    private static String normalizeDateTimeText(String text) {
+        return stripByteOrderMark(text).trim()
+                .replace('T', ' ')
+                .replace('：', ':')
+                .replace("上午", "AM")
+                .replace("下午", "PM")
+                .replaceAll("(?i)(\\d)(am|pm)\\b", "$1 $2")
+                .replaceAll("(?i)\\bam\\b", "AM")
+                .replaceAll("(?i)\\bpm\\b", "PM");
+    }
+
     private static String stripByteOrderMark(String text) {
         if (text == null || text.isEmpty()) {
             return text;
@@ -487,5 +862,29 @@ public final class CourseScheduleParser {
         }
 
         return text;
+    }
+
+    private static boolean isSpreadsheetSeparatorDirective(String line) {
+        return line.toLowerCase(Locale.ROOT).startsWith("sep=");
+    }
+
+    private static boolean endsWithAmPm(String text) {
+        String normalizedText = text.trim().toUpperCase(Locale.ROOT);
+        return normalizedText.endsWith(" AM") || normalizedText.endsWith(" PM");
+    }
+
+    private static String amPmSuffix(String text) {
+        String normalizedText = text.trim().toUpperCase(Locale.ROOT);
+        if (normalizedText.endsWith(" AM")) {
+            return "AM";
+        }
+        if (normalizedText.endsWith(" PM")) {
+            return "PM";
+        }
+
+        return "";
+    }
+
+    private record FlexibleRowTime(LocalDateTime startsAt, LocalDateTime endsAt, List<Integer> usedIndexes) {
     }
 }

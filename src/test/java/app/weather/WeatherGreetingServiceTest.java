@@ -196,6 +196,52 @@ class WeatherGreetingServiceTest {
     }
 
     @Test
+    void doesNotUseStableWordingInWeatherGreetingVariants() {
+        WeatherSnapshot rainySnapshot = new WeatherSnapshot(
+                "Canberra",
+                18.4,
+                5.6,
+                61,
+                14.2,
+                22.1,
+                12.3,
+                63,
+                70,
+                4.8
+        );
+        WeatherSnapshot snowySnapshot = new WeatherSnapshot(
+                "Canberra",
+                2.0,
+                -1.0,
+                71,
+                8.0,
+                5.0,
+                -2.0,
+                71,
+                40,
+                10.0
+        );
+        WeatherSnapshot ordinarySnapshot = new WeatherSnapshot(
+                "Canberra",
+                19.0,
+                18.5,
+                4,
+                8.0,
+                24.0,
+                14.0,
+                4,
+                5,
+                5.0
+        );
+
+        for (int variantIndex = 0; variantIndex < 4; variantIndex++) {
+            assertDoesNotUseWeatherReportTone(greetingFor(rainySnapshot, variantIndex));
+            assertDoesNotUseWeatherReportTone(greetingFor(snowySnapshot, variantIndex));
+            assertDoesNotUseWeatherReportTone(greetingFor(ordinarySnapshot, variantIndex));
+        }
+    }
+
+    @Test
     void variesStartupGreetingTemplatesWithoutChangingMeaning() {
         WeatherSnapshot snapshot = new WeatherSnapshot(
                 "Canberra",
@@ -251,6 +297,15 @@ class WeatherGreetingServiceTest {
         return bound -> 2;
     }
 
+    private String greetingFor(WeatherSnapshot snapshot, int variantIndex) {
+        WeatherGreetingService service = new WeatherGreetingService(
+                () -> CompletableFuture.completedFuture(snapshot),
+                fixedMorningClock(),
+                bound -> variantIndex
+        );
+        return service.startupGreeting().join();
+    }
+
     private void assertNaturalStartupGreeting(String greeting) {
         int length = greeting.codePointCount(0, greeting.length());
         assertTrue(length >= 30, "greeting is too short: " + greeting);
@@ -268,5 +323,6 @@ class WeatherGreetingServiceTest {
         assertFalse(greeting.contains("烘干费"));
         assertFalse(greeting.contains("终端"));
         assertFalse(greeting.contains("维修"));
+        assertFalse(greeting.contains("\u7a33"));
     }
 }

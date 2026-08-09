@@ -159,6 +159,10 @@ weather.longitude=149.1300
 - `.txt`
 - `.tsv`
 - `.ics`
+- `.ical`
+- `.xlsx`
+
+导入时会先使用本地解析器读取常见 CSV、TSV、ICS、文本和 `.xlsx` 表格。如果格式不标准且本地解析失败，会在本地 AI 配置可用时把文件内容交给 AI 转换为标准 CSV，再由本地解析器校验后保存。
 
 CSV / TSV 推荐字段：
 
@@ -177,7 +181,7 @@ Assignment 1,2026-08-09 23:59,,deadline,1440,,Submit before midnight
 
 默认提醒时间：
 
-- 上课：提前 20 分钟
+- 上课：提前 15 分钟
 - Deadline：提前 24 小时
 
 ---

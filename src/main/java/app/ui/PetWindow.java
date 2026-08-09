@@ -1,9 +1,10 @@
 package app.ui;
 
+import app.reminder.AiCourseScheduleImportConverter;
+import app.reminder.AiEventReminderTextGenerator;
 import app.reminder.CourseScheduleEntry;
 import app.reminder.CourseScheduleReminder;
 import app.reminder.CourseScheduleRepository;
-import app.reminder.AiEventReminderTextGenerator;
 import app.reminder.EventReminder;
 import app.reminder.EventReminderEntry;
 import app.reminder.EventReminderRepository;
@@ -515,7 +516,7 @@ public class PetWindow extends JFrame {
     }
 
     private void initCourseScheduleReminder() {
-        courseScheduleRepository = CourseScheduleRepository.userDefault();
+        courseScheduleRepository = CourseScheduleRepository.userDefault(AiCourseScheduleImportConverter.fromEnvironment());
         List<CourseScheduleEntry> savedEntries = loadSavedCourseSchedule();
         courseScheduleReminder = new CourseScheduleReminder(
                 savedEntries,

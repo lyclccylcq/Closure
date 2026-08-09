@@ -23,6 +23,8 @@ import java.io.File;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -127,7 +129,7 @@ public final class CourseScheduleWindow {
                 -fx-font-weight: bold;
                 """);
 
-        statusLabel = new Label("支持 CSV/TXT：title,start,end,type,remindBeforeMinutes,location,notes");
+        statusLabel = new Label("支持 CSV/TXT/TSV/ICS/XLSX，可带表头，也可每行写：时间 | 标题 | 类型 | 提前分钟 | 地点");
         statusLabel.setWrapText(true);
         statusLabel.setStyle("""
                 -fx-text-fill: #93b7c9;
@@ -183,7 +185,7 @@ public final class CourseScheduleWindow {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("选择课程表");
         fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("课程表文件", "*.csv", "*.txt", "*.tsv", "*.ics"),
+                new FileChooser.ExtensionFilter("课程表文件", "*.csv", "*.txt", "*.tsv", "*.ics", "*.ical", "*.xlsx"),
                 new FileChooser.ExtensionFilter("所有文件", "*.*")
         );
 
@@ -192,17 +194,37 @@ public final class CourseScheduleWindow {
             return;
         }
 
-        try {
-            List<CourseScheduleEntry> importedEntries = importHandler.apply(selectedFile.toPath());
-            updateEntries(importedEntries);
-            String message = "已保存 " + importedEntries.size() + " 条课程/Deadline。";
+        statusLabel.setText("正在导入课程表，格式不标准时会尝试交给 AI 转换...");
+        CompletableFuture
+                .supplyAsync(() -> importHandler.apply(selectedFile.toPath()))
+                .whenComplete((importedEntries, error) -> runOnFxThread(() -> handleImportResult(importedEntries, error)));
+    }
+
+    private void handleImportResult(List<CourseScheduleEntry> importedEntries, Throwable error) {
+        if (error != null) {
+            String message = "课程表导入失败：" + rootErrorMessage(error);
             statusLabel.setText(message);
             statusHandler.accept(message);
-        } catch (RuntimeException exception) {
-            String message = "课程表导入失败：" + exception.getMessage();
-            statusLabel.setText(message);
-            statusHandler.accept(message);
+            return;
         }
+
+        updateEntries(importedEntries);
+        String message = "已保存 " + importedEntries.size() + " 条课程/Deadline。";
+        statusLabel.setText(message);
+        statusHandler.accept(message);
+    }
+
+    private static String rootErrorMessage(Throwable error) {
+        Throwable currentError = error instanceof CompletionException && error.getCause() != null
+                ? error.getCause()
+                : error;
+        while ((currentError.getMessage() == null || currentError.getMessage().isBlank())
+                && currentError.getCause() != null
+                && currentError.getCause() != currentError) {
+            currentError = currentError.getCause();
+        }
+
+        return currentError.getMessage() == null ? currentError.getClass().getSimpleName() : currentError.getMessage();
     }
 
     private void updateEntries(List<CourseScheduleEntry> entries) {
