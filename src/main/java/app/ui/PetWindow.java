@@ -233,6 +233,8 @@ public class PetWindow extends JFrame {
      * 构造方法：创建桌宠窗口。
      */
     public PetWindow() {
+        UiFonts.applySwingDefaults();
+
         // 初始化窗口基本属性
         initWindow();
 
@@ -992,18 +994,24 @@ public class PetWindow extends JFrame {
     private void initPopupMenu() {
         // 创建右键菜单对象
         popupMenu = new JPopupMenu();
+        Font menuFont = UiFonts.preferredSwingFont(Font.PLAIN, 13);
+        popupMenu.setFont(menuFont);
 
         // 创建“通讯”菜单项
         JMenuItem chatItem = new JMenuItem("通讯");
+        chatItem.setFont(menuFont);
 
         // 创建定时提醒菜单项
         JMenuItem timedReminderItem = new JMenuItem("定时提醒...");
+        timedReminderItem.setFont(menuFont);
 
         // 创建课程表提醒菜单项
         JMenuItem courseScheduleItem = new JMenuItem("课程表提醒...");
+        courseScheduleItem.setFont(menuFont);
 
         // 创建“下线”菜单项
         JMenuItem exitItem = new JMenuItem("下线");
+        exitItem.setFont(menuFont);
 
         // 点击“通讯”时打开聊天窗口
         chatItem.addActionListener(e -> openChatWindow());

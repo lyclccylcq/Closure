@@ -2,6 +2,7 @@ package app.ui.reminder;
 
 import app.reminder.EventReminderEntry;
 import app.reminder.WorkBreakReminder;
+import app.ui.UiFonts;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -153,28 +154,30 @@ public final class TimedReminderWindow {
 
     private VBox createContent() {
         Label titleLabel = new Label("定时提醒");
-        titleLabel.setStyle("""
+        titleLabel.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 16px;
                 -fx-font-weight: bold;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(titleLabel,16);
 
         statusLabel = new Label("设置工作休息提醒，或给今天添加一个事件提醒。");
         statusLabel.setWrapText(true);
-        statusLabel.setStyle("""
+        statusLabel.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #93b7c9;
                 -fx-font-size: 12px;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(statusLabel,12);
 
         VBox root = new VBox(12);
         root.setPadding(new Insets(18, 18, 16, 18));
-        root.setStyle("""
+        root.setStyle(UiFonts.fxStyle("""
                 -fx-background-color: rgba(8, 12, 18, 0.95);
                 -fx-border-color: rgba(58, 174, 210, 0.90);
                 -fx-border-width: 1;
                 -fx-background-radius: 12;
                 -fx-border-radius: 12;
-                """);
+                """));
         root.getChildren().addAll(
                 titleLabel,
                 statusLabel,
@@ -189,16 +192,18 @@ public final class TimedReminderWindow {
         Label sectionLabel = sectionLabel("工作时间提醒");
 
         selectedIntervalLabel = new Label();
-        selectedIntervalLabel.setStyle("""
+        selectedIntervalLabel.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #93b7c9;
                 -fx-font-size: 13px;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(selectedIntervalLabel,13);
 
         workReminderEnabledCheckBox = new CheckBox("开启到点休息提醒");
-        workReminderEnabledCheckBox.setStyle("""
+        workReminderEnabledCheckBox.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 13px;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(workReminderEnabledCheckBox,13);
         workReminderEnabledCheckBox.setOnAction(event ->
                 workEnabledChangeHandler.accept(workReminderEnabledCheckBox.isSelected())
         );
@@ -243,6 +248,7 @@ public final class TimedReminderWindow {
         eventTextArea.setPrefRowCount(2);
         eventTextArea.setWrapText(true);
         eventTextArea.setStyle(inputStyle());
+        UiFonts.applyJavaFxFont(eventTextArea,13);
 
         hourSpinner = createTimeSpinner(0, 23, 9, 1);
         minuteSpinner = createTimeSpinner(0, 59, 0, 1);
@@ -257,20 +263,27 @@ public final class TimedReminderWindow {
 
         createEventButton = new Button("创建事件提醒");
         createEventButton.setStyle(primaryButtonStyle());
+        UiFonts.applyJavaFxFont(createEventButton,13);
         createEventButton.setOnAction(event -> createEventReminder());
 
         HBox createBar = new HBox(8, timeSelector, spacer(), createEventButton);
         createBar.setAlignment(Pos.CENTER_RIGHT);
 
         eventReminderListView = new ListView<>();
-        eventReminderListView.setPlaceholder(new Label("今天还没有事件提醒。"));
-        eventReminderListView.setStyle("""
+        Label emptyReminderLabel = new Label("今天还没有事件提醒。");
+        emptyReminderLabel.setStyle(UiFonts.fxStyle("""
+                -fx-text-fill: #93b7c9;
+                -fx-font-size: 13px;
+                """));
+        UiFonts.applyJavaFxFont(emptyReminderLabel,13);
+        eventReminderListView.setPlaceholder(emptyReminderLabel);
+        eventReminderListView.setStyle(UiFonts.fxStyle("""
                 -fx-control-inner-background: rgba(14, 22, 32, 0.96);
                 -fx-background-color: rgba(14, 22, 32, 0.96);
                 -fx-border-color: #30586c;
                 -fx-border-width: 1;
                 -fx-text-fill: #eef6ff;
-                """);
+                """));
         VBox.setVgrow(eventReminderListView, Priority.ALWAYS);
 
         VBox section = new VBox(8, sectionLabel, eventTextArea, createBar, eventReminderListView);
@@ -281,6 +294,7 @@ public final class TimedReminderWindow {
     private HBox createFooter() {
         Button closeButton = new Button("关闭");
         closeButton.setStyle(secondaryButtonStyle());
+        UiFonts.applyJavaFxFont(closeButton,13);
         closeButton.setOnAction(event -> stage.hide());
 
         HBox footer = new HBox(8, spacer(), closeButton);
@@ -372,6 +386,7 @@ public final class TimedReminderWindow {
         spinner.setEditable(true);
         spinner.setPrefWidth(70);
         spinner.setStyle(inputStyle());
+        UiFonts.applyJavaFxFont(spinner.getEditor(),13);
         spinner.getEditor().setAlignment(Pos.CENTER);
         spinner.getEditor().setOnAction(event -> commitTimeSpinner(spinner, min, max));
         spinner.getEditor().focusedProperty().addListener((observable, wasFocused, isFocused) -> {
@@ -416,6 +431,7 @@ public final class TimedReminderWindow {
     private Button workButton(String text, javafx.event.EventHandler<javafx.event.ActionEvent> handler) {
         Button button = new Button(text);
         button.setStyle(secondaryButtonStyle());
+        UiFonts.applyJavaFxFont(button,13);
         button.setOnAction(handler);
         return button;
     }
@@ -423,26 +439,29 @@ public final class TimedReminderWindow {
     private Button primaryWorkButton(String text, javafx.event.EventHandler<javafx.event.ActionEvent> handler) {
         Button button = new Button(text);
         button.setStyle(primaryButtonStyle());
+        UiFonts.applyJavaFxFont(button,13);
         button.setOnAction(handler);
         return button;
     }
 
     private Label sectionLabel(String text) {
         Label label = new Label(text);
-        label.setStyle("""
+        label.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 14px;
                 -fx-font-weight: bold;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(label,14);
         return label;
     }
 
     private Label smallLabel(String text) {
         Label label = new Label(text);
-        label.setStyle("""
+        label.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #93b7c9;
                 -fx-font-size: 13px;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(label,13);
         return label;
     }
 
@@ -513,7 +532,7 @@ public final class TimedReminderWindow {
     }
 
     private static String inputStyle() {
-        return """
+        return UiFonts.fxStyle("""
                 -fx-control-inner-background: rgba(14, 22, 32, 0.96);
                 -fx-background-color: rgba(14, 22, 32, 0.96);
                 -fx-border-color: #30586c;
@@ -521,29 +540,29 @@ public final class TimedReminderWindow {
                 -fx-text-fill: #eef6ff;
                 -fx-prompt-text-fill: #5f8798;
                 -fx-font-size: 13px;
-                """;
+                """);
     }
 
     private static String primaryButtonStyle() {
-        return """
+        return UiFonts.fxStyle("""
                 -fx-background-color: rgba(18, 58, 74, 0.98);
                 -fx-border-color: #3ad6ff;
                 -fx-border-width: 1;
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 13px;
                 -fx-padding: 5 14 5 14;
-                """;
+                """);
     }
 
     private static String secondaryButtonStyle() {
-        return """
+        return UiFonts.fxStyle("""
                 -fx-background-color: rgba(14, 22, 32, 0.92);
                 -fx-border-color: #30586c;
                 -fx-border-width: 1;
                 -fx-text-fill: #93b7c9;
                 -fx-font-size: 13px;
                 -fx-padding: 5 10 5 10;
-                """;
+                """);
     }
 
     @FunctionalInterface

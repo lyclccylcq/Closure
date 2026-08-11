@@ -1,5 +1,6 @@
 package app.ui.chat;
 
+import app.ui.UiFonts;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -23,10 +24,12 @@ final class ChatInputBar extends HBox {
         setStyle(ChatStyles.BACKGROUND_STYLE);
 
         inputField.setStyle(ChatStyles.INPUT_STYLE);
+        UiFonts.applyJavaFxFont(inputField,14);
         inputField.setOnAction(event -> sendCurrentMessage());
 
         Button sendButton=new Button("发送");
         sendButton.setStyle(ChatStyles.BUTTON_STYLE);
+        UiFonts.applyJavaFxFont(sendButton,14);
         sendButton.setOnAction(event -> sendCurrentMessage());
 
         HBox.setHgrow(inputField, Priority.ALWAYS);

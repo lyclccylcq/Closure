@@ -1,6 +1,7 @@
 package app.ui.reminder;
 
 import app.reminder.CourseScheduleEntry;
+import app.ui.UiFonts;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -123,39 +124,47 @@ public final class CourseScheduleWindow {
 
     private VBox createContent() {
         Label titleLabel = new Label("课程表提醒");
-        titleLabel.setStyle("""
+        titleLabel.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 16px;
                 -fx-font-weight: bold;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(titleLabel,16);
 
         statusLabel = new Label("支持 CSV/TXT/TSV/ICS/XLSX，可带表头，也可每行写：时间 | 标题 | 类型 | 提前分钟 | 地点");
         statusLabel.setWrapText(true);
-        statusLabel.setStyle("""
+        statusLabel.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #93b7c9;
                 -fx-font-size: 12px;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(statusLabel,12);
 
         scheduleListView = new ListView<>();
-        scheduleListView.setPlaceholder(new Label("还没有课程表。"));
-        scheduleListView.setStyle("""
+        Label emptyScheduleLabel = new Label("还没有课程表。");
+        emptyScheduleLabel.setStyle(UiFonts.fxStyle("""
+                -fx-text-fill: #93b7c9;
+                -fx-font-size: 13px;
+                """));
+        UiFonts.applyJavaFxFont(emptyScheduleLabel,13);
+        scheduleListView.setPlaceholder(emptyScheduleLabel);
+        scheduleListView.setStyle(UiFonts.fxStyle("""
                 -fx-control-inner-background: rgba(14, 22, 32, 0.96);
                 -fx-background-color: rgba(14, 22, 32, 0.96);
                 -fx-border-color: #30586c;
                 -fx-border-width: 1;
                 -fx-text-fill: #eef6ff;
-                """);
+                """));
         VBox.setVgrow(scheduleListView, Priority.ALWAYS);
 
         VBox root = new VBox(12);
         root.setPadding(new Insets(18, 18, 16, 18));
-        root.setStyle("""
+        root.setStyle(UiFonts.fxStyle("""
                 -fx-background-color: rgba(8, 12, 18, 0.95);
                 -fx-border-color: rgba(58, 174, 210, 0.90);
                 -fx-border-width: 1;
                 -fx-background-radius: 12;
                 -fx-border-radius: 12;
-                """);
+                """));
         root.getChildren().addAll(titleLabel, statusLabel, scheduleListView, createActionBar());
         return root;
     }
@@ -163,14 +172,17 @@ public final class CourseScheduleWindow {
     private HBox createActionBar() {
         Button testButton = new Button("测试提醒");
         testButton.setStyle(secondaryButtonStyle());
+        UiFonts.applyJavaFxFont(testButton,13);
         testButton.setOnAction(event -> testReminderHandler.run());
 
         Button importButton = new Button("上传课程表");
         importButton.setStyle(primaryButtonStyle());
+        UiFonts.applyJavaFxFont(importButton,13);
         importButton.setOnAction(event -> chooseAndImportFile());
 
         Button closeButton = new Button("关闭");
         closeButton.setStyle(secondaryButtonStyle());
+        UiFonts.applyJavaFxFont(closeButton,13);
         closeButton.setOnAction(event -> stage.hide());
 
         Region spacer = new Region();
@@ -287,24 +299,24 @@ public final class CourseScheduleWindow {
     }
 
     private static String primaryButtonStyle() {
-        return """
+        return UiFonts.fxStyle("""
                 -fx-background-color: rgba(18, 58, 74, 0.98);
                 -fx-border-color: #3ad6ff;
                 -fx-border-width: 1;
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 13px;
                 -fx-padding: 5 14 5 14;
-                """;
+                """);
     }
 
     private static String secondaryButtonStyle() {
-        return """
+        return UiFonts.fxStyle("""
                 -fx-background-color: rgba(14, 22, 32, 0.92);
                 -fx-border-color: #30586c;
                 -fx-border-width: 1;
                 -fx-text-fill: #93b7c9;
                 -fx-font-size: 13px;
                 -fx-padding: 5 14 5 14;
-                """;
+                """);
     }
 }

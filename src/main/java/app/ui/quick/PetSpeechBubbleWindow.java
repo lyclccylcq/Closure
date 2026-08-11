@@ -1,5 +1,6 @@
 package app.ui.quick;
 
+import app.ui.UiFonts;
 import javafx.animation.KeyFrame;
 import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
@@ -149,20 +150,21 @@ public class PetSpeechBubbleWindow {
         speechLabel.setTextOverrun(OverrunStyle.CLIP);
         speechLabel.setEllipsisString("");
         speechLabel.setMaxWidth(Double.MAX_VALUE);
-        speechLabel.setStyle("""
+        speechLabel.setStyle(UiFonts.fxStyle("""
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 14px;
-                """);
+                """));
+        UiFonts.applyJavaFxFont(speechLabel,14);
 
         StackPane root = new StackPane(speechLabel);
         root.setPadding(new Insets(13, 16, 13, 16));
-        root.setStyle("""
+        root.setStyle(UiFonts.fxStyle("""
                 -fx-background-color: rgba(8, 12, 18, 0.88);
                 -fx-border-color: rgba(58, 174, 210, 0.90);
                 -fx-border-width: 1;
                 -fx-background-radius: 12;
                 -fx-border-radius: 12;
-                """);
+                """));
         return root;
     }
 

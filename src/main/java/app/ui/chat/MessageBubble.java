@@ -2,6 +2,7 @@ package app.ui.chat;
 
 import app.chat.model.ChatMessage;
 import app.chat.model.MessageRole;
+import app.ui.UiFonts;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
@@ -38,6 +39,7 @@ final class MessageBubble extends HBox {
 
         Label nameLabel=new Label(message.getRole().getDisplayName());
         nameLabel.setStyle(ChatStyles.NAME_STYLE);
+        UiFonts.applyJavaFxFont(nameLabel,12);
 
         contentColumn.getChildren().addAll(nameLabel,bubbleLabel);
         return contentColumn;
@@ -53,6 +55,7 @@ final class MessageBubble extends HBox {
         label.setWrapText(true);
         label.setMaxWidth(ChatStyles.BUBBLE_MAX_WIDTH);
         label.setStyle(ChatStyles.BUBBLE_STYLE);
+        UiFonts.applyJavaFxFont(label,14);
         return label;
     }
 

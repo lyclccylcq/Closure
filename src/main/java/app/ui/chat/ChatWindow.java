@@ -2,6 +2,7 @@ package app.ui.chat;
 
 import app.service.ChatService;
 import app.service.ChatSpeechController;
+import app.ui.UiFonts;
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.Scene;
@@ -27,6 +28,7 @@ public class ChatWindow extends JFrame {
     }
 
     private ChatWindow(ChatSpeechController chatSpeechController, boolean ownsSpeechController) {
+        UiFonts.applySwingDefaults();
         fxPanel = new JFXPanel();
         soundPlayer = new SoundPlayer();
         this.chatSpeechController = chatSpeechController;
