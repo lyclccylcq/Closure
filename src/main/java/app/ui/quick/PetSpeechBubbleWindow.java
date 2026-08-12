@@ -154,7 +154,7 @@ public class PetSpeechBubbleWindow {
                 -fx-text-fill: #eef6ff;
                 -fx-font-size: 14px;
                 """));
-        UiFonts.applyJavaFxFont(speechLabel,14);
+        UiFonts.applyJavaFxFont(speechLabel, 14);
 
         StackPane root = new StackPane(speechLabel);
         root.setPadding(new Insets(13, 16, 13, 16));

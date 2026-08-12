@@ -18,6 +18,12 @@ import java.util.stream.Collectors;
 public final class UiFonts {
     private static final String DISPLAY_TEST_TEXT = "出门提醒";
     private static final String FONT_OVERRIDE_PROPERTY = "closure.ui.fontFamily";
+    private static final String[] CLASSIC_CHINESE_FONT_FILES = {
+            "/System/Library/Fonts/STHeiti Medium.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "/System/Library/Fonts/Supplemental/Songti.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc"
+    };
     private static final String PINGFANG_FONT_FILE_NAME = "PingFang.ttc";
     private static final Path[] PINGFANG_SEARCH_ROOTS = {
             Path.of("/System/Library/AssetsV2/com_apple_MobileAsset_Font8"),
@@ -30,11 +36,11 @@ public final class UiFonts {
             "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
     };
     private static final String[] SIMPLIFIED_CHINESE_FONT_FAMILIES = {
-            "PingFang SC",
-            "Hiragino Sans GB",
-            "Songti SC",
-            "Heiti SC",
             "STHeiti",
+            "Heiti SC",
+            "Songti SC",
+            "Hiragino Sans GB",
+            "PingFang SC",
             "Microsoft YaHei UI",
             "Microsoft YaHei",
             "SimHei",
@@ -119,6 +125,13 @@ public final class UiFonts {
     }
 
     private static String resolveJavaFxFontUri() {
+        for (String fontFile : CLASSIC_CHINESE_FONT_FILES) {
+            Path fontPath = Path.of(fontFile);
+            if (Files.isRegularFile(fontPath)) {
+                return fontPath.toUri().toString();
+            }
+        }
+
         String pingFangFontUri = findPingFangFontUri();
         if (pingFangFontUri != null) {
             return pingFangFontUri;

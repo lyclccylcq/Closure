@@ -472,6 +472,7 @@ public class PetWindow extends JFrame {
 
     private void showStartupSpeechBubble() {
         showSpeechBubble(STARTUP_BUBBLE_TEXT);
+        speakSpeechBubble(STARTUP_BUBBLE_TEXT);
     }
 
     private void showInteractionSpeechBubble() {
