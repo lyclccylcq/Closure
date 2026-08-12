@@ -65,6 +65,7 @@ public class ChatWindow extends JFrame {
 
     private void initWindow(){
         setTitle("通讯频道：可露希尔");
+        setFont(UiFonts.preferredSwingFont(Font.PLAIN,13));
         setSize(420,520);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
