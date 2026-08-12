@@ -11,12 +11,19 @@ import javax.swing.*;
 import java.awt.*;
 
 public class ChatWindow extends JFrame {
+    private static final int DEFAULT_WIDTH = 560;
+    private static final int DEFAULT_HEIGHT = 680;
+    private static final int MIN_WIDTH = 480;
+    private static final int MIN_HEIGHT = 560;
+    private static final int ANCHOR_GAP = 18;
+
     // JFXPanel 负责把 JavaFX Scene 嵌进现有 Swing JFrame，PetWindow 的调用方式就不用改。
     private final JFXPanel fxPanel;
     private final SoundPlayer soundPlayer;
     private final ChatSpeechController chatSpeechController;
     private final boolean ownsSpeechController;
     private ChatView chatView;
+    private Rectangle anchorBounds;
     private boolean disposed;
 
     public ChatWindow() {
@@ -46,9 +53,8 @@ public class ChatWindow extends JFrame {
     public void setVisible(boolean visible){
         boolean wasVisible=isVisible();
 
-        // 每次从隐藏变成显示前重新居中，避免 PetWindow 或其他调用方之前改过窗口位置。
         if(visible && !wasVisible){
-            setLocationRelativeTo(null);
+            positionForDisplay();
         }
 
         super.setVisible(visible);
@@ -63,19 +69,99 @@ public class ChatWindow extends JFrame {
         }
     }
 
+    public void showNear(Rectangle anchorBounds){
+        this.anchorBounds=anchorBounds==null ? null : new Rectangle(anchorBounds);
+        if(isVisible()){
+            positionForDisplay();
+        }
+        setVisible(true);
+    }
+
     private void initWindow(){
         setTitle("通讯频道：可露希尔");
         setFont(UiFonts.preferredSwingFont(Font.PLAIN,13));
-        setSize(420,520);
-        setLocationRelativeTo(null);
+        setSize(DEFAULT_WIDTH,DEFAULT_HEIGHT);
+        setMinimumSize(new Dimension(MIN_WIDTH,MIN_HEIGHT));
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setLayout(new BorderLayout());
         add(fxPanel,BorderLayout.CENTER);
+        setLocationRelativeTo(null);
     }
 
     private void initFxContent(){
         chatView=new ChatView(new ChatService(),soundPlayer,chatSpeechController);
         fxPanel.setScene(new Scene(chatView));
+    }
+
+    private void positionForDisplay(){
+        if(anchorBounds==null){
+            setLocationRelativeTo(null);
+            return;
+        }
+
+        Rectangle usableBounds=usableScreenBounds(anchorBounds);
+        int windowWidth=Math.max(getWidth(),MIN_WIDTH);
+        int windowHeight=Math.max(getHeight(),MIN_HEIGHT);
+        int leftSpace=anchorBounds.x - usableBounds.x - ANCHOR_GAP;
+        int rightSpace=usableBounds.x + usableBounds.width - (anchorBounds.x + anchorBounds.width) - ANCHOR_GAP;
+
+        int x;
+        if(leftSpace>=windowWidth){
+            x=anchorBounds.x - windowWidth - ANCHOR_GAP;
+        }else if(rightSpace>=windowWidth){
+            x=anchorBounds.x + anchorBounds.width + ANCHOR_GAP;
+        }else if(leftSpace>=rightSpace){
+            x=usableBounds.x;
+        }else{
+            x=usableBounds.x + usableBounds.width - windowWidth;
+        }
+
+        int anchorCenterY=anchorBounds.y + anchorBounds.height / 2;
+        int y=anchorCenterY - windowHeight / 2;
+        setLocation(
+                clamp(x,usableBounds.x,usableBounds.x + usableBounds.width - windowWidth),
+                clamp(y,usableBounds.y,usableBounds.y + usableBounds.height - windowHeight)
+        );
+    }
+
+    private Rectangle usableScreenBounds(Rectangle anchorBounds){
+        GraphicsConfiguration graphicsConfiguration=graphicsConfigurationFor(anchorBounds);
+        if(graphicsConfiguration==null){
+            Dimension screenSize=Toolkit.getDefaultToolkit().getScreenSize();
+            return new Rectangle(0,0,screenSize.width,screenSize.height);
+        }
+
+        Rectangle bounds=graphicsConfiguration.getBounds();
+        Insets insets=Toolkit.getDefaultToolkit().getScreenInsets(graphicsConfiguration);
+        return new Rectangle(
+                bounds.x + insets.left,
+                bounds.y + insets.top,
+                bounds.width - insets.left - insets.right,
+                bounds.height - insets.top - insets.bottom
+        );
+    }
+
+    private GraphicsConfiguration graphicsConfigurationFor(Rectangle anchorBounds){
+        Point anchorCenter=new Point(
+                anchorBounds.x + anchorBounds.width / 2,
+                anchorBounds.y + anchorBounds.height / 2
+        );
+        for(GraphicsDevice screenDevice:GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()){
+            GraphicsConfiguration configuration=screenDevice.getDefaultConfiguration();
+            if(configuration.getBounds().contains(anchorCenter)){
+                return configuration;
+            }
+        }
+
+        return getGraphicsConfiguration();
+    }
+
+    private int clamp(int value,int min,int max){
+        if(max<min){
+            return min;
+        }
+
+        return Math.max(min,Math.min(value,max));
     }
 
     @Override

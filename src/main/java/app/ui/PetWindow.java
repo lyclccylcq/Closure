@@ -1082,17 +1082,6 @@ public class PetWindow extends JFrame {
             chatWindow = new ChatWindow(speechController);
 
             /*
-             * 第一次打开聊天窗口时，
-             * 让聊天窗口出现在桌宠右边。
-             */
-            Point petLocation = getLocation();
-
-            chatWindow.setLocation(
-                    petLocation.x + getWidth() + 10,
-                    petLocation.y
-            );
-
-            /*
              * 当聊天窗口被关闭/隐藏时，
              * 恢复桌宠置顶状态。
              *
@@ -1124,8 +1113,8 @@ public class PetWindow extends JFrame {
         setAlwaysOnTop(false);
         chatWindow.setAlwaysOnTop(true);
 
-        // 显示聊天窗口
-        chatWindow.setVisible(true);
+        // 显示聊天窗口，并放在桌宠旁边，优先避免和模型重叠。
+        chatWindow.showNear(getBounds());
 
         // 把聊天窗口移动到最前面
         chatWindow.toFront();
