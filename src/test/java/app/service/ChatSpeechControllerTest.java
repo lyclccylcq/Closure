@@ -174,6 +174,35 @@ class ChatSpeechControllerTest {
         assertTrue(controller.readyForSpeechFuture().isDone());
     }
 
+    @Test
+    void notifiesSpeechLifecycleAroundActiveSpeech() throws Exception {
+        FakeSpeechService speechService = new FakeSpeechService();
+        List<String> events = new ArrayList<>();
+        ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
+        controller.setSpeechLifecycleListener(listener(events));
+
+        controller.speakAssistantReply("第一条。");
+
+        assertEquals(List.of("start"), events);
+
+        speechService.futures.getFirst().complete(null);
+
+        assertEquals(List.of("start", "finish"), events);
+    }
+
+    @Test
+    void stopFinishesActiveSpeechLifecycle() throws Exception {
+        FakeSpeechService speechService = new FakeSpeechService();
+        List<String> events = new ArrayList<>();
+        ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
+        controller.setSpeechLifecycleListener(listener(events));
+
+        controller.speakAssistantReply("第一条。");
+        controller.stop();
+
+        assertEquals(List.of("start", "finish"), events);
+    }
+
     private ChatSpeechController controller(
             FakeSpeechService speechService,
             boolean autoSpeakEnabled,
@@ -204,6 +233,20 @@ class ChatSpeechControllerTest {
         Path audioPath = tempDir.resolve(fileName);
         Files.write(audioPath, "RIFF".getBytes(StandardCharsets.US_ASCII));
         return new VoiceProfile(id, audioPath, "参考文本。", "zh");
+    }
+
+    private SpeechLifecycleListener listener(List<String> events) {
+        return new SpeechLifecycleListener() {
+            @Override
+            public void onSpeechStarted() {
+                events.add("start");
+            }
+
+            @Override
+            public void onSpeechFinished() {
+                events.add("finish");
+            }
+        };
     }
 
     private static final class FakeSpeechService implements AssistantSpeechService {

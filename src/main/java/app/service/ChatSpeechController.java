@@ -30,8 +30,10 @@ public final class ChatSpeechController implements AutoCloseable {
 
     private CompletableFuture<Void> activeSpeechFuture;
     private CompletableFuture<Void> readyForSpeechFuture;
+    private SpeechLifecycleListener speechLifecycleListener = SpeechLifecycleListener.NO_OP;
     private String lastWarningKey;
     private boolean autoSpeakEnabled;
+    private boolean speechActive;
     private long requestGeneration;
 
     public ChatSpeechController(
@@ -125,14 +127,26 @@ public final class ChatSpeechController implements AutoCloseable {
         return readyForSpeechFuture;
     }
 
+    public synchronized void setSpeechLifecycleListener(SpeechLifecycleListener speechLifecycleListener) {
+        this.speechLifecycleListener = speechLifecycleListener == null
+                ? SpeechLifecycleListener.NO_OP
+                : speechLifecycleListener;
+    }
+
     public void speakAssistantReply(String replyText) {
         speakText(replyText);
     }
 
     public void speakAssistantReply(AssistantReply assistantReply) {
+        speakAssistantReplyAsync(assistantReply);
+    }
+
+    public CompletableFuture<Void> speakAssistantReplyAsync(AssistantReply assistantReply) {
         if (assistantReply != null) {
-            speakWithEmotion(assistantReply.getSpeechText(), assistantReply.getDominantEmotion());
+            return speakWithEmotionAsync(assistantReply.getSpeechText(), assistantReply.getDominantEmotion());
         }
+
+        return CompletableFuture.completedFuture(null);
     }
 
     public void speakText(String text) {
@@ -192,10 +206,12 @@ public final class ChatSpeechController implements AutoCloseable {
         try {
             speechFuture = speechService.speak(speechText, profile);
         } catch (RuntimeException exception) {
+            notifySpeechFinished();
             warnOnce(errorKey(exception), warningMessage(exception));
             return CompletableFuture.failedFuture(exception);
         }
 
+        notifySpeechStarted();
         rememberActiveFuture(requestId, speechFuture);
         return speechFuture;
     }
@@ -219,16 +235,15 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     public void stop() {
-        CompletableFuture<Void> speechFuture;
         synchronized (this) {
             requestGeneration++;
-            speechFuture = activeSpeechFuture;
             activeSpeechFuture = null;
         }
 
         if (speechService != null) {
             speechService.stop();
         }
+        notifySpeechFinished();
     }
 
     @Override
@@ -237,12 +252,10 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     private long startNewRequest() {
-        CompletableFuture<Void> previousFuture;
         long requestId;
         synchronized (this) {
             requestGeneration++;
             requestId = requestGeneration;
-            previousFuture = activeSpeechFuture;
             activeSpeechFuture = null;
         }
 
@@ -269,6 +282,8 @@ public final class ChatSpeechController implements AutoCloseable {
             activeSpeechFuture = null;
         }
 
+        notifySpeechFinished();
+
         if (error == null) {
             clearLastWarning();
             return;
@@ -278,6 +293,42 @@ public final class ChatSpeechController implements AutoCloseable {
         }
 
         warnOnce(errorKey(error), warningMessage(error));
+    }
+
+    private void notifySpeechStarted() {
+        SpeechLifecycleListener listener;
+        synchronized (this) {
+            if (speechActive) {
+                return;
+            }
+
+            speechActive = true;
+            listener = speechLifecycleListener;
+        }
+
+        runSpeechLifecycleCallback(listener::onSpeechStarted);
+    }
+
+    private void notifySpeechFinished() {
+        SpeechLifecycleListener listener;
+        synchronized (this) {
+            if (!speechActive) {
+                return;
+            }
+
+            speechActive = false;
+            listener = speechLifecycleListener;
+        }
+
+        runSpeechLifecycleCallback(listener::onSpeechFinished);
+    }
+
+    private void runSpeechLifecycleCallback(Runnable callback) {
+        try {
+            callback.run();
+        } catch (RuntimeException exception) {
+            System.out.println("语音状态回调失败：" + exception.getMessage());
+        }
     }
 
     private synchronized void warnOnce(String key, String message) {

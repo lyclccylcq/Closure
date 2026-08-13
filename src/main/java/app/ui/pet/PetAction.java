@@ -15,7 +15,7 @@ public enum PetAction {
         return frameDirectory;
     }
 
-    int frameDelayMillis() {
+    public int frameDelayMillis() {
         return frameDelayMillis;
     }
 
@@ -23,7 +23,7 @@ public enum PetAction {
         return PetAction.class.getResource(framePath(1)) != null;
     }
 
-    String framePath(int frameNumber) {
+    public String framePath(int frameNumber) {
         return "%s/frame_%03d.png".formatted(frameDirectory, frameNumber);
     }
 }

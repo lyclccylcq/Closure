@@ -1,5 +1,7 @@
 package app.ui;
 
+import app.character.animation.AnimationController;
+import app.character.animation.AnimationType;
 import app.reminder.AiCourseScheduleImportConverter;
 import app.reminder.AiEventReminderTextGenerator;
 import app.reminder.CourseScheduleEntry;
@@ -12,6 +14,7 @@ import app.reminder.EventReminderTextGenerator;
 import app.reminder.TodayReminderTime;
 import app.reminder.WorkBreakReminder;
 import app.service.ChatSpeechController;
+import app.service.SpeechLifecycleListener;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
@@ -189,6 +192,7 @@ public class PetWindow extends JFrame {
      * 如果当前没有加载 PNG 帧动画，它会显示兜底图片。
      */
     private PetAnimationPanel petAnimationPanel;
+    private AnimationController animationController;
 
     /**
      * 桌宠组件共用的鼠标监听器。
@@ -267,7 +271,7 @@ public class PetWindow extends JFrame {
 
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
-        playOpenVoice(this::showStartupWeatherGreetingAfterSpeechReady);
+        playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
         startWorkBreakReminder();
         startEventReminder();
         startIdleChatterTimer();
@@ -439,11 +443,12 @@ public class PetWindow extends JFrame {
         );
 
         petAnimationPanel = new PetAnimationPanel(
-                PetAction.OPEN,
                 MODEL_SIZE,
                 MODEL_SIZE,
                 fallbackIcon
         );
+        animationController = new AnimationController(petAnimationPanel.animationPlayer());
+        playAnimation(AnimationType.GREETING);
         addPetMouseListeners(petAnimationPanel);
 
         getContentPane().removeAll();
@@ -476,6 +481,7 @@ public class PetWindow extends JFrame {
     }
 
     private void showInteractionSpeechBubble() {
+        playAnimation(AnimationType.TAP);
         String interactionLine = randomInteractionLine();
         showSpeechBubble(interactionLine);
         speakSpeechBubble(interactionLine);
@@ -547,6 +553,17 @@ public class PetWindow extends JFrame {
         speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
         );
+        speechController.setSpeechLifecycleListener(new SpeechLifecycleListener() {
+            @Override
+            public void onSpeechStarted() {
+                playAnimation(AnimationType.TALK);
+            }
+
+            @Override
+            public void onSpeechFinished() {
+                playAnimation(AnimationType.IDLE);
+            }
+        });
     }
 
     private void initVoiceServerProcess() {
@@ -641,6 +658,14 @@ public class PetWindow extends JFrame {
 
     private void registerDesktopActivity() {
         lastDesktopActivityMillis = System.currentTimeMillis();
+    }
+
+    private void playAnimation(AnimationType animation) {
+        if (animationController == null) {
+            return;
+        }
+
+        animationController.play(animation);
     }
 
     private void pauseWorkBreakReminder() {
@@ -909,6 +934,11 @@ public class PetWindow extends JFrame {
                     System.out.println("启动天气问候等待语音暖机失败：" + safeErrorMessage(error));
                     return null;
                 });
+    }
+
+    private void finishOpenVoiceAndShowStartupWeatherGreeting() {
+        playAnimation(AnimationType.IDLE);
+        showStartupWeatherGreetingAfterSpeechReady();
     }
 
     private void speakStartupGreeting(String greeting, int attempt) {
