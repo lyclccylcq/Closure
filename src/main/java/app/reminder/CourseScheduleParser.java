@@ -2,6 +2,7 @@ package app.reminder;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,9 +14,11 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public final class CourseScheduleParser {
     private static final DateTimeFormatter[] DATE_TIME_FORMATTERS = {
@@ -50,6 +53,19 @@ public final class CourseScheduleParser {
             formatter("H:mm:ss"),
             formatter("h:mm a")
     };
+    private static final DateTimeFormatter[] ICS_LOCAL_DATE_TIME_FORMATTERS = {
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"),
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmm")
+    };
+    private static final DateTimeFormatter[] ICS_OFFSET_DATE_TIME_FORMATTERS = {
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssX"),
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssXX"),
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssXXX"),
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmX"),
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmXX"),
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmXXX")
+    };
+    private static final int MAX_ICS_RECURRENCE_OCCURRENCES = 500;
 
     public List<CourseScheduleEntry> parse(Path scheduleFile) throws IOException {
         List<String> lines = CourseScheduleSourceReader.readLines(scheduleFile);
@@ -57,19 +73,22 @@ public final class CourseScheduleParser {
     }
 
     public List<CourseScheduleEntry> parseLines(List<String> lines) {
-        List<String> meaningfulLines = lines.stream()
+        List<String> bomStrippedLines = lines.stream()
                 .map(CourseScheduleParser::stripByteOrderMark)
+                .toList();
+
+        int calendarStartIndex = firstCalendarStartIndex(bomStrippedLines);
+        if (calendarStartIndex >= 0) {
+            return parseIcs(bomStrippedLines.subList(calendarStartIndex, bomStrippedLines.size()));
+        }
+
+        List<String> meaningfulLines = bomStrippedLines.stream()
                 .map(String::trim)
                 .filter(line -> !line.isEmpty() && !line.startsWith("#") && !isSpreadsheetSeparatorDirective(line))
                 .toList();
 
         if (meaningfulLines.isEmpty()) {
             return List.of();
-        }
-
-        int calendarStartIndex = firstCalendarStartIndex(meaningfulLines);
-        if (calendarStartIndex >= 0) {
-            return parseIcs(meaningfulLines.subList(calendarStartIndex, meaningfulLines.size()));
         }
 
         int headerIndex = firstHeaderIndex(meaningfulLines);
@@ -82,17 +101,24 @@ public final class CourseScheduleParser {
 
     private List<CourseScheduleEntry> parseIcs(List<String> lines) {
         List<CourseScheduleEntry> entries = new ArrayList<>();
-        Map<String, String> eventValues = null;
+        Map<String, List<IcsProperty>> eventValues = null;
+        int eventNumber = 1;
 
         for (String line : unfoldIcsLines(lines)) {
-            if (line.equalsIgnoreCase("BEGIN:VEVENT")) {
+            IcsProperty property = parseIcsProperty(line);
+            if (property == null) {
+                continue;
+            }
+
+            if (property.name().equals("BEGIN") && property.value().equalsIgnoreCase("VEVENT")) {
                 eventValues = new HashMap<>();
                 continue;
             }
 
-            if (line.equalsIgnoreCase("END:VEVENT")) {
+            if (property.name().equals("END") && property.value().equalsIgnoreCase("VEVENT")) {
                 if (eventValues != null) {
-                    entries.add(entryFromIcsEvent(eventValues, entries.size() + 1));
+                    entries.addAll(entriesFromIcsEvent(eventValues, eventNumber));
+                    eventNumber++;
                 }
                 eventValues = null;
                 continue;
@@ -102,48 +128,155 @@ public final class CourseScheduleParser {
                 continue;
             }
 
-            int separatorIndex = line.indexOf(':');
-            if (separatorIndex <= 0) {
-                continue;
-            }
-
-            String name = line.substring(0, separatorIndex);
-            String value = line.substring(separatorIndex + 1);
-            String key = name.contains(";") ? name.substring(0, name.indexOf(';')) : name;
-            eventValues.put(key.toUpperCase(Locale.ROOT), value.trim());
+            eventValues.computeIfAbsent(property.name(), ignored -> new ArrayList<>()).add(property);
         }
 
         return entries;
     }
 
-    private CourseScheduleEntry entryFromIcsEvent(Map<String, String> eventValues, int eventNumber) {
-        String title = firstNonBlank(eventValues.get("SUMMARY"), "课程表事件 " + eventNumber);
-        String description = eventValues.getOrDefault("DESCRIPTION", "");
-        CourseReminderType type = CourseReminderType.fromText(title + " " + description);
+    private List<CourseScheduleEntry> entriesFromIcsEvent(Map<String, List<IcsProperty>> eventValues, int eventNumber) {
+        if (propertyText(eventValues, "STATUS").equalsIgnoreCase("CANCELLED")) {
+            return List.of();
+        }
 
-        return new CourseScheduleEntry(
-                title,
-                parseIcsDateTime(eventValues.get("DTSTART"), eventNumber),
-                parseOptionalIcsDateTime(eventValues.get("DTEND"), eventNumber),
-                type,
-                CourseScheduleEntry.defaultRemindBefore(type),
-                eventValues.getOrDefault("LOCATION", ""),
-                description
-        );
+        String title = firstNonBlank(propertyText(eventValues, "SUMMARY"), "课程表事件 " + eventNumber);
+        String description = propertyText(eventValues, "DESCRIPTION");
+        CourseReminderType type = CourseReminderType.fromText(title + " " + description);
+        IcsProperty startProperty = firstProperty(eventValues, "DTSTART");
+        LocalDateTime startsAt = parseIcsDateTime(startProperty, eventNumber);
+        LocalDateTime endsAt = parseOptionalIcsDateTime(firstProperty(eventValues, "DTEND"), eventNumber);
+        Duration duration = parseOptionalIcsDuration(propertyValue(eventValues, "DURATION"), eventNumber);
+        if (endsAt == null && duration != null) {
+            endsAt = startsAt.plus(duration);
+        }
+        Duration eventDuration = endsAt == null ? null : Duration.between(startsAt, endsAt);
+        Set<LocalDateTime> startTimes = new LinkedHashSet<>();
+        IcsRecurrenceRule recurrenceRule = parseIcsRecurrenceRule(firstProperty(eventValues, "RRULE"), eventNumber);
+        if (recurrenceRule == null) {
+            startTimes.add(startsAt);
+        } else {
+            startTimes.addAll(recurrenceStartTimes(startsAt, recurrenceRule));
+        }
+        startTimes.addAll(additionalIcsStartTimes(eventValues, eventNumber));
+        startTimes.removeAll(excludedIcsStartTimes(eventValues, eventNumber));
+
+        List<CourseScheduleEntry> entries = new ArrayList<>();
+        for (LocalDateTime occurrenceStart : startTimes) {
+            entries.add(new CourseScheduleEntry(
+                    title,
+                    occurrenceStart,
+                    eventDuration == null ? null : occurrenceStart.plus(eventDuration),
+                    type,
+                    CourseScheduleEntry.defaultRemindBefore(type),
+                    propertyText(eventValues, "LOCATION"),
+                    description
+            ));
+        }
+
+        return entries;
     }
 
     private static List<String> unfoldIcsLines(List<String> lines) {
         List<String> unfoldedLines = new ArrayList<>();
         for (String line : lines) {
-            if ((line.startsWith(" ") || line.startsWith("\t")) && !unfoldedLines.isEmpty()) {
+            String cleanLine = stripByteOrderMark(line);
+            if (cleanLine == null || cleanLine.isBlank()) {
+                continue;
+            }
+
+            if ((cleanLine.startsWith(" ") || cleanLine.startsWith("\t")) && !unfoldedLines.isEmpty()) {
                 int lastIndex = unfoldedLines.size() - 1;
-                unfoldedLines.set(lastIndex, unfoldedLines.get(lastIndex) + line.trim());
+                unfoldedLines.set(lastIndex, unfoldedLines.get(lastIndex) + cleanLine.substring(1).stripTrailing());
             } else {
-                unfoldedLines.add(line.trim());
+                unfoldedLines.add(cleanLine.stripTrailing());
             }
         }
 
         return unfoldedLines;
+    }
+
+    private static IcsProperty parseIcsProperty(String line) {
+        if (line == null || line.isBlank()) {
+            return null;
+        }
+
+        String trimmedLine = stripByteOrderMark(line).trim();
+        int separatorIndex = firstUnquotedColonIndex(trimmedLine);
+        if (separatorIndex <= 0) {
+            return null;
+        }
+
+        List<String> parts = splitIcsPropertyParts(trimmedLine.substring(0, separatorIndex));
+        if (parts.isEmpty() || parts.getFirst().isBlank()) {
+            return null;
+        }
+
+        Map<String, String> parameters = new HashMap<>();
+        for (int index = 1; index < parts.size(); index++) {
+            String part = parts.get(index);
+            int equalsIndex = part.indexOf('=');
+            if (equalsIndex <= 0) {
+                continue;
+            }
+
+            String key = part.substring(0, equalsIndex).trim().toUpperCase(Locale.ROOT);
+            String value = unquoteIcsParameter(part.substring(equalsIndex + 1).trim());
+            parameters.put(key, value);
+        }
+
+        return new IcsProperty(
+                parts.getFirst().trim().toUpperCase(Locale.ROOT),
+                parameters,
+                trimmedLine.substring(separatorIndex + 1).trim()
+        );
+    }
+
+    private static int firstUnquotedColonIndex(String text) {
+        boolean inQuotes = false;
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (character == '"') {
+                inQuotes = !inQuotes;
+            } else if (character == ':' && !inQuotes) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static List<String> splitIcsPropertyParts(String text) {
+        List<String> parts = new ArrayList<>();
+        StringBuilder currentPart = new StringBuilder();
+        boolean inQuotes = false;
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (character == '"') {
+                inQuotes = !inQuotes;
+            }
+            if (character == ';' && !inQuotes) {
+                parts.add(currentPart.toString());
+                currentPart.setLength(0);
+                continue;
+            }
+
+            currentPart.append(character);
+        }
+
+        parts.add(currentPart.toString());
+        return parts;
+    }
+
+    private static String unquoteIcsParameter(String text) {
+        String value = text.trim();
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            value = value.substring(1, value.length() - 1);
+        }
+
+        return value.replace("^n", "\n")
+                .replace("^N", "\n")
+                .replace("^'", "\"")
+                .replace("^^", "^");
     }
 
     private List<CourseScheduleEntry> parseCsv(List<String> lines, int headerIndex) {
@@ -449,7 +582,7 @@ public final class CourseScheduleParser {
 
     private static int firstCalendarStartIndex(List<String> lines) {
         for (int index = 0; index < lines.size(); index++) {
-            if (lines.get(index).equalsIgnoreCase("BEGIN:VCALENDAR")) {
+            if (lines.get(index).trim().equalsIgnoreCase("BEGIN:VCALENDAR")) {
                 return index;
             }
         }
@@ -583,37 +716,425 @@ public final class CourseScheduleParser {
         return parseDateTime(text, lineNumber);
     }
 
-    private static LocalDateTime parseIcsDateTime(String text, int eventNumber) {
+    private static IcsProperty firstProperty(Map<String, List<IcsProperty>> eventValues, String name) {
+        List<IcsProperty> properties = properties(eventValues, name);
+        if (properties.isEmpty()) {
+            return null;
+        }
+
+        return properties.getFirst();
+    }
+
+    private static List<IcsProperty> properties(Map<String, List<IcsProperty>> eventValues, String name) {
+        return eventValues.getOrDefault(name.toUpperCase(Locale.ROOT), List.of());
+    }
+
+    private static String propertyValue(Map<String, List<IcsProperty>> eventValues, String name) {
+        IcsProperty property = firstProperty(eventValues, name);
+        if (property == null) {
+            return "";
+        }
+
+        return property.value();
+    }
+
+    private static String propertyText(Map<String, List<IcsProperty>> eventValues, String name) {
+        return unescapeIcsText(propertyValue(eventValues, name));
+    }
+
+    private static String unescapeIcsText(String text) {
         if (text == null || text.isBlank()) {
+            return "";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        boolean escaping = false;
+        for (int index = 0; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (escaping) {
+                switch (character) {
+                    case 'n', 'N' -> builder.append('\n');
+                    case ',', ';', '\\' -> builder.append(character);
+                    default -> builder.append(character);
+                }
+                escaping = false;
+                continue;
+            }
+
+            if (character == '\\') {
+                escaping = true;
+            } else {
+                builder.append(character);
+            }
+        }
+
+        if (escaping) {
+            builder.append('\\');
+        }
+
+        return builder.toString().trim();
+    }
+
+    private static LocalDateTime parseIcsDateTime(IcsProperty property, int eventNumber) {
+        if (property == null || property.value().isBlank()) {
             throw new IllegalArgumentException("第 " + eventNumber + " 个日历事件缺少 DTSTART");
+        }
+
+        return parseIcsDateTimeValue(property, property.value(), eventNumber);
+    }
+
+    private static LocalDateTime parseIcsDateTimeValue(IcsProperty property, String text, int eventNumber) {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("第 " + eventNumber + " 个日历事件时间格式无法识别：" + text);
         }
 
         String normalizedText = text.trim();
         try {
-            if (normalizedText.length() == 8) {
+            if (isIcsDateOnly(property, normalizedText)) {
                 return LocalDate.parse(normalizedText, DateTimeFormatter.BASIC_ISO_DATE).atStartOfDay();
             }
-            if (normalizedText.endsWith("Z")) {
-                return OffsetDateTime.parse(normalizedText, DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssX"))
-                        .atZoneSameInstant(ZoneId.systemDefault())
+
+            LocalDateTime offsetDateTime = parseIcsOffsetDateTime(normalizedText);
+            if (offsetDateTime != null) {
+                return offsetDateTime;
+            }
+
+            LocalDateTime localDateTime = parseIcsLocalDateTime(normalizedText);
+            ZoneId timeZone = icsTimeZone(property);
+            if (timeZone != null) {
+                return localDateTime.atZone(timeZone)
+                        .withZoneSameInstant(ZoneId.systemDefault())
                         .toLocalDateTime();
             }
-            if (normalizedText.length() == 15) {
-                return LocalDateTime.parse(normalizedText, DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"));
-            }
+
+            return localDateTime;
         } catch (DateTimeParseException exception) {
             throw new IllegalArgumentException("第 " + eventNumber + " 个日历事件时间格式无法识别：" + text, exception);
         }
-
-        throw new IllegalArgumentException("第 " + eventNumber + " 个日历事件时间格式无法识别：" + text);
     }
 
-    private static LocalDateTime parseOptionalIcsDateTime(String text, int eventNumber) {
+    private static boolean isIcsDateOnly(IcsProperty property, String text) {
+        String valueType = property.parameters().getOrDefault("VALUE", "");
+        return valueType.equalsIgnoreCase("DATE") || (!text.contains("T") && text.length() == 8);
+    }
+
+    private static LocalDateTime parseIcsOffsetDateTime(String text) {
+        for (DateTimeFormatter formatter : ICS_OFFSET_DATE_TIME_FORMATTERS) {
+            try {
+                return OffsetDateTime.parse(text, formatter)
+                        .atZoneSameInstant(ZoneId.systemDefault())
+                        .toLocalDateTime();
+            } catch (DateTimeParseException ignored) {
+                // Try the next ICS date-time format.
+            }
+        }
+
+        return null;
+    }
+
+    private static LocalDateTime parseIcsLocalDateTime(String text) {
+        for (DateTimeFormatter formatter : ICS_LOCAL_DATE_TIME_FORMATTERS) {
+            try {
+                return LocalDateTime.parse(text, formatter);
+            } catch (DateTimeParseException ignored) {
+                // Try the next ICS date-time format.
+            }
+        }
+
+        throw new DateTimeParseException("Unsupported ICS date-time", text, 0);
+    }
+
+    private static ZoneId icsTimeZone(IcsProperty property) {
+        String timeZoneId = property.parameters().get("TZID");
+        if (timeZoneId == null || timeZoneId.isBlank()) {
+            return null;
+        }
+
+        try {
+            return ZoneId.of(timeZoneId);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static LocalDateTime parseOptionalIcsDateTime(IcsProperty property, int eventNumber) {
+        if (property == null || property.value().isBlank()) {
+            return null;
+        }
+
+        return parseIcsDateTimeValue(property, property.value(), eventNumber);
+    }
+
+    private static Duration parseOptionalIcsDuration(String text, int eventNumber) {
         if (text == null || text.isBlank()) {
             return null;
         }
 
-        return parseIcsDateTime(text, eventNumber);
+        String normalizedText = text.trim().toUpperCase(Locale.ROOT);
+        boolean negative = normalizedText.startsWith("-");
+        String unsignedText = normalizedText;
+        if (normalizedText.startsWith("+") || normalizedText.startsWith("-")) {
+            unsignedText = normalizedText.substring(1);
+        }
+
+        try {
+            Duration duration;
+            if (unsignedText.matches("P\\d+W")) {
+                long weeks = Long.parseLong(unsignedText.substring(1, unsignedText.length() - 1));
+                duration = Duration.ofDays(weeks * 7);
+            } else {
+                duration = Duration.parse(unsignedText);
+            }
+
+            return negative ? duration.negated() : duration;
+        } catch (DateTimeParseException | NumberFormatException exception) {
+            throw new IllegalArgumentException("第 " + eventNumber + " 个日历事件持续时间格式无法识别：" + text, exception);
+        }
+    }
+
+    private static IcsRecurrenceRule parseIcsRecurrenceRule(IcsProperty property, int eventNumber) {
+        if (property == null || property.value().isBlank()) {
+            return null;
+        }
+
+        Map<String, String> ruleParts = parseIcsRuleParts(property.value());
+        String frequency = ruleParts.get("FREQ");
+        if (frequency == null || frequency.isBlank()) {
+            return null;
+        }
+
+        LocalDateTime until = null;
+        if (ruleParts.containsKey("UNTIL")) {
+            IcsProperty untilProperty = new IcsProperty("UNTIL", Map.of(), ruleParts.get("UNTIL"));
+            until = parseIcsDateTimeValue(untilProperty, ruleParts.get("UNTIL"), eventNumber);
+        }
+
+        DayOfWeek weekStart = parseIcsDay(firstNonBlank(ruleParts.get("WKST"), "MO"));
+        return new IcsRecurrenceRule(
+                frequency.trim().toUpperCase(Locale.ROOT),
+                parsePositiveInteger(ruleParts.get("INTERVAL"), 1),
+                parseOptionalPositiveInteger(ruleParts.get("COUNT")),
+                until,
+                parseIcsDays(ruleParts.get("BYDAY")),
+                weekStart == null ? DayOfWeek.MONDAY : weekStart
+        );
+    }
+
+    private static Map<String, String> parseIcsRuleParts(String text) {
+        Map<String, String> ruleParts = new HashMap<>();
+        for (String part : text.split(";")) {
+            int equalsIndex = part.indexOf('=');
+            if (equalsIndex <= 0) {
+                continue;
+            }
+
+            ruleParts.put(
+                    part.substring(0, equalsIndex).trim().toUpperCase(Locale.ROOT),
+                    part.substring(equalsIndex + 1).trim()
+            );
+        }
+
+        return ruleParts;
+    }
+
+    private static int parsePositiveInteger(String text, int fallback) {
+        if (text == null || text.isBlank()) {
+            return fallback;
+        }
+
+        try {
+            int value = Integer.parseInt(text.trim());
+            return value > 0 ? value : fallback;
+        } catch (NumberFormatException exception) {
+            return fallback;
+        }
+    }
+
+    private static Integer parseOptionalPositiveInteger(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+
+        try {
+            int value = Integer.parseInt(text.trim());
+            return value >= 0 ? value : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private static Set<DayOfWeek> parseIcsDays(String text) {
+        if (text == null || text.isBlank()) {
+            return Set.of();
+        }
+
+        Set<DayOfWeek> days = new LinkedHashSet<>();
+        for (String part : text.split(",")) {
+            DayOfWeek day = parseIcsDay(part);
+            if (day != null) {
+                days.add(day);
+            }
+        }
+
+        return days;
+    }
+
+    private static DayOfWeek parseIcsDay(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+
+        String dayText = text.trim().toUpperCase(Locale.ROOT);
+        if (dayText.length() > 2) {
+            dayText = dayText.substring(dayText.length() - 2);
+        }
+
+        return switch (dayText) {
+            case "MO" -> DayOfWeek.MONDAY;
+            case "TU" -> DayOfWeek.TUESDAY;
+            case "WE" -> DayOfWeek.WEDNESDAY;
+            case "TH" -> DayOfWeek.THURSDAY;
+            case "FR" -> DayOfWeek.FRIDAY;
+            case "SA" -> DayOfWeek.SATURDAY;
+            case "SU" -> DayOfWeek.SUNDAY;
+            default -> null;
+        };
+    }
+
+    private static List<LocalDateTime> recurrenceStartTimes(LocalDateTime startsAt, IcsRecurrenceRule rule) {
+        if (rule.count() != null && rule.count() <= 0) {
+            return List.of();
+        }
+        if (rule.frequency().equals("WEEKLY") && !rule.byDays().isEmpty()) {
+            return weeklyByDayRecurrenceStartTimes(startsAt, rule);
+        }
+
+        List<LocalDateTime> startTimes = new ArrayList<>();
+        LocalDateTime candidate = startsAt;
+        while (startTimes.size() < MAX_ICS_RECURRENCE_OCCURRENCES) {
+            if (shouldStopIcsRecurrence(startsAt, candidate, rule)) {
+                break;
+            }
+
+            startTimes.add(candidate);
+            if (rule.count() != null && startTimes.size() >= rule.count()) {
+                break;
+            }
+
+            LocalDateTime nextCandidate = nextIcsOccurrence(candidate, rule);
+            if (nextCandidate == null || !nextCandidate.isAfter(candidate)) {
+                break;
+            }
+            candidate = nextCandidate;
+        }
+
+        return startTimes;
+    }
+
+    private static List<LocalDateTime> weeklyByDayRecurrenceStartTimes(LocalDateTime startsAt, IcsRecurrenceRule rule) {
+        List<LocalDateTime> startTimes = new ArrayList<>();
+        List<DayOfWeek> days = rule.byDays().stream()
+                .sorted((first, second) -> Integer.compare(
+                        dayOffset(first, rule.weekStart()),
+                        dayOffset(second, rule.weekStart())
+                ))
+                .toList();
+        LocalDate firstWeekStart = weekStart(startsAt.toLocalDate(), rule.weekStart());
+        int weekIndex = 0;
+        while (startTimes.size() < MAX_ICS_RECURRENCE_OCCURRENCES) {
+            LocalDate currentWeekStart = firstWeekStart.plusWeeks((long) weekIndex * rule.interval());
+            for (DayOfWeek day : days) {
+                LocalDateTime candidate = currentWeekStart.plusDays(dayOffset(day, rule.weekStart()))
+                        .atTime(startsAt.toLocalTime());
+                if (candidate.isBefore(startsAt)) {
+                    continue;
+                }
+                if (shouldStopIcsRecurrence(startsAt, candidate, rule)) {
+                    return startTimes;
+                }
+
+                startTimes.add(candidate);
+                if (rule.count() != null && startTimes.size() >= rule.count()) {
+                    return startTimes;
+                }
+                if (startTimes.size() >= MAX_ICS_RECURRENCE_OCCURRENCES) {
+                    return startTimes;
+                }
+            }
+
+            weekIndex++;
+        }
+
+        return startTimes;
+    }
+
+    private static LocalDateTime nextIcsOccurrence(LocalDateTime candidate, IcsRecurrenceRule rule) {
+        return switch (rule.frequency()) {
+            case "MINUTELY" -> candidate.plusMinutes(rule.interval());
+            case "HOURLY" -> candidate.plusHours(rule.interval());
+            case "DAILY" -> candidate.plusDays(rule.interval());
+            case "WEEKLY" -> candidate.plusWeeks(rule.interval());
+            case "MONTHLY" -> candidate.plusMonths(rule.interval());
+            case "YEARLY" -> candidate.plusYears(rule.interval());
+            default -> null;
+        };
+    }
+
+    private static boolean shouldStopIcsRecurrence(LocalDateTime startsAt, LocalDateTime candidate, IcsRecurrenceRule rule) {
+        if (rule.until() != null && candidate.isAfter(rule.until())) {
+            return true;
+        }
+
+        return rule.until() == null
+                && rule.count() == null
+                && candidate.isAfter(startsAt.plusYears(1));
+    }
+
+    private static LocalDate weekStart(LocalDate date, DayOfWeek weekStart) {
+        return date.minusDays(dayOffset(date.getDayOfWeek(), weekStart));
+    }
+
+    private static int dayOffset(DayOfWeek day, DayOfWeek weekStart) {
+        return Math.floorMod(day.getValue() - weekStart.getValue(), 7);
+    }
+
+    private static Set<LocalDateTime> additionalIcsStartTimes(Map<String, List<IcsProperty>> eventValues, int eventNumber) {
+        return icsDateTimesFromProperties(eventValues, "RDATE", eventNumber);
+    }
+
+    private static Set<LocalDateTime> excludedIcsStartTimes(Map<String, List<IcsProperty>> eventValues, int eventNumber) {
+        return icsDateTimesFromProperties(eventValues, "EXDATE", eventNumber);
+    }
+
+    private static Set<LocalDateTime> icsDateTimesFromProperties(
+            Map<String, List<IcsProperty>> eventValues,
+            String name,
+            int eventNumber
+    ) {
+        Set<LocalDateTime> dateTimes = new LinkedHashSet<>();
+        for (IcsProperty property : properties(eventValues, name)) {
+            for (String value : splitIcsValueList(property.value())) {
+                if (value.isBlank()) {
+                    continue;
+                }
+
+                String dateTimeValue = value.contains("/") ? value.substring(0, value.indexOf('/')) : value;
+                dateTimes.add(parseIcsDateTimeValue(property, dateTimeValue, eventNumber));
+            }
+        }
+
+        return dateTimes;
+    }
+
+    private static List<String> splitIcsValueList(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+
+        return java.util.Arrays.stream(text.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .toList();
     }
 
     private static Duration parseReminderDuration(String text, CourseReminderType type) {
@@ -883,6 +1404,19 @@ public final class CourseScheduleParser {
         }
 
         return "";
+    }
+
+    private record IcsProperty(String name, Map<String, String> parameters, String value) {
+    }
+
+    private record IcsRecurrenceRule(
+            String frequency,
+            int interval,
+            Integer count,
+            LocalDateTime until,
+            Set<DayOfWeek> byDays,
+            DayOfWeek weekStart
+    ) {
     }
 
     private record FlexibleRowTime(LocalDateTime startsAt, LocalDateTime endsAt, List<Integer> usedIndexes) {

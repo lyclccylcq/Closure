@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
@@ -206,11 +207,12 @@ class CourseScheduleParserTest {
 
     @Test
     void parsesIcsScheduleWithBom() {
+        String timeZone = ZoneId.systemDefault().getId();
         List<CourseScheduleEntry> entries = parser.parseLines(List.of(
                 "\uFEFFBEGIN:VCALENDAR",
                 "BEGIN:VEVENT",
                 "SUMMARY:Computer Systems",
-                "DTSTART;TZID=Australia/Sydney:20260805T090000",
+                "DTSTART;TZID=" + timeZone + ":20260805T090000",
                 "END:VEVENT",
                 "END:VCALENDAR"
         ));
@@ -218,6 +220,81 @@ class CourseScheduleParserTest {
         assertEquals(1, entries.size());
         assertEquals("Computer Systems", entries.getFirst().title());
         assertEquals(LocalDateTime.of(2026, 8, 5, 9, 0), entries.getFirst().startsAt());
+    }
+
+    @Test
+    void parsesStandardIcsPropertiesWithEscapesFoldingAndDuration() {
+        String timeZone = ZoneId.systemDefault().getId();
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//Closure Test//Calendar//EN",
+                "CALSCALE:GREGORIAN",
+                "BEGIN:VEVENT",
+                "UID:comp6710@example.test",
+                "SUMMARY;LANGUAGE=en:COMP6710\\, Lect",
+                " ure",
+                "DTSTART;TZID=" + timeZone + ":20260805T090000",
+                "DURATION:PT1H30M",
+                "LOCATION:Room\\, A",
+                "DESCRIPTION:Bring lap",
+                " top\\nRead chapter 2",
+                "END:VEVENT",
+                "END:VCALENDAR"
+        ));
+
+        assertEquals(1, entries.size());
+        CourseScheduleEntry entry = entries.getFirst();
+        assertEquals("COMP6710, Lecture", entry.title());
+        assertEquals(LocalDateTime.of(2026, 8, 5, 9, 0), entry.startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 5, 10, 30), entry.endsAt());
+        assertEquals("Room, A", entry.location());
+        assertEquals("Bring laptop\nRead chapter 2", entry.notes());
+    }
+
+    @Test
+    void parsesIcsAllDayDateEvents() {
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "BEGIN:VEVENT",
+                "SUMMARY:Assignment due",
+                "DTSTART;VALUE=DATE:20260812",
+                "DTEND;VALUE=DATE:20260813",
+                "END:VEVENT",
+                "END:VCALENDAR"
+        ));
+
+        assertEquals(1, entries.size());
+        CourseScheduleEntry entry = entries.getFirst();
+        assertEquals(LocalDateTime.of(2026, 8, 12, 0, 0), entry.startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 13, 0, 0), entry.endsAt());
+        assertEquals(CourseReminderType.DEADLINE, entry.type());
+    }
+
+    @Test
+    void expandsWeeklyIcsRecurrenceWithByDayExdateAndRdate() {
+        String timeZone = ZoneId.systemDefault().getId();
+        List<CourseScheduleEntry> entries = parser.parseLines(List.of(
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "BEGIN:VEVENT",
+                "SUMMARY:Algorithms tutorial",
+                "DTSTART;TZID=" + timeZone + ":20260803T090000",
+                "DTEND;TZID=" + timeZone + ":20260803T100000",
+                "RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO,WE",
+                "EXDATE;TZID=" + timeZone + ":20260805T090000",
+                "RDATE;TZID=" + timeZone + ":20260814T090000",
+                "END:VEVENT",
+                "END:VCALENDAR"
+        ));
+
+        assertEquals(4, entries.size());
+        assertEquals(LocalDateTime.of(2026, 8, 3, 9, 0), entries.get(0).startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 10, 9, 0), entries.get(1).startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 12, 9, 0), entries.get(2).startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 14, 9, 0), entries.get(3).startsAt());
+        assertEquals(LocalDateTime.of(2026, 8, 14, 10, 0), entries.get(3).endsAt());
     }
 
     @Test

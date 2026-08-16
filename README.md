@@ -164,6 +164,8 @@ weather.longitude=149.1300
 
 导入时会先使用本地解析器读取常见 CSV、TSV、ICS、文本和 `.xlsx` 表格。如果格式不标准且本地解析失败，会在本地 AI 配置可用时把文件内容交给 AI 转换为标准 CSV，再由本地解析器校验后保存。
 
+ICS / iCalendar 会读取 `VEVENT` 里的 `SUMMARY`、`DTSTART`、`DTEND`、`DURATION`、`LOCATION`、`DESCRIPTION`，并支持常见的折行、转义、`TZID`、全天 `VALUE=DATE`、`RRULE`、`EXDATE` 和 `RDATE`。
+
 CSV / TSV 推荐字段：
 
 ```csv
