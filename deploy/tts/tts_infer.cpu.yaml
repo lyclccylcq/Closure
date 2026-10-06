@@ -1,0 +1,10 @@
+# Reviewed with GPT-SoVITS d523079fc05d9a8028d6085bffe4a2757c32abb6.
+# install-linux-cpu.sh and the service preflight reject missing custom weights.
+custom:
+  device: cpu
+  is_half: false
+  version: v2ProPlus
+  t2s_weights_path: /opt/closure-tts/GPT-SoVITS/GPT_weights_v2ProPlus/closure_zh-e15.ckpt
+  vits_weights_path: /opt/closure-tts/GPT-SoVITS/SoVITS_weights_v2ProPlus/closure_zh_e8_s304.pth
+  bert_base_path: /opt/closure-tts/GPT-SoVITS/GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large
+  cnhuhbert_base_path: /opt/closure-tts/GPT-SoVITS/GPT_SoVITS/pretrained_models/chinese-hubert-base

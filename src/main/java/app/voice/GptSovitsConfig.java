@@ -14,11 +14,13 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * GPT-SoVITS 本地服务配置。
+ * GPT-SoVITS 服务配置。
  * 真实路径从环境变量或 config/local-voice.properties 读取，不写死在 Java 类中。
  */
 public final class GptSovitsConfig {
     public static final String ENV_BASE_URL = "CLOSURE_GPT_SOVITS_BASE_URL";
+    public static final String ENV_REMOTE_SERVER = "CLOSURE_GPT_SOVITS_SERVER_REMOTE";
+    public static final String ENV_STREAMING = "CLOSURE_GPT_SOVITS_STREAMING";
     public static final String ENV_GPT_WEIGHT_PATH = "CLOSURE_GPT_SOVITS_GPT_WEIGHT_PATH";
     public static final String ENV_SOVITS_WEIGHT_PATH = "CLOSURE_GPT_SOVITS_SOVITS_WEIGHT_PATH";
     public static final String ENV_NEUTRAL_REF_AUDIO_PATH = "CLOSURE_GPT_SOVITS_NEUTRAL_REF_AUDIO_PATH";
@@ -35,6 +37,8 @@ public final class GptSovitsConfig {
     public static final String ENV_BATCH_SIZE = "CLOSURE_GPT_SOVITS_BATCH_SIZE";
 
     public static final String PROPERTY_BASE_URL = "gptSovits.baseUrl";
+    public static final String PROPERTY_REMOTE_SERVER = "gptSovits.server.remote";
+    public static final String PROPERTY_STREAMING = "gptSovits.streaming";
     public static final String PROPERTY_GPT_WEIGHT_PATH = "gptSovits.gptWeightPath";
     public static final String PROPERTY_SOVITS_WEIGHT_PATH = "gptSovits.sovitsWeightPath";
     public static final String PROPERTY_NEUTRAL_REF_AUDIO_PATH = "gptSovits.neutral.refAudioPath";
@@ -73,6 +77,8 @@ public final class GptSovitsConfig {
     private final Duration connectTimeout;
     private final Duration requestTimeout;
     private final boolean autoSpeakEnabled;
+    private final boolean remoteServer;
+    private final boolean streaming;
     private final int shortTextMaxChars;
     private final String shortTextSplitMethod;
     private final String longTextSplitMethod;
@@ -158,6 +164,42 @@ public final class GptSovitsConfig {
             boolean splitBucket,
             int batchSize
     ) {
+        this(baseUri, gptWeightPath, sovitsWeightPath, voiceProfiles, connectTimeout, requestTimeout,
+                autoSpeakEnabled, shortTextMaxChars, shortTextSplitMethod, longTextSplitMethod,
+                fragmentInterval, seed, parallelInfer, splitBucket, batchSize, false);
+    }
+
+    public GptSovitsConfig(
+            URI baseUri,
+            Path gptWeightPath,
+            Path sovitsWeightPath,
+            Map<SpeechEmotion, VoiceProfile> voiceProfiles,
+            Duration connectTimeout,
+            Duration requestTimeout,
+            boolean autoSpeakEnabled,
+            int shortTextMaxChars,
+            String shortTextSplitMethod,
+            String longTextSplitMethod,
+            double fragmentInterval,
+            int seed,
+            boolean parallelInfer,
+            boolean splitBucket,
+            int batchSize,
+            boolean remoteServer
+    ) {
+        this(baseUri, gptWeightPath, sovitsWeightPath, voiceProfiles, connectTimeout, requestTimeout,
+                autoSpeakEnabled, shortTextMaxChars, shortTextSplitMethod, longTextSplitMethod,
+                fragmentInterval, seed, parallelInfer, splitBucket, batchSize, remoteServer, false);
+    }
+
+    public GptSovitsConfig(
+            URI baseUri, Path gptWeightPath, Path sovitsWeightPath,
+            Map<SpeechEmotion, VoiceProfile> voiceProfiles,
+            Duration connectTimeout, Duration requestTimeout, boolean autoSpeakEnabled,
+            int shortTextMaxChars, String shortTextSplitMethod, String longTextSplitMethod,
+            double fragmentInterval, int seed, boolean parallelInfer, boolean splitBucket,
+            int batchSize, boolean remoteServer, boolean streaming
+    ) {
         this.baseUri = requireUri(baseUri);
         this.gptWeightPath = requirePath(gptWeightPath, "gptWeightPath");
         this.sovitsWeightPath = requirePath(sovitsWeightPath, "sovitsWeightPath");
@@ -166,6 +208,8 @@ public final class GptSovitsConfig {
         this.connectTimeout = connectTimeout == null ? DEFAULT_CONNECT_TIMEOUT : connectTimeout;
         this.requestTimeout = requestTimeout == null ? DEFAULT_REQUEST_TIMEOUT : requestTimeout;
         this.autoSpeakEnabled = autoSpeakEnabled;
+        this.remoteServer = remoteServer;
+        this.streaming = streaming;
         this.shortTextMaxChars = requirePositive(shortTextMaxChars, "shortTextMaxChars");
         this.shortTextSplitMethod = requireText(shortTextSplitMethod, "shortTextSplitMethod");
         this.longTextSplitMethod = requireText(longTextSplitMethod, "longTextSplitMethod");
@@ -177,8 +221,10 @@ public final class GptSovitsConfig {
     }
 
     public static GptSovitsConfig fromEnvironment() {
-        Properties localProperties = loadLocalProperties();
+        return fromProperties(loadLocalProperties());
+    }
 
+    static GptSovitsConfig fromProperties(Properties localProperties) {
         String baseUrl = configValueOrDefault(ENV_BASE_URL, PROPERTY_BASE_URL, localProperties, DEFAULT_BASE_URL);
         Path gptWeightPath = Path.of(requiredConfigValue(
                 ENV_GPT_WEIGHT_PATH,
@@ -237,7 +283,9 @@ public final class GptSovitsConfig {
                         localProperties,
                         DEFAULT_SPLIT_BUCKET
                 ),
-                configInt(ENV_BATCH_SIZE, PROPERTY_BATCH_SIZE, localProperties, DEFAULT_BATCH_SIZE)
+                configInt(ENV_BATCH_SIZE, PROPERTY_BATCH_SIZE, localProperties, DEFAULT_BATCH_SIZE),
+                configBoolean(ENV_REMOTE_SERVER, PROPERTY_REMOTE_SERVER, localProperties, false),
+                configBoolean(ENV_STREAMING, PROPERTY_STREAMING, localProperties, false)
         );
     }
 
@@ -296,6 +344,14 @@ public final class GptSovitsConfig {
 
     public boolean isAutoSpeakEnabled() {
         return autoSpeakEnabled;
+    }
+
+    public boolean isRemoteServer() {
+        return remoteServer;
+    }
+
+    public boolean isStreaming() {
+        return streaming;
     }
 
     public int getShortTextMaxChars() {

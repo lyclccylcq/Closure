@@ -6,6 +6,8 @@ import app.voice.model.TtsAudioResult;
 import app.voice.model.VoiceProfile;
 
 import java.io.IOException;
+import java.io.DataInputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -15,8 +17,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -35,6 +40,8 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
 
     public GptSovitsClient(GptSovitsConfig config) {
         this(config, HttpClient.newBuilder()
+                // The GPT-SoVITS API uses HTTP/1.1; avoid Uvicorn's h2c upgrade/body fallback.
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Objects.requireNonNull(config, "config").getConnectTimeout())
                 .build());
     }
@@ -88,6 +95,110 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
                 })
                 .thenApply(response -> requireWavResponse(response, "语音合成"))
                 .thenApply(this::writeTempWav);
+    }
+
+    @Override
+    public boolean supportsStreaming() { return config.isStreaming(); }
+
+    @Override
+    public CompletableFuture<Void> synthesizeStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(consumer, "consumer");
+        if (!config.isStreaming()) {
+            return VoiceSynthesisClient.super.synthesizeStream(request, consumer);
+        }
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(endpoint("/closure/tts"))
+                .timeout(config.getRequestTimeout())
+                .header("Content-Type", "application/json; charset=utf-8")
+                .header("Accept", "application/vnd.closure.wav-stream")
+                .POST(HttpRequest.BodyPublishers.ofString(toTtsJson(request, config.getLongTextSplitMethod())))
+                .build();
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        AtomicReference<InputStream> body = new AtomicReference<>();
+        var headers = httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+        headers.whenComplete((response, error) -> {
+            if (error != null) {
+                result.completeExceptionally(error);
+                return;
+            }
+            body.set(response.body());
+            if (result.isDone()) {
+                closeQuietly(response.body());
+                return;
+            }
+            CompletableFuture.runAsync(() -> {
+                try (InputStream stream = response.body()) {
+                    if (response.statusCode() != 200) {
+                        throw new VoiceSynthesisException("流式语音合成失败，HTTP " + response.statusCode()
+                                + ": " + new String(stream.readNBytes(8192), StandardCharsets.UTF_8));
+                    }
+                    readWavFrames(stream, consumer, result);
+                } catch (IOException exception) {
+                    throw new CompletionException(new VoiceSynthesisException("读取流式语音失败", exception));
+                }
+            }, command -> Thread.ofVirtual().name("closure-tts-stream").start(command))
+                    .whenComplete((unused, failure) -> {
+                        if (failure == null) result.complete(null);
+                        else result.completeExceptionally(failure);
+                    });
+        });
+        // HttpRequest's timeout only covers receipt of headers for an InputStream body.
+        result.orTimeout(config.getRequestTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                .whenComplete((unused, error) -> {
+                    closeQuietly(body.get());
+                    if (error != null) headers.cancel(true);
+                });
+        return result;
+    }
+
+    private void readWavFrames(InputStream input, Consumer<TtsAudioResult> consumer,
+                               CompletableFuture<Void> completion) throws IOException {
+        DataInputStream stream = new DataInputStream(input);
+        if (!Arrays.equals(stream.readNBytes(6), "CTTS1\n".getBytes(StandardCharsets.US_ASCII))) {
+            throw new VoiceSynthesisException("服务器未返回 Closure 流式语音协议");
+        }
+        long totalBytes = 0;
+        boolean receivedAudio = false;
+        while (!completion.isDone()) {
+            int length = stream.readInt();
+            if (length == 0) {
+                if (!receivedAudio) throw new VoiceSynthesisException("服务器返回了空语音流");
+                return;
+            }
+            if (length == -1) {
+                int errorLength = stream.readInt();
+                if (errorLength < 0 || errorLength > 8192) throw new IOException("Invalid stream error length");
+                byte[] message = stream.readNBytes(errorLength);
+                if (message.length != errorLength) throw new IOException("Truncated stream error");
+                throw new VoiceSynthesisException("流式语音合成失败：" + new String(message, StandardCharsets.UTF_8));
+            }
+            totalBytes += length;
+            if (length < 46 || length > 32 * 1024 * 1024 || totalBytes > 64 * 1024 * 1024) {
+                throw new IOException("Invalid or excessive WAV frame length");
+            }
+            byte[] wav = stream.readNBytes(length);
+            if (wav.length != length) throw new IOException("Truncated WAV frame");
+            if (!new String(wav, 0, 4, StandardCharsets.US_ASCII).equals("RIFF")
+                    || !new String(wav, 8, 4, StandardCharsets.US_ASCII).equals("WAVE")) {
+                throw new IOException("Invalid WAV frame");
+            }
+            if (completion.isDone()) return;
+            TtsAudioResult fragment = writeTempWav(wav);
+            try {
+                consumer.accept(fragment);
+                receivedAudio = true;
+            } catch (RuntimeException exception) {
+                if (fragment instanceof FileTtsAudioResult file) Files.deleteIfExists(file.getAudioFile());
+                throw exception;
+            }
+        }
+    }
+
+    private static void closeQuietly(InputStream stream) {
+        if (stream != null) {
+            try { stream.close(); } catch (IOException ignored) { }
+        }
     }
 
     private CompletableFuture<HttpResponse<byte[]>> sendTtsRequestWithGetFallback(

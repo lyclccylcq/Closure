@@ -17,21 +17,31 @@ import java.util.function.Consumer;
 public final class VoiceProfileRegistry {
     private final Map<SpeechEmotion, VoiceProfile> profiles;
     private final Consumer<String> warningSink;
+    private final boolean remoteServer;
     private final Set<String> warnedKeys = new HashSet<>();
     private final VoiceProfile neutralProfile;
 
     public VoiceProfileRegistry(Map<SpeechEmotion, VoiceProfile> profiles, Consumer<String> warningSink) {
+        this(profiles, warningSink, false);
+    }
+
+    public VoiceProfileRegistry(
+            Map<SpeechEmotion, VoiceProfile> profiles,
+            Consumer<String> warningSink,
+            boolean remoteServer
+    ) {
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
+        this.remoteServer = remoteServer;
         this.profiles = normalizeProfiles(profiles);
         VoiceProfile configuredNeutral = this.profiles.get(SpeechEmotion.NEUTRAL);
-        neutralProfile = isUsable(configuredNeutral) ? configuredNeutral : null;
+        neutralProfile = isReferenceAudioUsable(configuredNeutral) ? configuredNeutral : null;
         if (configuredNeutral != null && neutralProfile == null) {
             warnOnce("neutral-unusable", "neutral 参考音频不可用：" + configuredNeutral.getReferenceAudioPath());
         }
     }
 
     public static VoiceProfileRegistry fromConfig(GptSovitsConfig config, Consumer<String> warningSink) {
-        return new VoiceProfileRegistry(config.getVoiceProfiles(), warningSink);
+        return new VoiceProfileRegistry(config.getVoiceProfiles(), warningSink, config.isRemoteServer());
     }
 
     public VoiceProfile get(SpeechEmotion emotion) {
@@ -42,7 +52,7 @@ public final class VoiceProfileRegistry {
 
         SpeechEmotion normalizedEmotion = activeEmotion(emotion);
         VoiceProfile profile = profiles.get(normalizedEmotion);
-        if (isUsable(profile)) {
+        if (isReferenceAudioUsable(profile)) {
             return profile;
         }
 
@@ -73,8 +83,10 @@ public final class VoiceProfileRegistry {
         return Map.copyOf(normalizedProfiles);
     }
 
-    private boolean isUsable(VoiceProfile profile) {
-        return profile != null && Files.isRegularFile(profile.getReferenceAudioPath());
+    public boolean isReferenceAudioUsable(VoiceProfile profile) {
+        return profile != null
+                && !profile.getReferenceAudioPath().toString().isBlank()
+                && (remoteServer || Files.isRegularFile(profile.getReferenceAudioPath()));
     }
 
     private SpeechEmotion activeEmotion(SpeechEmotion emotion) {

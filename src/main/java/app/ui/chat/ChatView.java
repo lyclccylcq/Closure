@@ -166,6 +166,7 @@ final class ChatView extends BorderPane {
         private String renderedText="";
         private int renderedCodePoints;
         private AssistantReply pendingFinalReply;
+        private boolean speechRequested;
 
         private StreamingContentRenderer(MessageBubble bubble,Duration interval){
             this.bubble=bubble;
@@ -186,6 +187,11 @@ final class ChatView extends BorderPane {
             Platform.runLater(() -> {
                 pendingFinalReply=assistantReply;
                 setTargetTextOnFx(assistantReply.getDisplayText());
+                // Begin synthesis alongside the typewriter animation.
+                if(!speechRequested){
+                    speechRequested=true;
+                    chatSpeechController.speakAssistantReply(assistantReply);
+                }
                 completeIfFinalTextRendered();
             });
         }
@@ -238,10 +244,8 @@ final class ChatView extends BorderPane {
                 return;
             }
 
-            AssistantReply assistantReply=pendingFinalReply;
             pendingFinalReply=null;
             timeline.stop();
-            chatSpeechController.speakAssistantReply(assistantReply);
         }
     }
 }

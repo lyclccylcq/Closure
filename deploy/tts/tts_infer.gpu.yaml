@@ -1,0 +1,9 @@
+# Original Closure weights, CUDA / FP16 inference.
+custom:
+  device: cuda
+  is_half: true
+  version: v2ProPlus
+  t2s_weights_path: /opt/closure-tts/GPT-SoVITS/GPT_weights_v2ProPlus/closure_zh-e15.ckpt
+  vits_weights_path: /opt/closure-tts/GPT-SoVITS/SoVITS_weights_v2ProPlus/closure_zh_e8_s304.pth
+  bert_base_path: /opt/closure-tts/GPT-SoVITS/GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large
+  cnhuhbert_base_path: /opt/closure-tts/GPT-SoVITS/GPT_SoVITS/pretrained_models/chinese-hubert-base

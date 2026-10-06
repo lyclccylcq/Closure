@@ -81,6 +81,32 @@ class VoiceProfileRegistryTest {
         assertTrue(warnings.size() <= 2);
     }
 
+    @Test
+    void remoteProfilesUseServerPathsWithoutLocalFiles() {
+        VoiceProfile neutral = profile("neutral", tempDir.resolve("server-only/neutral.wav"));
+        VoiceProfile question = profile("question", tempDir.resolve("server-only/question.wav"));
+        VoiceProfileRegistry registry = new VoiceProfileRegistry(Map.of(
+                SpeechEmotion.NEUTRAL, neutral,
+                SpeechEmotion.QUESTION, question
+        ), message -> { }, true);
+
+        assertTrue(registry.isAvailable());
+        assertEquals(neutral, registry.get(SpeechEmotion.NEUTRAL));
+        assertEquals(question, registry.get(SpeechEmotion.QUESTION));
+        assertEquals(neutral, registry.get(SpeechEmotion.TEASING));
+    }
+
+    @Test
+    void remoteModeStillRequiresAConfiguredReferencePath() {
+        VoiceProfileRegistry registry = new VoiceProfileRegistry(Map.of(
+                SpeechEmotion.NEUTRAL, profile("neutral", Path.of(""))
+        ), message -> { }, true);
+
+        assertFalse(registry.isAvailable());
+        assertFalse(registry.isReferenceAudioUsable(null));
+        assertNull(registry.get(SpeechEmotion.NEUTRAL));
+    }
+
     private VoiceProfileRegistry registry(Map<SpeechEmotion, VoiceProfile> profiles) {
         return new VoiceProfileRegistry(profiles, message -> {
         });

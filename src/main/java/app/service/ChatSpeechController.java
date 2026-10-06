@@ -79,7 +79,8 @@ public final class ChatSpeechController implements AutoCloseable {
             return new ChatSpeechController(
                     new SpeechService(
                             new GptSovitsClient(config),
-                            new AudioPlayerService()
+                            new AudioPlayerService(),
+                            voiceProfileRegistry
                     ),
                     voiceProfileRegistry,
                     config.isAutoSpeakEnabled(),

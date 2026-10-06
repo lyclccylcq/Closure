@@ -6,6 +6,12 @@ gptSovits.baseUrl=http://127.0.0.1:9880
 gptSovits.gptWeightPath=<absolute-path-to-gpt-ckpt>
 gptSovits.sovitsWeightPath=<absolute-path-to-sovits-pth>
 
+# Remote API (including through an SSH tunnel): all weight/reference paths belong to the server.
+# Set true to let the server validate reference files; the default false checks local files.
+# Environment override: CLOSURE_GPT_SOVITS_SERVER_REMOTE=true
+gptSovits.server.remote=false
+# For a remote API, set gptSovits.server.autoStart=false and remove command/workingDir below.
+
 # Optional: start the local GPT-SoVITS API when the desktop pet starts.
 # If baseUrl is already reachable, Closure will skip starting another process.
 # Prefer a small shell script for complex environment setup such as conda/venv activation.
@@ -78,3 +84,5 @@ gptSovits.profile.serious.topP=0.85
 gptSovits.profile.serious.temperature=0.7
 gptSovits.profile.serious.seed=42
 gptSovits.profile.serious.repetitionPenalty=1.35
+# Enable only with Closure's /closure/tts streaming adapter on the server.
+gptSovits.streaming=false

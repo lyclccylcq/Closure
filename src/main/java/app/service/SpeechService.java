@@ -18,6 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 /**
  * 文字转语音业务编排。
@@ -31,14 +32,26 @@ public final class SpeechService implements AssistantSpeechService {
     private final VoiceSynthesisClient ttsClient;
     private final VoiceAudioPlayer audioPlayerService;
     private final Throwable unavailableCause;
+    private final Predicate<VoiceProfile> referenceAudioUsable;
     private CompletableFuture<Void> initializationFuture;
     private CompletableFuture<Void> activeSpeechFuture;
+    private CompletableFuture<Void> activeSynthesisFuture;
     private long speechGeneration;
     private volatile boolean ready;
 
     public SpeechService(VoiceSynthesisClient ttsClient, VoiceAudioPlayer audioPlayerService) {
+        this(ttsClient, audioPlayerService,
+                profile -> Files.isRegularFile(profile.getReferenceAudioPath()));
+    }
+
+    private SpeechService(
+            VoiceSynthesisClient ttsClient,
+            VoiceAudioPlayer audioPlayerService,
+            Predicate<VoiceProfile> referenceAudioUsable
+    ) {
         this.ttsClient = Objects.requireNonNull(ttsClient, "ttsClient");
         this.audioPlayerService = Objects.requireNonNull(audioPlayerService, "audioPlayerService");
+        this.referenceAudioUsable = Objects.requireNonNull(referenceAudioUsable, "referenceAudioUsable");
         unavailableCause = null;
     }
 
@@ -47,13 +60,15 @@ public final class SpeechService implements AssistantSpeechService {
             VoiceAudioPlayer audioPlayerService,
             VoiceProfileRegistry voiceProfileRegistry
     ) {
-        this(ttsClient, audioPlayerService);
+        this(ttsClient, audioPlayerService,
+                Objects.requireNonNull(voiceProfileRegistry, "voiceProfileRegistry")::isReferenceAudioUsable);
     }
 
     private SpeechService(Throwable unavailableCause) {
         ttsClient = null;
         audioPlayerService = new AudioPlayerService();
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
+        referenceAudioUsable = profile -> false;
     }
 
     public static SpeechService fromEnvironment() {
@@ -61,7 +76,8 @@ public final class SpeechService implements AssistantSpeechService {
             GptSovitsConfig config = GptSovitsConfig.fromEnvironment();
             return new SpeechService(
                     new GptSovitsClient(config),
-                    new AudioPlayerService()
+                    new AudioPlayerService(),
+                    VoiceProfileRegistry.fromConfig(config, message -> System.out.println("GPT-SoVITS 警告：" + message))
             );
         } catch (RuntimeException exception) {
             return new SpeechService(exception);
@@ -93,25 +109,22 @@ public final class SpeechService implements AssistantSpeechService {
             ));
         }
         Objects.requireNonNull(profile, "profile");
-        if (!Files.isRegularFile(profile.getReferenceAudioPath())) {
+        if (!referenceAudioUsable.test(profile)) {
             return CompletableFuture.failedFuture(new VoiceSynthesisException(
                     "参考音频不存在：" + profile.getReferenceAudioPath()
             ));
         }
 
+        PlaybackQueue playback = new PlaybackQueue(generation);
         CompletableFuture<Void> speechFuture = initializeOnce()
-                .thenCompose(unused -> ttsClient.synthesize(new TtsRequest(
-                        speechText,
-                        "zh",
-                        profile,
-                        profile.getSpeedFactor()
-                )))
-                .thenCompose(audioResult -> {
-                    if (isCurrentSpeech(generation)) {
-                        return playAndDelete(generation, audioResult);
-                    }
-                    deleteAudioResult(audioResult);
-                    return CompletableFuture.completedFuture(null);
+                .thenCompose(unused -> {
+                    if (!isCurrentSpeech(generation)) return CompletableFuture.completedFuture(null);
+                    CompletableFuture<Void> synthesis = ttsClient.synthesizeStream(new TtsRequest(
+                            speechText, "zh", profile, profile.getSpeedFactor()), playback::accept);
+                    if (ttsClient.supportsStreaming()) rememberSynthesis(generation, synthesis);
+                    return synthesis.whenComplete((done, error) -> {
+                        if (error != null && isCurrentSpeech(generation)) audioPlayerService.stop();
+                    }).thenCompose(done -> playback.finished());
                 });
 
         rememberActiveSpeech(generation, speechFuture);
@@ -126,7 +139,7 @@ public final class SpeechService implements AssistantSpeechService {
             ));
         }
         Objects.requireNonNull(profile, "profile");
-        if (!Files.isRegularFile(profile.getReferenceAudioPath())) {
+        if (!referenceAudioUsable.test(profile)) {
             return CompletableFuture.failedFuture(new VoiceSynthesisException(
                     "参考音频不存在：" + profile.getReferenceAudioPath()
             ));
@@ -156,14 +169,48 @@ public final class SpeechService implements AssistantSpeechService {
 
     @Override
     public void stop() {
-        CompletableFuture<Void> speechFuture;
+        CompletableFuture<Void> synthesis;
         synchronized (this) {
             speechGeneration++;
-            speechFuture = activeSpeechFuture;
             activeSpeechFuture = null;
+            synthesis = activeSynthesisFuture;
+            activeSynthesisFuture = null;
         }
 
+        if (synthesis != null) synthesis.cancel(true);
         audioPlayerService.stop();
+    }
+
+    private void rememberSynthesis(long generation, CompletableFuture<Void> synthesis) {
+        synchronized (this) {
+            if (speechGeneration == generation) activeSynthesisFuture = synthesis;
+            else synthesis.cancel(true);
+        }
+        synthesis.whenComplete((unused, error) -> {
+            synchronized (this) {
+                if (activeSynthesisFuture == synthesis) activeSynthesisFuture = null;
+            }
+        });
+    }
+
+    /** Download can continue while earlier fragments play; only one fragment plays at a time. */
+    private final class PlaybackQueue {
+        private final long generation;
+        private CompletableFuture<Void> tail = CompletableFuture.completedFuture(null);
+
+        private PlaybackQueue(long generation) { this.generation = generation; }
+
+        private synchronized void accept(TtsAudioResult audio) {
+            if (!isCurrentSpeech(generation)) {
+                deleteAudioResult(audio);
+                return;
+            }
+            tail = tail.thenCompose(unused -> playAndDelete(generation, audio))
+                    // Also delete queued fragments if an earlier playback fails or is stopped.
+                    .whenComplete((unused, error) -> deleteAudioResult(audio));
+        }
+
+        private synchronized CompletableFuture<Void> finished() { return tail; }
     }
 
     private synchronized CompletableFuture<Void> initializeOnce() {
@@ -237,15 +284,17 @@ public final class SpeechService implements AssistantSpeechService {
     }
 
     private long startNewSpeechRequest() {
-        CompletableFuture<Void> previousSpeechFuture;
+        CompletableFuture<Void> previousSynthesis;
         long generation;
         synchronized (this) {
             speechGeneration++;
             generation = speechGeneration;
-            previousSpeechFuture = activeSpeechFuture;
+            previousSynthesis = activeSynthesisFuture;
             activeSpeechFuture = null;
+            activeSynthesisFuture = null;
         }
 
+        if (previousSynthesis != null) previousSynthesis.cancel(true);
         audioPlayerService.stop();
         return generation;
     }

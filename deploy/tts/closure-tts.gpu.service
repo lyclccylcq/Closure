@@ -1,0 +1,37 @@
+[Unit]
+Description=Closure GPT-SoVITS v2ProPlus CUDA streaming API
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=closure-tts
+Group=closure-tts
+WorkingDirectory=/opt/closure-tts/GPT-SoVITS
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+Environment=HF_HOME=/var/cache/closure-tts/huggingface
+Environment=NUMBA_CACHE_DIR=/var/cache/closure-tts/numba
+Environment=NLTK_DATA=/var/lib/closure-tts/nltk_data
+Environment=CUDA_VISIBLE_DEVICES=0
+Environment=CLOSURE_TTS_CPU_THREADS=4
+StateDirectory=closure-tts
+CacheDirectory=closure-tts
+ExecStartPre=/opt/closure-tts/install-linux-gpu.sh --check-only
+ExecStart=/opt/closure-tts/venv-gpu/bin/python /opt/closure-tts/serve-tts.py -a 127.0.0.1 -p 9880 -c /opt/closure-tts/tts_infer.gpu.yaml
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/closure-tts/tts_infer.gpu.yaml
+ReadWritePaths=/opt/closure-tts/GPT-SoVITS/GPT_SoVITS/text
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

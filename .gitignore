@@ -41,3 +41,12 @@ build/
 config/local-ai.properties
 config/local-voice.properties
 config/local-weather.properties
+config/local-voice.remote.properties
+config/local-voice.gpu.properties
+config/local-voice.before-gpu.properties
+config/local-tts-gpu-progress.json
+config/local-tts-migration.json
+config/local-tts-deployment.json
+config/local-voice.before-migration.properties
+config/local-tts-conda-environment.yml
+deploy/tts/samples/
