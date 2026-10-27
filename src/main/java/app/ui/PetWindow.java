@@ -237,6 +237,15 @@ public class PetWindow extends JFrame {
      * 构造方法：创建桌宠窗口。
      */
     public PetWindow() {
+        this(false);
+    }
+
+    /** Creates the real window/model without starting services, audio or user reminders. */
+    public static PetWindow startupSmokeWindow() {
+        return new PetWindow(true);
+    }
+
+    private PetWindow(boolean startupSmoke) {
         UiFonts.applySwingDefaults();
 
         // 初始化窗口基本属性
@@ -244,6 +253,11 @@ public class PetWindow extends JFrame {
 
         // 初始化桌宠鼠标事件
         initPetMouseAdapter();
+
+        if (startupSmoke) {
+            openPetModel();
+            return;
+        }
 
         // 初始化后台工作提醒
         initWorkBreakReminder();

@@ -106,7 +106,14 @@ calls.append(sys.argv[1:]); marker.write_text(json.dumps(calls))
 scenario=json.loads(Path(__file__).with_name('scenario.json').read_text())
 mode=scenario.get('gh_mode','new')
 head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-metadata={'number':7,'url':'https://github.com/example/test/pull/7','isDraft':True,'baseRefName':'main','headRefOid':head}
+lifecycle_path=Path(__file__).with_name('gh-lifecycle.json')
+life=json.loads(lifecycle_path.read_text()) if lifecycle_path.exists() else {}
+def save_life(): lifecycle_path.write_text(json.dumps(life))
+base=subprocess.run(['git','rev-parse','origin/main'],capture_output=True,text=True).stdout.strip()
+metadata={'number':7,'url':'https://github.com/example/test/pull/7','isDraft':True,'baseRefName':'main','headRefOid':head,'baseRefOid':base,'state':'MERGED' if life.get('merged') else 'OPEN','mergeCommit':{'oid':life.get('merge_sha')} if life.get('merged') else None,'mergedAt':'2026-10-28T00:00:00Z' if life.get('merged') else None}
+if life.get('ready'): metadata['isDraft']=False
+if scenario.get('finalize_wrong_head'): metadata['headRefOid']='0'*40
+if scenario.get('finalize_wrong_base'): metadata['baseRefOid']='0'*40
 if mode == 'existing-repair': metadata.update(number=1,url='https://github.com/example/test/pull/1')
 if sys.argv[1:3] == ['pr','list'] and scenario.get('gh_list_head'): metadata['headRefOid']=scenario['gh_list_head']
 if mode.endswith('wrong-base'): metadata['baseRefName']='release'
@@ -118,7 +125,44 @@ elif sys.argv[1:3] == ['pr','create'] and '--draft' in sys.argv:
     print('https://github.com/example/test/pull/1')
 elif sys.argv[1:3] == ['pr','edit']:
     print(metadata['url'])
+elif sys.argv[1:3] == ['pr','ready']:
+    life['ready']='--undo' not in sys.argv
+    save_life();print('ready changed')
+elif sys.argv[1:3] == ['pr','checks']:
+    life['check_calls']=life.get('check_calls',0)+1
+    if life.get('ready'):life['ready_check_calls']=life.get('ready_check_calls',0)+1
+    save_life()
+    ci=scenario.get('ci_mode','pass')
+    current='ready' if life.get('ready') else 'draft'
+    bucket='pending' if ci=='pending' or (ci=='ready-pending' and life.get('ready')) else 'fail' if ci=='fail' else 'pass'
+    if ci=='ready-sequence' and life.get('ready'):
+        n=life['ready_check_calls']
+        if n==1:current='draft'
+        elif n==2:bucket='pending'
+    names=['workflow-contract','java-tests']
+    if ci=='missing':names=['workflow-contract']
+    rows=[{'name':name,'bucket':bucket,'state':'SUCCESS' if bucket=='pass' else 'FAILURE' if bucket=='fail' else 'IN_PROGRESS','link':'https://github.com/example/test/actions/runs/99/job/'+current+'-'+name,'startedAt':current} for name in names]
+    if ci=='duplicate-pending':
+        for name in names:
+            rows.append({'name':name,'bucket':'pending','state':'QUEUED','link':'https://github.com/example/test/actions/runs/100/job/1000','startedAt':None})
+    print(json.dumps(rows))
+elif sys.argv[1:3] == ['pr','merge']:
+    assert '--match-head-commit' in sys.argv and sys.argv[sys.argv.index('--match-head-commit')+1]==head
+    assert '--admin' not in sys.argv and '--auto' not in sys.argv
+    subprocess.check_call(['git','push','-q','origin',head+':refs/heads/main'])
+    life.update(merged=True,merge_sha=head,merge_after_ready_check_calls=life.get('ready_check_calls',0))
+    save_life();print('merged')
+    if scenario.get('ambiguous_merge_response'):sys.exit(1)
+elif sys.argv[1:3] == ['run','list']:
+    print(json.dumps([{'databaseId':99,'status':'in_progress' if scenario.get('main_ci_pending') else 'completed','conclusion':None if scenario.get('main_ci_pending') else 'failure' if scenario.get('main_ci_fail') else 'success','headSha':life.get('merge_sha'),'url':'https://github.com/example/test/actions/runs/99'}]))
+elif sys.argv[1:3] == ['run','view']:
+    if scenario.get('mutate_after_delivery') and life.get('merged'):
+        (Path.cwd().parent/'delivery/docs/result.txt').write_text('Late unreviewed change')
+    if '--log-failed' in sys.argv:print('Actual fixture CI diagnostic')
+    else: print(json.dumps({'headSha':life.get('merge_sha'),'event':'push','jobs':[{'name':name,'conclusion':'success','status':'completed'} for name in ['workflow-contract','java-tests']],'status':'completed','conclusion':'success','url':'https://github.com/example/test/actions/runs/99'}))
 elif sys.argv[1:3] == ['pr','view']:
+    if life.get('merged') and scenario.get('fail_post_merge_view_once') and not life.get('failed_post_merge_view'):
+        life['failed_post_merge_view']=True;save_life();sys.exit(1)
     if not mode.startswith('existing-'): metadata['url']='https://github.com/example/test/pull/1'
     print(json.dumps(metadata))
 else:
@@ -503,6 +547,151 @@ else:
         feedback.write_text(json.dumps({"head_sha": "0" * 40, "message": "Stale feedback"}))
         self.command("repair", "--run", state["run_dir"], "--feedback", str(feedback), ok=False)
         self.assertEqual(len(self.calls()), 2)
+
+    def authorized_run(self, delivery_fail=False, delivery_source=None, **scenario):
+        config = {"schema_version": 1,
+                  "allowed_checks": {"python3 fixture-check.py": [sys.executable, "fixture-check.py"],
+                                     "python3 delivery-check.py": [sys.executable, "delivery-check.py"]},
+                  "completion_policy": {"merge_authorized": True, "authorization_note": "User delegated merge and CI",
+                      "merge_method": "merge", "required_checks": ["workflow-contract", "java-tests"],
+                      "check_timeout_seconds": 1.5, "poll_interval_seconds": .01,
+                      "delivery_checks": ["python3 delivery-check.py"]}}
+        self.write_json("scripts/ai_dispatch_config.json", config)
+        self.write("delivery-check.py", delivery_source if delivery_source is not None else
+                   "from pathlib import Path\nassert Path('docs/result.txt').read_text() == 'fixed\\n'\n"
+                   + ("raise SystemExit(1)\n" if delivery_fail else "print('Delivery validated')\n"))
+        self.git("add", "-A")
+        if self.git("diff", "--cached", "--name-only"):
+            self.git("commit", "-q", "-m", "Authorized completion fixture")
+        self.base = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/heads/automation-base", self.base)
+        remote = self.local_github_remote()
+        self.git("push", "-q", "origin", "HEAD:refs/heads/main")
+        self.scenario.write_text(json.dumps({"mode": "good", **scenario}))
+        state = self.start()
+        self.command("review", "--run", state["run_dir"], "--review", str(self.review_file(state)))
+        self.command("publish", "--run", state["run_dir"])
+        return state, remote
+
+    def test_finalize_without_frozen_merge_authorization_never_calls_merge(self):
+        remote = self.local_github_remote()
+        self.git("push", "-q", "origin", "HEAD:refs/heads/main")
+        state = self.start()
+        self.command("review", "--run", state["run_dir"], "--review", str(self.review_file(state)))
+        self.command("publish", "--run", state["run_dir"])
+        self.command("finalize", "--run", state["run_dir"], ok=False)
+        calls = json.loads((self.bin / "gh-called").read_text())
+        self.assertFalse(any(row[:2] == ["pr", "merge"] for row in calls))
+        self.assertEqual(self.git("--git-dir", str(remote), "rev-parse", "refs/heads/main"), self.base)
+
+    def test_finalize_waits_for_new_ready_checks_then_merges_exact_head_and_validates_delivery(self):
+        state, remote = self.authorized_run(ci_mode="ready-sequence")
+        self.write("user-uncommitted.txt", "Untouched user work\n")
+        before = self.git("status", "--porcelain")
+        result = self.command("finalize", "--run", state["run_dir"])
+        self.assertEqual(result["status"], "COMPLETE")
+        self.assertEqual(result["merge_commit_sha"], state["head_sha"])
+        self.assertEqual(self.git("--git-dir", str(remote), "rev-parse", "refs/heads/main"), state["head_sha"])
+        self.assertEqual(self.git("status", "--porcelain"), before)
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.base)
+        self.assertTrue(all(row["status"] == "PASS" for row in result["delivery_checks"]))
+        life = json.loads((self.bin / "gh-lifecycle.json").read_text())
+        self.assertGreaterEqual(life["merge_after_ready_check_calls"], 3)
+
+    def test_finalize_pending_or_missing_required_checks_does_not_merge(self):
+        for ci_mode in ("pending", "missing", "ready-pending", "duplicate-pending"):
+            with self.subTest(ci_mode=ci_mode):
+                state, remote = self.authorized_run(ci_mode=ci_mode)
+                result = self.command("finalize", "--run", state["run_dir"])
+                self.assertEqual(result["status"], "AWAITING_CI")
+                self.assertEqual(self.git("--git-dir", str(remote), "rev-parse", "refs/heads/main"), self.base)
+                life = self.bin / "gh-lifecycle.json"
+                if life.exists(): life.unlink()
+                self.git("remote", "remove", "origin")
+                shutil.rmtree(remote)
+
+    def test_finalize_failed_ci_automatically_repairs_and_requires_new_review(self):
+        state, remote = self.authorized_run(ci_mode="fail")
+        result = self.command("finalize", "--run", state["run_dir"])
+        self.assertEqual(result["status"], "AWAITING_REVIEW")
+        self.assertEqual(result["round"], 2)
+        self.assertEqual(len(self.calls()), 2)
+        self.assertEqual(self.git("--git-dir", str(remote), "rev-parse", "refs/heads/main"), self.base)
+        self.assertFalse(any(row[:2] == ["pr", "merge"] for row in json.loads((self.bin / "gh-called").read_text())))
+
+    def test_finalize_rejects_changed_pr_head_or_base_before_merge(self):
+        for flag in ("finalize_wrong_head", "finalize_wrong_base"):
+            with self.subTest(flag=flag):
+                state, remote = self.authorized_run()
+                self.scenario.write_text(json.dumps({"mode": "good", flag: True}))
+                self.command("finalize", "--run", state["run_dir"], ok=False)
+                self.assertEqual(self.git("--git-dir", str(remote), "rev-parse", "refs/heads/main"), self.base)
+                self.git("remote", "remove", "origin")
+                shutil.rmtree(remote)
+
+    def test_post_merge_delivery_failure_is_not_complete(self):
+        state, _ = self.authorized_run(delivery_fail=True)
+        proc = subprocess.run([sys.executable, "scripts/ai_dispatch.py", "finalize", "--run", state["run_dir"]],
+                              cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["status"], "DELIVERY_FAILED")
+        self.assertEqual(result["delivery_checks"][0]["status"], "FAIL")
+        self.assertIn("merge_commit_sha", result)
+
+    def test_successful_delivery_check_cannot_change_reviewed_files_or_head(self):
+        mutations = ["from pathlib import Path\nPath('docs/result.txt').write_text('Unreviewed mutation')\n",
+                     "import subprocess\nsubprocess.check_call(['git','commit','-q','--allow-empty','-m','Unexpected delivery head'])\n"]
+        for source in mutations:
+            with self.subTest(source=source):
+                state, remote = self.authorized_run(delivery_source=source)
+                proc = subprocess.run([sys.executable, "scripts/ai_dispatch.py", "finalize", "--run", state["run_dir"]],
+                                      cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=30)
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                result = json.loads(proc.stdout)
+                self.assertEqual(result["status"], "DELIVERY_FAILED")
+                self.assertEqual(result["delivery_checks"][0]["status"], "PASS")
+                self.assertIn("delivery_guard", result)
+                self.assertNotEqual(result["status"], "COMPLETE")
+                (self.bin / "gh-lifecycle.json").unlink()
+                self.git("remote", "remove", "origin")
+                shutil.rmtree(remote)
+
+    def test_main_ci_wait_cannot_hide_a_late_delivery_mutation(self):
+        state, _ = self.authorized_run(mutate_after_delivery=True)
+        proc = subprocess.run([sys.executable, "scripts/ai_dispatch.py", "finalize", "--run", state["run_dir"]],
+                              cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["status"], "DELIVERY_FAILED")
+        self.assertIn("docs/result.txt", result["delivery_guard"]["changes"])
+
+    def test_ambiguous_merge_response_and_post_merge_read_failure_resume_without_second_merge(self):
+        for failure in ("fail_post_merge_view_once", "ambiguous_merge_response"):
+            with self.subTest(failure=failure):
+                state, remote = self.authorized_run(**{failure: True})
+                first = self.command("finalize", "--run", state["run_dir"], ok=False)
+                self.assertEqual(first["merge_intent"]["head_sha"], state["head_sha"])
+                self.assertNotIn("merge_commit_sha", first)
+                self.assertEqual(self.git("--git-dir", str(remote), "rev-parse", "refs/heads/main"), state["head_sha"])
+                second = self.command("finalize", "--run", state["run_dir"])
+                self.assertEqual(second["status"], "COMPLETE")
+                merges = [row for row in json.loads((self.bin / "gh-called").read_text()) if row[:2] == ["pr", "merge"]]
+                self.assertEqual(len(merges), 1)
+                (self.bin / "gh-lifecycle.json").unlink()
+                (self.bin / "gh-called").unlink()
+                self.git("remote", "remove", "origin")
+                shutil.rmtree(remote)
+
+    def test_pending_main_ci_can_be_resumed_without_remerging(self):
+        state, _ = self.authorized_run(main_ci_pending=True)
+        first = self.command("finalize", "--run", state["run_dir"])
+        self.assertEqual(first["status"], "AWAITING_MAIN_CI")
+        self.scenario.write_text(json.dumps({"mode": "good"}))
+        second = self.command("finalize", "--run", state["run_dir"])
+        self.assertEqual(second["status"], "COMPLETE")
+        merges = [row for row in json.loads((self.bin / "gh-called").read_text()) if row[:2] == ["pr", "merge"]]
+        self.assertEqual(len(merges), 1)
 
     def test_publish_rejects_a_pass_against_a_different_remote_main_before_push(self):
         remote = self.local_github_remote()
