@@ -50,3 +50,8 @@ config/local-tts-deployment.json
 config/local-voice.before-migration.properties
 config/local-tts-conda-environment.yml
 deploy/tts/samples/
+
+### AI workflow local evidence ###
+.ai-workflow/
+__pycache__/
+*.pyc

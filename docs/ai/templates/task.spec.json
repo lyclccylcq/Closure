@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0000",
+  "spec_version": 1,
+  "status": "DRAFT",
+  "title": "TODO: 任务标题",
+  "objective": "TODO: 用户可观察的目标和成功标准",
+  "architecture": [
+    "TODO: 现有入口与关键架构决定、接口/数据约束"
+  ],
+  "non_goals": [
+    "TODO: 本任务明确不处理的范围"
+  ],
+  "allowed_paths": [
+    "src/main/java/app/TODO.java",
+    "src/test/java/app/TODOTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "TODO: 可观察且可判定的验收要求",
+      "verification": "TODO: 测试、手动步骤或文档检查方法"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    }
+  ],
+  "risks": [
+    "TODO: 兼容性、隐私、运行环境和剩余风险"
+  ],
+  "rollback": "TODO: 如何撤销或恢复此前行为",
+  "review_budget": {
+    "max_diff_bytes": 100000
+  }
+}

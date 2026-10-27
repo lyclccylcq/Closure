@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0001",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "落地 GPT → Claude Code → GPT 的仓库开发闭环",
+  "objective": "以 GitHub 为中枢，在不改变业务代码和本地未提交工作的前提下，提供可执行的 Spec 设计、Claude 实现自测、GPT 批量复核和用户最终合并流程。用户当前请求授权本次流程落地，具体远端保护设置由所有者配置。",
+  "architecture": [
+    "使用版本化 JSON Spec 作为任务合同；schema_version 版本化协议，spec_version 版本化单任务设计。状态字段不认证用户身份。",
+    "根 CLAUDE.md 保存稳定约束，手动 Claude Skill 读取单个 READY Spec，Prompt 和报告模板承接两轮 GPT。",
+    "Python 标准库工具读取已提交 Spec，校验范围、版本、AC 和检查证据；交接包绑定 base/head 与 Spec/报告/完整 Diff 哈希。",
+    "报告和 GPT 记录保存在忽略目录并作为 PR 附件，避免把当前 head 写入提交产生循环引用。",
+    "普通 pull_request CI 只读且无模型密钥；GPT 复核和用户合并为明确人工门禁，不声称文件中的 PASS 已被身份认证。"
+  ],
+  "non_goals": [
+    "不修改 Java 业务、pom.xml、部署脚本或本地配置",
+    "不合入原 checkout 的未提交工作或本地独有提交",
+    "不调用模型 API、不建立后台轮询或自动合并",
+    "不自动修改 GitHub 分支保护或要求单人仓库自我批准 PR"
+  ],
+  "allowed_paths": [
+    ".gitignore",
+    "CLAUDE.md",
+    ".claude/skills/implement-task/SKILL.md",
+    ".github/pull_request_template.md",
+    ".github/workflows/ai-workflow.yml",
+    "docs/ai/**",
+    "scripts/ai_workflow.py",
+    "scripts/tests/test_ai_workflow.py"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "提供版本化任务 Spec、CLAUDE.md、手动 implement-task Skill、两轮 GPT Prompt 和 PR/实施/复核报告模板。",
+      "verification": "检查模板齐全、互相引用和命令一致，validate 通过。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "阻止超范围变更、未升版的 Spec 修改、缺失/失败的强制证据和不完整 AC 映射。",
+      "verification": "独立临时 Git 仓库的正反例单元测试验证每种拒绝条件。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "交接包包含完整有预算限制的 Diff；任何 head/base/Spec/报告/Diff 篡改或旧审查不能通过绑定检查。",
+      "verification": "集成测试覆盖完整包、预算超限、内容篡改、旧 head/base 和 PASS/REVISE/BLOCKED。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "提供只读 CI，检查任务合同和现有 Java 21 单元测试；不添加模型密钥或特权 PR 代码执行。",
+      "verification": "审查 workflow 权限、固定 action commit、事件与命令；运行现有 Java 单元测试。"
+    },
+    {
+      "id": "AC-5",
+      "requirement": "说明设计批准、Claude 批次修复、GPT 一次复核、用户合并和所需仓库设置；不改变业务代码。",
+      "verification": "审查指南与 git diff 文件清单，明确人工门禁、未配置保护和单人仓库批准限制。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "结构校验无法证明模型身份、语义正确性或用户批准；依赖用户核对 GPT 输出及最终手动合并。",
+    "远端 main 当前未设置分支保护；CI 生效与必需检查需用户在 GitHub 配置。",
+    "本地开发目录与远端基线存在差异，后续整合须保留未提交工作。",
+    "按路径拦截敏感文件不是完整内容扫描，交接包需人工检查。"
+  ],
+  "rollback": "撤销本次流程提交即可移除新增文档、工具和 CI；不影响业务行为。若已启用必需检查，先由所有者更新保护规则，避免移除 workflow 后阻塞 PR。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}
