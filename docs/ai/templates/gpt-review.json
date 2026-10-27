@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0000",
+  "spec_version": 1,
+  "head_sha": "<COPY_MANIFEST_HEAD_SHA>",
+  "base_sha": "<COPY_MANIFEST_BASE_SHA>",
+  "spec_sha256": "<COPY_MANIFEST_SPEC_SHA256>",
+  "manifest_sha256": "<SHA256_OF_EXACT_MANIFEST_BYTES>",
+  "verdict": "BLOCKED",
+  "acceptance": [
+    {
+      "id": "AC-1",
+      "status": "BLOCKED",
+      "evidence": "TODO: 独立核对实现与证据"
+    }
+  ],
+  "findings": [
+    "TODO: 缺少材料/决定，或列出路径、触发条件、严重性、对应 AC 与修改要求"
+  ],
+  "reviewed_by": "<实际 GPT 模型/会话说明；不是认证凭据>"
+}

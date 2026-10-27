@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0000",
+  "spec_version": 1,
+  "head_sha": "<FINAL_HEAD_40_HEX_AFTER_COMMIT>",
+  "acceptance": [
+    {
+      "id": "AC-1",
+      "status": "BLOCKED",
+      "evidence": "TODO: 实现/测试定位与可访问证据；未检查不可写 PASS"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "status": "BLOCKED",
+      "evidence": "TODO: 命令、实际结果和日志/CI 链接"
+    }
+  ],
+  "deviations": [],
+  "risks": [],
+  "rollback": "TODO: 可执行回滚步骤"
+}
