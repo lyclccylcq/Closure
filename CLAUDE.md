@@ -2,10 +2,11 @@
 
 ## 入口
 
+- 默认自动方式由 Codex 读取 `AGENTS.md` 并使用 `closure-workflow` Skill 调度，详见 [自动化指南](docs/ai/automation.md)。自动运行时 Claude 只修改文件，宿主负责测试、Git、证据和 PR；下列命令也供手动方式使用。
 - 执行已批准任务：`/implement-task docs/ai/tasks/TASK-0001.json`。
 - [闭环流程](docs/ai/README.md)、[任务模板](docs/ai/templates/task.spec.json)。
 - GPT 负责架构与按 Spec 复核；Claude Code 负责实现、测试和证据；用户负责批准 Spec 和最终合并。
-- Spec 的 `READY` 是流程状态，不是身份认证或自动授权。未确认用户批准的 Spec，先完成可做的调查，再集中说明阻塞点。
+- Spec 的 `READY` 是流程状态，不是身份认证。用户明确要求执行需求时，可在该授权范围内设计并交接，不为常规实现选择反复确认；用户要求先批准方案或存在未授权决定时，先完成可做的调查，再集中说明阻塞点。
 
 ## 项目与验证
 

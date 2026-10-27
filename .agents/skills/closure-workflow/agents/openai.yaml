@@ -1,0 +1,4 @@
+interface:
+  display_name: "Closure 自动开发闭环"
+  short_description: "自动交接 Claude 开发、自测与 Codex 批量复核，保留用户合并审批"
+  default_prompt: "使用 $closure-workflow 自动推进这项 Closure 开发需求。"

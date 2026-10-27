@@ -303,7 +303,7 @@ def write_packet(args):
     print("Complete review packet: " + str(output))
 
 
-def review_packet(args):
+def review_packet(args, require_pass=True):
     packet = Path(args.packet)
     manifest_raw = (packet / "manifest.json").read_bytes()
     manifest = read_json(manifest_raw)
@@ -326,8 +326,10 @@ def review_packet(args):
     if review["verdict"] == "PASS":
         need(all(x["status"] == "PASS" for x in acceptance.values()) and not review["findings"],
              "PASS needs all criteria PASS and no unresolved findings")
-    need(review["verdict"] == "PASS", "GPT verdict: " + review["verdict"])
-    print("Review record PASS for current head/base; manual evidence only. User merge approval still required.")
+    if require_pass:
+        need(review["verdict"] == "PASS", "GPT verdict: " + review["verdict"])
+        print("Review record PASS for current head/base; manual evidence only. User merge approval still required.")
+    return review
 
 
 def main(argv=None):

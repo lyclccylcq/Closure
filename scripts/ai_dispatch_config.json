@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "allowed_checks": {
+    "python3 scripts/ai_workflow.py validate": ["python3", "scripts/ai_workflow.py", "validate"],
+    "python3 -m unittest discover -s scripts/tests -v": ["python3", "-m", "unittest", "discover", "-s", "scripts/tests", "-v"],
+    "./mvnw -B -Djava.awt.headless=true test": ["./mvnw", "-B", "-Djava.awt.headless=true", "test"],
+    "git diff --check": ["git", "diff", "--check"]
+  }
+}

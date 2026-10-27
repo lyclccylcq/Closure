@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0002",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "由 Codex 自动交接 Claude 并收回复核的开发调度",
+  "objective": "用户明确要求全自动转交。让 Closure 用户在 Codex 提出执行需求后，由 Codex 生成任务 Spec、自动调用本机 Claude Code、收回实现/测试证据并做批量复核，自动成批修复，准备 PR，最终合并仍由用户批准。",
+  "architecture": [
+    "根 AGENTS.md 和项目 Codex Skill 建立默认入口，当前 Codex 聊天承担规划与审查，不启动额外 GPT API 或递归 Codex 进程。",
+    "标准库调度器创建隔离 Git 工作副本，冻结 Spec 与受信任检查映射；原目录未提交改动不自动混入。",
+    "Claude CLI 复用现有 OAuth，safe-mode、文件工具和结构化输出；预检与实际调用认证一致；宿主负责受信任检查、Git、报告与 PR，无 Bash 或权限绕过。",
+    "自测失败先在同一 Claude 会话中批量修复；Codex 的 REVISE 再自动交回，所有模型尝试与时间有上限。",
+    "复用已有提交/Spec/证据哈希绑定；只有当前真实 PASS 可以发布草稿 PR，CI 修复后必须重新复核。"
+  ],
+  "non_goals": [
+    "不自动合并或修改分支保护",
+    "不改业务 Java、pom.xml 或部署/本地服务配置",
+    "不复制原目录未提交业务工作，不代用户启动云服务",
+    "不配置新模型 API Key，不增加聊天结束后的后台唤醒"
+  ],
+  "allowed_paths": [
+    "AGENTS.md",
+    ".agents/skills/closure-workflow/**",
+    "CLAUDE.md",
+    ".claude/skills/implement-task/SKILL.md",
+    "docs/ai/README.md",
+    "docs/ai/automation.md",
+    "docs/ai/tasks/TASK-0002.json",
+    "scripts/ai_dispatch.py",
+    "scripts/ai_dispatch_config.json",
+    "scripts/ai_workflow.py",
+    "scripts/tests/test_ai_dispatch.py"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "Codex 对 Closure 执行任务可自动选择调度入口，无需用户手动复制 Spec 或切换 Claude；仅设计请求不自动实施。",
+      "verification": "检查 AGENTS/Skill 默认触发、授权和规划/复核/合并边界；独立场景评估。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "可真正启动本机已登录 Claude，在隔离副本中实现文件修改，宿主运行受信任检查并自动生成提交、报告和完整包。",
+      "verification": "临时仓库假 CLI 集成测试，加一次真实 Claude 文件修改冒烟；不修改业务源。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "自测失败、GPT REVISE 和 CI 反馈可自动批量回传；旧 PASS、Spec 篡改、超范围修改和达到尝试/时间上限必须停止。",
+      "verification": "集成测试覆盖自动修复、冻结数据、旧记录、超时及有限重试的可观察行为。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "发布草稿 PR 前验证真实结构化审查记录，保留用户最终合并；原 dirty 工作区不受影响，不使用权限绕过或任意 shell 评估 Spec。",
+      "verification": "集成测试和独立代码审查；主 PR 当前提交 CI 全部通过。"
+    },
+    {
+      "id": "AC-5",
+      "requirement": "自动和手动路径、运行状态、安装/使用及局限说明一致；旧流程保持可用。",
+      "verification": "原有工作流测试与新增测试通过，Skill 校验通过，指南与 CLI 对照。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "自动化依赖本机 Claude 登录、网络和可用额度，权限或额度失败须明确 BLOCKED。",
+    "文件工具限定不是目录读取隔离或完整 OS 沙箱；宿主执行测试前应信任仓库基线、上下文与检查映射。",
+    "GitHub main 分支保护仍需所有者配置，模型 PASS 不替代人类合并批准。",
+    "真实调度会消耗 Claude 额度；默认有限尝试，GPT 只在稳定自测结果后集中复核。"
+  ],
+  "rollback": "撤销本次自动调度提交即可恢复手动流程；保留运行副本与日志可供恢复，按需单独清理，不重置原工作区。",
+  "review_budget": {
+    "max_diff_bytes": 220000
+  }
+}
