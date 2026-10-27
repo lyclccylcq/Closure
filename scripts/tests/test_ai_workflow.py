@@ -244,6 +244,22 @@ class WorkflowTests(unittest.TestCase):
         self.git("config", "diff.orderFile", ".ai-workflow/order.txt")
         self.review()
 
+    def test_packet_summary_has_compact_stat_without_patch(self):
+        self.write("src/large.py", "".join(f"# substantive fixture line {index}\n" for index in range(1000)))
+        self.commit()
+        self.head = self.git("rev-parse", "HEAD")
+        self.report["head_sha"] = self.head
+        self.write_json(self.report_path, self.report)
+        self.packet()
+        packet = self.repo / self.packet_path
+        summary = (packet / "SUMMARY.md").read_text()
+        patch = (packet / "changes.diff").read_bytes()
+        self.assertNotIn("diff --git ", summary)
+        self.assertIn("src/large.py", summary)
+        self.assertLess(len(summary.encode()), len(patch) // 5)
+        self.make_review()
+        self.review()
+
     def test_commands_use_root_relative_paths_from_a_subdirectory(self):
         subdir = self.repo / "src"
         self.git("config", "diff.relative", "true")

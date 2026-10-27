@@ -277,7 +277,7 @@ def packet_data(path, base_ref, head_ref, report_raw):
                     spec_path=path, spec_sha256=digest(raw), base_sha=base, merge_base_sha=ancestor,
                     head_sha=head, report_sha256=digest(report_raw), diff_sha256=digest(patch),
                     changed_files=paths, diff_bytes=len(patch))
-    stat = diff("--stat=80,40", "--stat-graph-width=30", ancestor, head).decode()
+    stat = diff("--no-patch", "--stat=80,40", "--stat-graph-width=30", ancestor, head).decode()
     summary = (f"# {spec['task_id']} review packet\n\nSpec version: {spec['spec_version']}\n"
                f"Base: {base}\nMerge base: {ancestor}\nHead: {head}\n"
                f"Diff: {len(patch)} bytes; complete and untruncated.\n\n"
