@@ -1,9 +1,56 @@
 {
   "schema_version": 1,
   "allowed_checks": {
-    "python3 scripts/ai_workflow.py validate": ["python3", "scripts/ai_workflow.py", "validate"],
-    "python3 -m unittest discover -s scripts/tests -v": ["python3", "-m", "unittest", "discover", "-s", "scripts/tests", "-v"],
-    "./mvnw -B -Djava.awt.headless=true test": ["./mvnw", "-B", "-Djava.awt.headless=true", "test"],
-    "git diff --check": ["git", "diff", "--check"]
+    "python3 scripts/ai_workflow.py validate": [
+      "python3",
+      "scripts/ai_workflow.py",
+      "validate"
+    ],
+    "python3 -m unittest discover -s scripts/tests -v": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/tests",
+      "-v"
+    ],
+    "./mvnw -B -Djava.awt.headless=true test": [
+      "./mvnw",
+      "-B",
+      "-Djava.awt.headless=true",
+      "test"
+    ],
+    "git diff --check": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "./mvnw -B -DskipTests package": [
+      "./mvnw",
+      "-B",
+      "-DskipTests",
+      "package"
+    ],
+    "python3 scripts/verify_startup.py": [
+      "python3",
+      "scripts/verify_startup.py"
+    ]
+  },
+  "completion_policy": {
+    "merge_authorized": true,
+    "authorization_note": "User delegated CI and PR merging to the agent on 2026-10-28; user accepts the final runnable project.",
+    "merge_method": "merge",
+    "required_checks": [
+      "workflow-contract",
+      "java-tests"
+    ],
+    "check_timeout_seconds": 900,
+    "poll_interval_seconds": 10,
+    "delivery_checks": [
+      "./mvnw -B -Djava.awt.headless=true test",
+      "./mvnw -B -DskipTests package",
+      "python3 scripts/verify_startup.py"
+    ]
   }
 }

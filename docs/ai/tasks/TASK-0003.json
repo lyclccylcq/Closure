@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0003",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "授权 Codex 完成 CI、受审 PR 合并与可运行项目交付",
+  "objective": "用户已明确授权：运行 CI 和合并 PR 属于代理工作流，用户只验收最终可运行项目。将授权落实为受精确提交与证据保护的完成阶段，交付已构建并验证桌面启动的主分支项目。",
+  "architecture": [
+    "用户授权保存在根规范、Codex Skill 和受信任 completion_policy，技术审查、代理合并与用户产品验收分别记录。",
+    "finalize 必须验证明确合并授权、真实当前 PASS、准确 PR/head/base 和必要最新 CI；以匹配受审 SHA 的命令合并，不绕过保护。",
+    "草稿转就绪后等待新检查实例，拒绝旧绿灯抢先通过；失败自动成批修复并重新复核。",
+    "合并后在实际 merge commit 的独立副本等待主分支 CI 并执行可信构建和启动检查，全通过才 COMPLETE。",
+    "修正历史 Maven 启动入口；离线 smoke 初始化真实 PetWindow/模型并验证原生可见性与图像，跳过外部服务；默认运行行为保持。"
+  ],
+  "non_goals": [
+    "不冒充用户产品验收或 GitHub 人类批准",
+    "不修改或绕过分支保护，不自动部署云服务、启用付费功能或执行破坏性数据操作",
+    "不复制或重置原 Desktop/Closure 未提交业务工作、私有配置或密钥",
+    "不声称离线启动验证了真实 AI/TTS/天气集成"
+  ],
+  "allowed_paths": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".agents/skills/closure-workflow/**",
+    ".claude/skills/implement-task/SKILL.md",
+    "docs/ai/README.md",
+    "docs/ai/automation.md",
+    "docs/ai/prompts/design.md",
+    "docs/ai/prompts/review.md",
+    "docs/ai/templates/pr-acceptance-report.md",
+    ".github/pull_request_template.md",
+    ".github/workflows/ai-workflow.yml",
+    "docs/ai/tasks/TASK-0003.json",
+    "scripts/ai_dispatch.py",
+    "scripts/ai_dispatch_config.json",
+    "scripts/tests/test_ai_dispatch.py",
+    "scripts/verify_startup.py",
+    "scripts/tests/test_startup.py",
+    "pom.xml",
+    "src/main/java/app/Main.java",
+    "src/main/java/app/ui/PetWindow.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "后续 Closure 流程无需用户逐 PR 运行 CI 或确认合并；用户负责最终产品验收，授权边界和不同身份如实记录。",
+      "verification": "检查 AGENTS、Skill、Prompt、模板与冻结策略，确认授权持久化且没有矛盾的人类合并关卡。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "finalize 仅合并真实当前 PASS 的精确提交，验证 PR/main/base、必要最新 CI，就绪后的新 CI 不得被旧绿灯替代。",
+      "verification": "集成测试覆盖无授权、旧提交/基线、失败/缺失/等待检查、旧绿灯和匹配 SHA 合并。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "CI 失败自动成批修复并重新复核，次数和时间有限；不绕过保护、伪造批准或触碰原 dirty 工作区。",
+      "verification": "测试失败修复、无 PASS 不合并、无 admin/force、原工作区保留等场景。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "合并后在实际主分支提交的独立副本执行交付检查，只有主分支 CI 与检查全部通过才完成。",
+      "verification": "测试主分支检查等待/失败、构建失败和成功 COMPLETE 的顺序及证据。"
+    },
+    {
+      "id": "AC-5",
+      "requirement": "标准 Maven 命令使用正确桌面入口，可验证实际窗口、模型资源和正常退出，离线检查不调用真实外部服务。",
+      "verification": "本机实际窗口 smoke、Ubuntu xvfb CI、既有 Java 测试、打包与启动工具反例测试通过。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "代理已获工程合并授权，最终产品验收仍由用户决定；自动检查不覆盖所有体验。",
+    "离线启动只验证实际窗口和资源，真实服务需要对应环境与验收。",
+    "原目录未提交业务工作保持原样，交付以受审主分支为准。",
+    "认证、保护规则、配额或 CI 故障可能暂时阻塞，不能用绕过操作标记成功。"
+  ],
+  "rollback": "撤销本次完成阶段提交即可恢复上版自动交接；不重置原工作区。用户撤回合并授权时关闭 completion_policy.merge_authorized 并同步规范。",
+  "review_budget": {
+    "max_diff_bytes": 260000
+  }
+}

@@ -2,8 +2,8 @@
 """Run the Claude implementation leg for an active Codex session, without model APIs.
 
 Claude edits an isolated worktree. This trusted host owns checks, Git, packets and
-PR publication. The active Codex session supplies genuine review records; only a
-human merges. Local records are evidence, not authentication of an AI identity.
+PR publication. The active Codex session supplies genuine review records. A frozen
+completion policy can authorize guarded CI checks, merging and delivery validation. Local records are evidence, not authentication of an AI identity.
 """
 import argparse
 import contextlib
@@ -168,10 +168,11 @@ def frozen(state):
     return spec, config
 
 
-def current(state, clean=True):
+def current(state, clean=True, check_base=True):
     repo, workspace = Path(state["controller"]), Path(state["workspace"])
-    need(snapshot(state["base_ref"], repo) == state["base_sha"],
-         "base changed; create a new run against the updated base")
+    if check_base:
+        need(snapshot(state["base_ref"], repo) == state["base_sha"],
+             "base changed; create a new run against the updated base")
     need(snapshot("HEAD", workspace) == state["head_sha"], "worker head changed outside this run")
     code, branch, _ = run(["git", "symbolic-ref", "--quiet", "HEAD"], workspace)
     need(code == 0 and branch.decode().strip() == "refs/heads/" + state["branch"],
@@ -370,8 +371,8 @@ def start(args):
         return state
 
 
-def valid_review(state, filename):
-    current(state)
+def valid_review(state, filename, check_base=True):
+    current(state, check_base=check_base)
     with working(state["workspace"]), contextlib.redirect_stdout(io.StringIO()):
         return workflow.review_packet(SimpleNamespace(packet=state["packet_dir"], review=str(Path(filename).resolve()),
                                       head=state["head_sha"], base=state["base_sha"]), require_pass=False)
@@ -452,7 +453,9 @@ def publish(state, _args):
             + "Head: `" + state["head_sha"] + "`\nBase: `" + state["base_sha"] + "`\n"
             + "Spec SHA256: `" + manifest["spec_sha256"] + "`\n\n"
             + "The head-bound review record below is manual AI evidence, not authenticated reviewer identity or user merge approval. "
-            + "CI must pass and the user must explicitly approve merging.\n\n"
+            + ("CI and delivery checks are delegated to the agent under the frozen completion policy; the user accepts the final project.\n\n"
+               if frozen(state)[1].get("completion_policy", {}).get("merge_authorized") is True
+               else "CI must pass and the user must explicitly approve merging.\n\n")
             + "## Host verification and acceptance evidence\n\n"
             + "Commands, results and log hashes are recorded below. Raw logs remain private local artifacts; "
             + "they are not claimed to be accessible from this PR. GitHub CI supplies remotely accessible check logs.\n\n"
@@ -485,6 +488,237 @@ def publish(state, _args):
     return state
 
 
+
+def completion_policy(state):
+    _, config = frozen(state)
+    policy = config.get("completion_policy")
+    need(isinstance(policy, dict) and policy.get("merge_authorized") is True,
+         "merging is not authorized by this run's frozen completion policy")
+    need(workflow.text(policy.get("authorization_note")) and policy.get("merge_method") == "merge",
+         "completion policy needs actual authorization and the supported merge method")
+    names, delivery = policy.get("required_checks"), policy.get("delivery_checks")
+    need(workflow.strings(names, nonempty=True) and len(set(names)) == len(names), "policy needs unique required checks")
+    need(workflow.strings(delivery, nonempty=True) and all(x in config["allowed_checks"] for x in delivery),
+         "delivery checks must map to trusted argv")
+    timeout, interval = policy.get("check_timeout_seconds", 900), policy.get("poll_interval_seconds", 10)
+    need(type(timeout) in (int, float) and 0 < timeout <= 3600
+         and type(interval) in (int, float) and 0 < interval <= 30, "invalid completion wait limits")
+    return policy, config
+
+
+def github_json(state, args, codes=(0,)):
+    code, out, err = run(["gh", *args], state["workspace"], timeout=120)
+    need(code in codes, "GitHub operation failed: " + err.decode(errors="replace").strip())
+    return json.loads(out)
+
+
+def github_repository(state):
+    remote = git(state["controller"], "config", "--get", "remote.origin.url").decode().strip()
+    match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?", remote)
+    need(match, "completion only supports a GitHub origin")
+    need(re.fullmatch("https://github.com/" + re.escape(match[1]) + r"/pull/[0-9]+", state.get("pr_url", "")),
+         "recorded PR does not belong to the configured repository")
+    return match[1]
+
+
+def completion_pr(state, repository, merged=False):
+    data = github_json(state, ["pr", "view", state["pr_url"], "--repo", repository, "--json",
+        "state,isDraft,headRefOid,baseRefName,baseRefOid,mergeCommit,mergedAt,url"])
+    need(isinstance(data, dict) and data.get("url") == state["pr_url"], "PR identity changed")
+    need(data.get("headRefOid") == state["head_sha"] and data.get("baseRefName") == "main", "PR head/base changed")
+    expected = ("OPEN", "MERGED") if merged is None else (("MERGED",) if merged else ("OPEN",))
+    need(data.get("state") in expected, "unexpected PR lifecycle state")
+    if data.get("state") == "OPEN":
+        need(data.get("baseRefOid") == state["base_sha"], "PR target base changed; rebase and review again")
+    return data
+
+
+def check_rows(state, repository, required):
+    rows = github_json(state, ["pr", "checks", state["pr_url"], "--repo", repository,
+        "--json", "name,state,bucket,link,startedAt,completedAt"], codes=(0, 1, 8))
+    need(isinstance(rows, list), "invalid CI result")
+    latest = {}
+    for row in rows:
+        need(isinstance(row, dict) and workflow.text(row.get("name")), "invalid CI check row")
+        def key(value):
+            link = value.get("link") or ""
+            action = re.search(r"/actions/runs/([0-9]+)(?:/job/([0-9]+))?", link)
+            # A newly queued Actions job may not have startedAt yet; do not let an
+            # older green job win just because it has a timestamp.
+            generation = (int(action[1]), int(action[2] or 0)) if action else (0, 0)
+            return (generation, value.get("startedAt") or "", value.get("completedAt") or "", link)
+        if row["name"] not in latest or key(row) > key(latest[row["name"]]): latest[row["name"]] = row
+    failed = [row for name, row in latest.items() if row.get("bucket") in ("fail", "cancel")
+              or (name in required and row.get("bucket") == "skipping")]
+    passing = all(name in latest and latest[name].get("bucket") == "pass" for name in required)
+    pending = any(row.get("bucket") not in ("pass", "skipping", "fail", "cancel") for row in latest.values())
+    return latest, failed, passing and not pending
+
+
+def check_signatures(rows, required):
+    return {name: (rows[name].get("link"), rows[name].get("startedAt")) for name in required if name in rows}
+
+
+def wait_pr_ci(state, repository, policy, previous=None):
+    deadline = time.monotonic() + policy.get("check_timeout_seconds", 900)
+    while True:
+        completion_pr(state, repository)
+        rows, failed, passing = check_rows(state, repository, policy["required_checks"])
+        state["ci_checks"] = list(rows.values())
+        fresh = previous is None or all(name in rows and list(check_signatures(rows, [name])[name]) != previous.get(name)
+                                      for name in policy["required_checks"])
+        if failed or (passing and fresh): return rows, failed, True
+        if time.monotonic() >= deadline:
+            state.update(status="AWAITING_CI", reason="CI is pending or required checks are missing; run finalize again")
+            save(state)
+            return rows, [], False
+        time.sleep(min(policy.get("poll_interval_seconds", 10), max(0, deadline - time.monotonic())))
+
+
+def ci_repair(state, repository, metadata, failed):
+    if metadata.get("isDraft") is False:
+        code, _, err = run(["gh", "pr", "ready", state["pr_url"], "--repo", repository, "--undo"], state["workspace"])
+        need(code == 0, "could not restore draft before repair: " + err.decode(errors="replace"))
+    messages = []
+    for row in failed:
+        message = row["name"] + ": " + str(row.get("state")) + " " + str(row.get("link", ""))
+        match = re.search(r"/actions/runs/([0-9]+)", row.get("link") or "")
+        if match:
+            code, out, err = run(["gh", "run", "view", match[1], "--repo", repository, "--log-failed"], state["workspace"])
+            if code == 0: message += "\n" + out[-10000:].decode(errors="replace")
+        messages.append(message)
+    feedback = {"head_sha": state["head_sha"], "message": "Current-head CI failures:\n" + "\n".join(messages)}
+    write(Path(state["run_dir"]) / ("ci-feedback-" + str(state["round"]) + ".json"), json_bytes(feedback))
+    state.pop("ready_previous_checks", None)
+    state.pop("reason", None)
+    return implement(state, json.dumps(feedback, ensure_ascii=False))
+
+
+
+def verify_delivery_checkout(state, delivery, merge_sha):
+    actual = snapshot("HEAD", delivery)
+    code, branch, _ = run(["git", "symbolic-ref", "--quiet", "HEAD"], delivery)
+    changes = git(delivery, "status", "--porcelain", "-z", "--untracked-files=all")
+    if actual != merge_sha or code == 0 or changes:
+        state.update(status="DELIVERY_FAILED", reason="delivery checkout changed from the reviewed merged commit",
+                     delivery_guard={"expected_head": merge_sha, "actual_head": actual,
+                         "attached_branch": branch.decode(errors="replace").strip() if code == 0 else None,
+                         "changes": changes.decode(errors="replace").replace("\x00", "\n")[:4000]})
+        save(state)
+        return False
+    return True
+
+def delivery_validation(state, repository, policy, config):
+    metadata = completion_pr(state, repository, merged=True)
+    merge_sha = (metadata.get("mergeCommit") or {}).get("oid")
+    need(merge_sha == state["merge_commit_sha"], "merged PR commit changed")
+    git(state["controller"], "fetch", "origin")
+    git(state["controller"], "merge-base", "--is-ancestor", merge_sha, "origin/main")
+    delivery = Path(state["run_dir"]) / "delivery"
+    if not delivery.exists(): git(state["controller"], "worktree", "add", "--detach", str(delivery), merge_sha)
+    if not verify_delivery_checkout(state, delivery, merge_sha): return state
+    results = []
+    for index, command in enumerate(policy["delivery_checks"], 1):
+        code, out, err = run(config["allowed_checks"][command], delivery, state["timeout"], env=clean_env())
+        logfile = Path(state["run_dir"]) / "delivery-checks" / (str(index) + ".log")
+        write(logfile, out + b"\n" + err)
+        results.append({"command": command, "status": "PASS" if code == 0 else "FAIL", "exit_code": code,
+                        "log_path": str(logfile), "sha256": workflow.digest(logfile.read_bytes())})
+    state.update(delivery_workspace=str(delivery), delivery_checks=results)
+    if not verify_delivery_checkout(state, delivery, merge_sha): return state
+    if any(row["status"] != "PASS" for row in results):
+        state.update(status="DELIVERY_FAILED", reason="merged project delivery checks failed; repair and review a follow-up task")
+        save(state)
+        return state
+    deadline = time.monotonic() + policy.get("check_timeout_seconds", 900)
+    while True:
+        runs = github_json(state, ["run", "list", "--repo", repository, "--branch", "main", "--commit", merge_sha,
+            "--event", "push", "--limit", "20", "--json", "databaseId,status,conclusion,headSha,url"])
+        need(isinstance(runs, list), "invalid main CI result")
+        candidates = [row for row in runs if row.get("headSha") == merge_sha]
+        if candidates:
+            selected = max(candidates, key=lambda row: row["databaseId"])
+            state["main_ci"] = selected
+            if selected.get("status") == "completed":
+                if selected.get("conclusion") != "success":
+                    state.update(status="DELIVERY_FAILED", reason="merged main CI failed; repair a follow-up task")
+                    save(state)
+                    return state
+                details = github_json(state, ["run", "view", str(selected["databaseId"]), "--repo", repository,
+                    "--json", "headSha,event,jobs,status,conclusion,url"])
+                jobs = {job.get("name"): job for job in details.get("jobs", [])}
+                need(details.get("headSha") == merge_sha and all(name in jobs and jobs[name].get("conclusion") == "success"
+                    for name in policy["required_checks"]), "main CI lacks successful required jobs")
+                if not verify_delivery_checkout(state, delivery, merge_sha): return state
+                state.update(status="COMPLETE", post_merge_checks_pending=False)
+                state.pop("reason", None)
+                save(state)
+                return state
+        if time.monotonic() >= deadline:
+            state.update(status="AWAITING_MAIN_CI", post_merge_checks_pending=True, reason="main push CI pending; run finalize again")
+            save(state)
+            return state
+        time.sleep(min(policy.get("poll_interval_seconds", 10), max(0, deadline - time.monotonic())))
+
+
+
+def record_merged(state, metadata):
+    merge_sha = (metadata.get("mergeCommit") or {}).get("oid")
+    need(isinstance(merge_sha, str) and re.fullmatch(r"[0-9a-f]{40}", merge_sha), "merge commit was not returned")
+    state.update(status="MERGED", merge_commit_sha=merge_sha, post_merge_checks_pending=True)
+    save(state)
+
+def finalize(state, _args):
+    policy, config = completion_policy(state)
+    need(state.get("review_path") and state.get("pr_url"), "completion requires published current PASS evidence")
+    repository = github_repository(state)
+    already_merged = bool(state.get("merge_commit_sha"))
+    retry_open = False
+    intent = state.get("merge_intent")
+    if not already_merged and intent:
+        need(intent == {"head_sha": state["head_sha"], "base_sha": state["base_sha"], "pr_url": state["pr_url"]},
+             "merge intent no longer matches the reviewed task")
+        actual = completion_pr(state, repository, merged=None)
+        if actual["state"] == "MERGED":
+            need(valid_review(state, state["review_path"], check_base=False)["verdict"] == "PASS", "completion requires PASS")
+            record_merged(state, actual)
+            already_merged = True
+        else:
+            retry_open = True
+    need(valid_review(state, state["review_path"], check_base=not already_merged)["verdict"] == "PASS", "completion requires PASS")
+    if already_merged: return delivery_validation(state, repository, policy, config)
+    need(state["status"] == "AWAITING_CI" or retry_open, "run must be published before completion")
+    git(state["controller"], "fetch", "origin")
+    current(state)
+    need(snapshot("origin/main", state["controller"]) == state["base_sha"], "main changed before completion")
+    metadata = completion_pr(state, repository)
+    rows, failed, ready = wait_pr_ci(state, repository, policy, state.get("ready_previous_checks"))
+    if failed: return ci_repair(state, repository, metadata, failed)
+    if not ready: return state
+    if metadata.get("isDraft"):
+        state["ready_previous_checks"] = {name: list(value) for name, value in check_signatures(rows, policy["required_checks"]).items()}
+        code, _, err = run(["gh", "pr", "ready", state["pr_url"], "--repo", repository], state["workspace"])
+        need(code == 0, "could not mark reviewed PR ready: " + err.decode(errors="replace"))
+        save(state)
+        rows, failed, ready = wait_pr_ci(state, repository, policy, state["ready_previous_checks"])
+        if failed: return ci_repair(state, repository, completion_pr(state, repository), failed)
+        if not ready: return state
+    git(state["controller"], "fetch", "origin")
+    current(state)
+    metadata = completion_pr(state, repository)
+    need(metadata.get("isDraft") is False, "PR unexpectedly returned to draft")
+    rows, failed, ready = wait_pr_ci(state, repository, policy, state.get("ready_previous_checks"))
+    if failed: return ci_repair(state, repository, metadata, failed)
+    if not ready: return state
+    state.update(status="MERGING", merge_intent={"head_sha": state["head_sha"], "base_sha": state["base_sha"], "pr_url": state["pr_url"]})
+    save(state)  # Persist before the irreversible call; its response can be ambiguous.
+    code, out, err = run(["gh", "pr", "merge", state["pr_url"], "--repo", repository,
+        "--merge", "--match-head-commit", state["head_sha"]], state["workspace"], timeout=120)
+    write(Path(state["run_dir"]) / "merge.log", out + err)
+    need(code == 0, "merge did not succeed: " + err.decode(errors="replace"))
+    record_merged(state, completion_pr(state, repository, merged=True))
+    return delivery_validation(state, repository, policy, config)
+
 def operate(args):
     state = load_state(args.run)
     if args.command == "status":
@@ -492,7 +726,7 @@ def operate(args):
     with lock(state["run_dir"]):
         state = load_state(args.run)
         try:
-            return {"review": apply_review, "repair": repair, "publish": publish}[args.command](state, args)
+            return {"review": apply_review, "repair": repair, "publish": publish, "finalize": finalize}[args.command](state, args)
         except (DispatchError, workflow.ContractError, OSError, UnicodeError, TypeError, KeyError) as exc:
             state.update(status="BLOCKED", reason=str(exc))
             save(state)
@@ -510,7 +744,7 @@ def main(argv=None):
     start_parser.add_argument("--max-turns", type=int, default=30)
     start_parser.add_argument("--timeout", type=float, default=900)
     start_parser.set_defaults(handler=start)
-    for name in ("status", "review", "repair", "publish"):
+    for name in ("status", "review", "repair", "publish", "finalize"):
         command = sub.add_parser(name)
         command.add_argument("--run", required=True)
         if name == "review": command.add_argument("--review", required=True)
@@ -525,7 +759,7 @@ def main(argv=None):
     except (DispatchError, workflow.ContractError, OSError, UnicodeError, ValueError, TypeError, KeyError) as exc:
         result = {"schema_version": 1, "status": "BLOCKED", "reason": str(exc)}
     print(json.dumps(result, ensure_ascii=False))
-    return 1 if result["status"] == "BLOCKED" else 0
+    return 1 if result["status"] in ("BLOCKED", "DELIVERY_FAILED") else 0
 
 
 if __name__ == "__main__":
