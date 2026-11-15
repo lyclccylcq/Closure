@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0004",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Use the warmed local Qwen voice for Closure startup",
+  "objective": "Fix the two audible stages reported on the Mac: opening timbre differs from normal speech and startup speech can stop sharply or pause. In the configured local Qwen backend, announce startup in the usual neutral voice only after a complete warm-up and after fully synthesizing the startup greeting. Provide a runnable merge of the same local Qwen voice path the user already tested.",
+  "architecture": [
+    "Use current origin/main with its offline startup smoke constructor intact. The already authorized local Qwen voice path only exists as uncommitted source in the original checkout. Host staged an explicit voice-only source snapshot at the controller's .ai-workflow/support/TASK-0004, i.e. ../../../support/TASK-0004 relative to this dispatch worktree. These files contain approved source/tests only. Read the listed paths there to carry forward exactly the required Qwen compatibility, continuous PCM, sentence ICL, 0.88 tempo, and question profile handling. Do not read the original checkout or anything outside this worktree and that staged snapshot. Carry existing tests as needed, merging with any current tests, and retain all main startup smoke and GPT-SoVITS source behavior.",
+    "Use the same neutral reference profile and configured speed as ordinary local Qwen speech. The Qwen path should skip playing the packaged Japanese opener, show the startup/weather text even while speech warms up or is disabled/unavailable, and play one opening and greeting utterance (deduplicate identical fallback text). Other backends retain their prerecorded opener. Continue to use the actual model-warmup future, not a timer or an open TCP port, to permit the Qwen startup utterance.",
+    "Make the Qwen startup TTS call render one complete WAV before handing it to one playback. Reuse the existing whole WAV endpoint and PCM lifecycle and leave ordinary speech streaming. The startup utterance may start only once and must yield to newer user/request speech or window disposal; cancellation, failure or a prior request must not replay it or flush newer audio. Keep text independent of readiness. Do not require TTS or weather networking for offline smoke.",
+    "Have the Qwen server respond on its loopback health endpoint during model loading with recognized backend and ready:false and return 503 for synthesis until ready. Mark ready only after all configured profiles have completed end-to-end warm-up through the normal default tempo path. Preserve clear terminal failure diagnostics, one Metal worker, cancellation and bounded request queues. Use MLX-Audio 0.6.5, which includes upstream #1116 to keep valid codec ID 0 during full sentence decode; this retains the real final samples. Do not introduce an arbitrary sleep or change Qwen weights or speed to hide an error.",
+    "Keep launcher/install helpers runnable using bash if new file executable bits are unavailable. Ignore the local .runtime and Qwen config variants so the portable checkout can be linked to profiles and pinned weights locally. Keep setup notes succinct and use placeholders for personal paths and configuration. The three stock reference transcripts in staged code also appear in the tracked TTS sources; do not add waveforms, local configuration, or other runtime content."
+  ],
+  "non_goals": [
+    "No migration of the independent AI chat model or reasoning edits, weather providers, reminders, legacy process changes, model training or cloud infrastructure.",
+    "No credentials, workstation paths, logs from actual user chats or startup, model files, reference audio or generated samples in Git or CI. No true model invocation in CI.",
+    "Do not broadly change conversational speech, synthesis settings, artwork, or unrelated workflow files."
+  ],
+  "allowed_paths": [
+    "deploy/tts/install-macos-qwen.sh",
+    "deploy/tts/prepare-qwen.py",
+    "deploy/tts/qwen-requirements.txt",
+    "deploy/tts/qwen_audio.py",
+    "deploy/tts/qwen_runtime.py",
+    "deploy/tts/serve-qwen.py",
+    "deploy/tts/start-qwen.sh",
+    "src/main/java/app/service/AssistantReplyParser.java",
+    "src/main/java/app/service/AudioPlayerService.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/service/PcmAudioStream.java",
+    "src/main/java/app/service/SpeechProsody.java",
+    "src/main/java/app/service/SpeechService.java",
+    "src/main/java/app/service/VoiceAudioPlayer.java",
+    "src/main/java/app/service/VoiceAudioStream.java",
+    "src/main/java/app/voice/GptSovitsClient.java",
+    "src/main/java/app/voice/GptSovitsConfig.java",
+    "src/test/java/app/service/AssistantReplyParserTest.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/service/PcmAudioStreamTest.java",
+    "src/test/java/app/service/SpeechServiceTest.java",
+    "src/test/java/app/voice/GptSovitsClientTest.java",
+    "src/test/java/app/voice/GptSovitsConfigTest.java",
+    ".gitignore",
+    "deploy/tts/QWEN.md",
+    "scripts/tests/test_qwen_startup.py",
+    "src/main/java/app/service/AssistantSpeechService.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/voice/GptSovitsServerProcess.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The local Qwen opening uses the ordinary neutral voice as one utterance, and startup text appears independently of TTS being slow, disabled or unavailable. The normal GPT-SoVITS startup and offline window entry point are preserved.",
+      "verification": "Review PetWindow normal and smoke call sites and exercise cold ordered startup using controllable futures with no network."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Startup Qwen speech waits for warm-up success and a complete synthesis, then plays as one buffered WAV. Overlap, cancellation or a later startup stage cannot interrupt newer non-startup speech or replay the announcement.",
+      "verification": "Unit tests cover incomplete/failed warm-up, a newer request/stop, and complete-audio vs streaming routing, with no device and no real cloud calls."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "While Qwen warms the existing HTTP listener reports the backend with ready false and rejects synthesis; after every profile and default pitch-preserving tempo is warmed, health reports ready and can synthesize. Local install uses 0.6.5 and existing versioned Qwen 0.6B weights.",
+      "verification": "Run offline contract tests with a fake gated engine using stdlib on CI and a separate local Apple Metal smoke after review. Check pinned upstream release and ensure no further generated payload is truncated in transport."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Keep the published diff scoped to the existing Qwen voice dependency and startup fix, with a reproducible local install path and no user files. Delivered merge compiles, passes checks and opens the offline window.",
+      "verification": "Inspect full Diff for allowed paths, assess main version startup smoke, run guarded PR and main CI and preserve the original checkout."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Local cold start can take tens of seconds; the greeting text must remain usable during this period. A fully synthesized greeting trades first-audio latency for consistent playback.",
+    "The MLX version change must be checked on Apple Silicon using offline runtime resources; hosted CI verifies HTTP/Java contracts with doubles only.",
+    "Avoid clobbering legacy or dropping its Qwen baseline. Use the existing string config contract for voice profile or generic defaults."
+  ],
+  "rollback": "Revert the reviewed commit to restore the remote-only baseline, or launch the existing local checkout with its untouched runtime. Alternate-engine startup remains selected by its normal configuration.",
+  "review_budget": {
+    "max_diff_bytes": 185000
+  }
+}
