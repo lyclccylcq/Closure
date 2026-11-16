@@ -9,14 +9,15 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 使用 JavaFX MediaPlayer 播放本地音频文件。
+ * 单个文件使用 JavaFX；分段语音使用同一条连续 PCM 输出流。
  */
 public final class AudioPlayerService implements VoiceAudioPlayer {
     private static final Object FX_START_LOCK = new Object();
-    private static boolean fxStarted;
+    private static volatile boolean fxStarted;
 
     private MediaPlayer currentPlayer;
     private CompletableFuture<Void> currentPlaybackFuture;
+    private PcmAudioStream currentStream;
 
     @Override
     public void play(Path audioFile) {
@@ -26,6 +27,7 @@ public final class AudioPlayerService implements VoiceAudioPlayer {
     @Override
     public CompletableFuture<Void> playAndWait(Path audioFile) {
         Objects.requireNonNull(audioFile, "audioFile");
+        stopStream();
         CompletableFuture<Void> playbackFuture = new CompletableFuture<>();
         runOnFxThread(() -> playNow(audioFile, playbackFuture));
         return playbackFuture;
@@ -33,7 +35,23 @@ public final class AudioPlayerService implements VoiceAudioPlayer {
 
     @Override
     public void stop() {
-        runOnFxThread(this::stopNow);
+        stopStream();
+        if(fxStarted) runOnFxThread(this::stopNow);
+    }
+
+    @Override
+    public VoiceAudioStream openStream(){
+        stop();
+        synchronized(this){
+            currentStream=new PcmAudioStream();
+            return currentStream;
+        }
+    }
+
+    private void stopStream(){
+        PcmAudioStream stream;
+        synchronized(this){stream=currentStream;currentStream=null;}
+        if(stream!=null) stream.cancel();
     }
 
     private void playNow(Path audioFile, CompletableFuture<Void> playbackFuture) {

@@ -11,5 +11,8 @@ public interface VoiceAudioPlayer {
 
     CompletableFuture<Void> playAndWait(Path audioFile);
 
+    /** Optional continuous PCM path; simple/test players retain per-file behavior. */
+    default VoiceAudioStream openStream(){return null;}
+
     void stop();
 }

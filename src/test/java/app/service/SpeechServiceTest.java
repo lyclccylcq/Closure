@@ -207,6 +207,122 @@ class SpeechServiceTest {
     }
 
     @Test
+    void continuousPlaybackCopiesAndDeletesFragmentsThenWaitsForTheFinalSample() throws Exception {
+        var client=new StreamingTtsClient();
+        var player=new ContinuousAudioPlayer();
+        var service=new SpeechService(client,player);
+        var speech=service.speak("连续朗读。",profile("neutral","neutral.wav"));
+        Path first=outputAudio("pcm-first.wav");
+        Path second=outputAudio("pcm-second.wav");
+        client.consumer.accept(new FileTtsAudioResult(first));
+        client.consumer.accept(new FileTtsAudioResult(second));
+        client.stream.complete(null);
+        assertEquals(1,player.opens);
+        assertEquals(List.of(first,second),player.copied);
+        assertFalse(Files.exists(first));
+        assertFalse(Files.exists(second));
+        assertFalse(speech.isDone(),"Download and buffer writes must not finish speech before hardware playback ends");
+        player.drained.complete(null);
+        speech.join();
+    }
+
+    @Test
+    void firstQwenSpeechSharesWarmupAndWaitsForWholeWavAndDrain() throws Exception {
+        StreamingTtsClient client = new StreamingTtsClient();
+        client.acceptCompleteRequests = true;
+        client.available = new CompletableFuture<>();
+        ContinuousAudioPlayer player = new ContinuousAudioPlayer();
+        SpeechService service = new SpeechService(client, player, true);
+        VoiceProfile profile = profile("neutral", "neutral.wav");
+
+        CompletableFuture<Void> warmup = service.warmUp(profile);
+        CompletableFuture<Void> first = service.speak("工程部在线。博士，你好。", profile);
+        assertEquals(1, client.healthChecks);
+        assertTrue(client.completeRequests.isEmpty());
+        assertEquals(0, player.opens);
+
+        client.available.complete(null);
+        warmup.join();
+        assertEquals(List.of("工程部在线。博士，你好。"),
+                client.completeRequests.stream().map(TtsRequest::getText).toList());
+        assertEquals(0, player.opens, "The whole render must finish before output opens");
+
+        Path greeting = outputAudio("complete-greeting.wav");
+        client.completeResponses.getFirst().complete(new FileTtsAudioResult(greeting));
+        assertEquals(1, player.opens);
+        assertEquals(List.of(greeting), player.copied);
+        assertFalse(first.isDone());
+        player.drained.complete(null);
+        first.join();
+        assertFalse(Files.exists(greeting));
+
+        service.speak("接下来走普通流式播放。", profile);
+        assertEquals("接下来走普通流式播放。", client.request.getText());
+        assertEquals(1, client.completeRequests.size());
+        service.stop();
+    }
+
+    @Test
+    void supersededFirstQwenRenderCannotPlayOneLateFileOrMarkPlaybackComplete() throws Exception {
+        StreamingTtsClient client = new StreamingTtsClient();
+        client.acceptCompleteRequests = true;
+        ContinuousAudioPlayer player = new ContinuousAudioPlayer();
+        SpeechService service = new SpeechService(client, player, true);
+        VoiceProfile profile = profile("neutral", "neutral.wav");
+
+        CompletableFuture<Void> stale = service.speak("旧请求。", profile);
+        CompletableFuture<Void> current = service.speak("用户的新请求。", profile);
+        assertEquals(2, client.completeRequests.size());
+        Path newerAudio = outputAudio("newer.wav");
+        client.completeResponses.get(1).complete(new FileTtsAudioResult(newerAudio));
+
+        Path lateAudio = outputAudio("late-whole.wav");
+        client.completeResponses.getFirst().complete(new FileTtsAudioResult(lateAudio));
+        stale.join();
+        assertFalse(Files.exists(lateAudio));
+        assertEquals(List.of(newerAudio), player.copied);
+        assertFalse(current.isDone(), "The newer speech still owns its output");
+        assertEquals(1, player.opens);
+        service.stop();
+
+        service.speak("完整播放前的再一次尝试。", profile);
+        assertEquals(3, client.completeRequests.size());
+    }
+
+    @Test
+    void qwenReadyWaitCanBeRecreatedAfterItFails() throws Exception {
+        StreamingTtsClient client = new StreamingTtsClient();
+        SpeechService service = new SpeechService(client, new ContinuousAudioPlayer(), true);
+        VoiceProfile missing = new VoiceProfile("missing", tempDir.resolve("missing.wav"), "参考文本。", "zh");
+
+        assertTrue(service.warmUp(missing).isCompletedExceptionally());
+        service.warmUp(profile("neutral", "neutral.wav")).join();
+        assertTrue(service.isReady());
+        assertEquals(1, client.healthChecks);
+    }
+
+    @Test
+    void stoppingContinuousPlaybackDeletesBlockedQueuedAndLateFragments() throws Exception {
+        var client=new StreamingTtsClient();
+        var player=new ContinuousAudioPlayer();
+        player.copyImmediately=false;
+        var service=new SpeechService(client,player);
+        service.speak("停止测试。",profile("neutral","neutral.wav"));
+        Path first=outputAudio("pcm-blocked.wav");
+        Path queued=outputAudio("pcm-queued.wav");
+        client.consumer.accept(new FileTtsAudioResult(first));
+        client.consumer.accept(new FileTtsAudioResult(queued));
+        service.stop();
+        assertTrue(client.stream.isCancelled());
+        assertFalse(Files.exists(first));
+        assertFalse(Files.exists(queued));
+        Path late=outputAudio("pcm-late.wav");
+        client.consumer.accept(new FileTtsAudioResult(late));
+        assertFalse(Files.exists(late));
+        assertEquals(List.of(first),player.copied);
+    }
+
+    @Test
     void stopCancelsTheStreamAndDeletesQueuedAndLateFragments() throws Exception {
         StreamingTtsClient client = new StreamingTtsClient();
         FakeAudioPlayer player = new FakeAudioPlayer();
@@ -327,14 +443,52 @@ class SpeechServiceTest {
         private final CompletableFuture<Void> stream = new CompletableFuture<>();
         private Consumer<TtsAudioResult> consumer;
         private TtsRequest request;
+        private CompletableFuture<Void> available = CompletableFuture.completedFuture(null);
+        private int healthChecks;
+        private boolean acceptCompleteRequests;
+        private final List<TtsRequest> completeRequests = new ArrayList<>();
+        private final List<CompletableFuture<TtsAudioResult>> completeResponses = new ArrayList<>();
         public boolean supportsStreaming() { return true; }
-        public CompletableFuture<Void> checkAvailable() { return CompletableFuture.completedFuture(null); }
+        public CompletableFuture<Void> checkAvailable() { healthChecks++; return available; }
         public CompletableFuture<Void> initializeModels() { return CompletableFuture.completedFuture(null); }
-        public CompletableFuture<TtsAudioResult> synthesize(TtsRequest request) { throw new AssertionError(); }
+        public CompletableFuture<TtsAudioResult> synthesize(TtsRequest request) {
+            if (!acceptCompleteRequests) throw new AssertionError("Expected streaming synthesis");
+            completeRequests.add(request);
+            var response = new CompletableFuture<TtsAudioResult>();
+            completeResponses.add(response);
+            return response;
+        }
         public CompletableFuture<Void> synthesizeStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
             this.request = request;
             this.consumer = consumer;
             return stream;
+        }
+    }
+
+    private static final class ContinuousAudioPlayer implements VoiceAudioPlayer {
+        private final List<Path> copied=new ArrayList<>();
+        private final List<CompletableFuture<Void>> copies=new ArrayList<>();
+        private final CompletableFuture<Void> drained=new CompletableFuture<>();
+        private boolean copyImmediately=true;
+        private int opens;
+        private VoiceAudioStream active;
+        public void play(Path path){throw new AssertionError("Expected continuous PCM");}
+        public CompletableFuture<Void> playAndWait(Path path){throw new AssertionError("Expected continuous PCM");}
+        public void stop(){if(active!=null)active.cancel();}
+        public VoiceAudioStream openStream(){
+            opens++;
+            active=new VoiceAudioStream(){
+                public CompletableFuture<Void> append(Path path){
+                    copied.add(path);
+                    var future=new CompletableFuture<Void>();
+                    copies.add(future);
+                    if(copyImmediately)future.complete(null);
+                    return future;
+                }
+                public CompletableFuture<Void> finish(){return drained;}
+                public void cancel(){for(var future:copies)future.cancel(false);drained.cancel(false);}
+            };
+            return active;
         }
     }
 

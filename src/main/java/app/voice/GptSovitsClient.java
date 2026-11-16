@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
- * GPT-SoVITS HTTP 客户端。
+ * GPT-SoVITS / Qwen3-TTS HTTP 客户端，复用完整 WAV 分帧协议。
  * 所有网络请求都通过 HttpClient.sendAsync 执行，不阻塞 UI 线程。
  */
 public final class GptSovitsClient implements VoiceSynthesisClient {
@@ -47,7 +47,7 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
     }
 
     public GptSovitsClient(GptSovitsConfig config, HttpClient httpClient) {
-        this(config, httpClient, message -> System.out.println("GPT-SoVITS 警告：" + message));
+        this(config, httpClient, message -> System.out.println("语音服务警告：" + message));
     }
 
     public GptSovitsClient(GptSovitsConfig config, HttpClient httpClient, Consumer<String> warningSink) {
@@ -59,14 +59,22 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
     @Override
     public CompletableFuture<Void> checkAvailable() {
         HttpRequest httpRequest = HttpRequest.newBuilder()
-                .uri(endpoint("/"))
+                .uri(endpoint(config.isQwenTts() ? "/closure/health" : "/"))
                 .timeout(config.getConnectTimeout())
                 .GET()
                 .build();
 
         return httpClient
-                .sendAsync(httpRequest, HttpResponse.BodyHandlers.discarding())
+                .sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(response -> {
+                    if (config.isQwenTts()) {
+                        String health = response.body().replaceAll("\\s", "");
+                        if (response.statusCode() != 200 || !health.contains("\"backend\":\"qwen3-tts\"")
+                                || !health.contains("\"ready\":true")) {
+                            throw new VoiceSynthesisException("Qwen3-TTS 服务未就绪，HTTP " + response.statusCode());
+                        }
+                        return null;
+                    }
                     if (response.statusCode() >= 500) {
                         throw new VoiceSynthesisException("GPT-SoVITS API 检查失败，HTTP " + response.statusCode());
                     }
@@ -76,6 +84,10 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
 
     @Override
     public CompletableFuture<Void> initializeModels() {
+        if (config.isQwenTts()) {
+            // The local MLX service owns and preloads its model. Never send SoVITS weight operations.
+            return checkAvailable();
+        }
         return setWeights(SET_GPT_WEIGHTS_PATH, config.getGptWeightPath())
                 .thenCompose(unused -> setWeights(SET_SOVITS_WEIGHTS_PATH, config.getSovitsWeightPath()));
     }
@@ -259,7 +271,7 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
 
         byte[] body = response.body();
         if (body == null || body.length == 0) {
-            throw new VoiceSynthesisException(operationName + "失败：GPT-SoVITS 返回了空 WAV 内容");
+            throw new VoiceSynthesisException(operationName + "失败：语音模型返回了空 WAV 内容");
         }
 
         return body;
@@ -277,11 +289,11 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
 
     private TtsAudioResult writeTempWav(byte[] wavBytes) {
         try {
-            Path outputPath = Files.createTempFile("closure-gpt-sovits-", ".wav");
+            Path outputPath = Files.createTempFile("closure-tts-", ".wav");
             Files.write(outputPath, wavBytes);
             return new FileTtsAudioResult(outputPath);
         } catch (IOException exception) {
-            throw new CompletionException(new VoiceSynthesisException("保存 GPT-SoVITS WAV 到临时目录失败", exception));
+            throw new CompletionException(new VoiceSynthesisException("保存语音 WAV 到临时目录失败", exception));
         }
     }
 
@@ -299,6 +311,17 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
 
     private String toTtsJson(TtsRequest request, String splitMethod) {
         VoiceProfile profile = request.getVoiceProfile();
+
+        if (config.isQwenTts()) {
+            return "{"
+                    + "\"text\":\"" + escapeJson(request.getText()) + "\","
+                    + "\"text_lang\":\"" + escapeJson(request.getTextLanguage()) + "\","
+                    + "\"ref_audio_path\":\"" + escapeJson(profile.getReferenceAudioPath().toString()) + "\","
+                    + "\"prompt_text\":\"" + escapeJson(profile.getPromptText()) + "\","
+                    + "\"seed\":" + config.getSeed() + ","
+                    + "\"speed_factor\":" + request.getSpeedFactor()
+                    + "}";
+        }
 
         return "{"
                 + "\"text\":\"" + escapeJson(request.getText()) + "\","
@@ -358,7 +381,7 @@ public final class GptSovitsClient implements VoiceSynthesisClient {
     }
 
     private boolean shouldFallbackToLongSplit(HttpResponse<byte[]> response, String splitMethod) {
-        return response.statusCode() != 200
+        return !config.isQwenTts() && response.statusCode() != 200
                 && splitMethod.equals(config.getShortTextSplitMethod())
                 && !splitMethod.equals(config.getLongTextSplitMethod());
     }

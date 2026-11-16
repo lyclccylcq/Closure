@@ -22,36 +22,47 @@ import java.util.function.Predicate;
 
 /**
  * 文字转语音业务编排。
- * 负责初始化 GPT-SoVITS、合成 WAV，并交给 JavaFX 播放器播放。
+ * 负责初始化语音模型、合成 WAV，并交给 JavaFX 播放器播放。
  */
 public final class SpeechService implements AssistantSpeechService {
     private static final String WARMUP_TEXT = "工程部在线。";
     private static final int WARMUP_MAX_ATTEMPTS = 12;
     private static final long WARMUP_RETRY_DELAY_MILLIS = 5_000L;
+    private static final int QWEN_WARMUP_MAX_ATTEMPTS = 60;
+    private static final long QWEN_WARMUP_RETRY_DELAY_MILLIS = 2_000L;
 
     private final VoiceSynthesisClient ttsClient;
     private final VoiceAudioPlayer audioPlayerService;
     private final Throwable unavailableCause;
     private final Predicate<VoiceProfile> referenceAudioUsable;
+    private final boolean serverWarmsProfiles;
     private CompletableFuture<Void> initializationFuture;
+    private CompletableFuture<Void> serverWarmupFuture;
     private CompletableFuture<Void> activeSpeechFuture;
     private CompletableFuture<Void> activeSynthesisFuture;
     private long speechGeneration;
     private volatile boolean ready;
+    private volatile boolean firstPlaybackCompleted;
 
     public SpeechService(VoiceSynthesisClient ttsClient, VoiceAudioPlayer audioPlayerService) {
-        this(ttsClient, audioPlayerService,
-                profile -> Files.isRegularFile(profile.getReferenceAudioPath()));
+        this(ttsClient, audioPlayerService, false);
+    }
+
+    SpeechService(VoiceSynthesisClient ttsClient, VoiceAudioPlayer audioPlayerService, boolean serverWarmsProfiles) {
+        this(ttsClient, audioPlayerService, profile -> Files.isRegularFile(profile.getReferenceAudioPath()),
+                serverWarmsProfiles);
     }
 
     private SpeechService(
             VoiceSynthesisClient ttsClient,
             VoiceAudioPlayer audioPlayerService,
-            Predicate<VoiceProfile> referenceAudioUsable
+            Predicate<VoiceProfile> referenceAudioUsable,
+            boolean serverWarmsProfiles
     ) {
         this.ttsClient = Objects.requireNonNull(ttsClient, "ttsClient");
         this.audioPlayerService = Objects.requireNonNull(audioPlayerService, "audioPlayerService");
         this.referenceAudioUsable = Objects.requireNonNull(referenceAudioUsable, "referenceAudioUsable");
+        this.serverWarmsProfiles = serverWarmsProfiles;
         unavailableCause = null;
     }
 
@@ -60,8 +71,18 @@ public final class SpeechService implements AssistantSpeechService {
             VoiceAudioPlayer audioPlayerService,
             VoiceProfileRegistry voiceProfileRegistry
     ) {
+        this(ttsClient, audioPlayerService, voiceProfileRegistry, false);
+    }
+
+    SpeechService(
+            VoiceSynthesisClient ttsClient,
+            VoiceAudioPlayer audioPlayerService,
+            VoiceProfileRegistry voiceProfileRegistry,
+            boolean serverWarmsProfiles
+    ) {
         this(ttsClient, audioPlayerService,
-                Objects.requireNonNull(voiceProfileRegistry, "voiceProfileRegistry")::isReferenceAudioUsable);
+                Objects.requireNonNull(voiceProfileRegistry, "voiceProfileRegistry")::isReferenceAudioUsable,
+                serverWarmsProfiles);
     }
 
     private SpeechService(Throwable unavailableCause) {
@@ -69,6 +90,7 @@ public final class SpeechService implements AssistantSpeechService {
         audioPlayerService = new AudioPlayerService();
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
         referenceAudioUsable = profile -> false;
+        serverWarmsProfiles = false;
     }
 
     public static SpeechService fromEnvironment() {
@@ -77,7 +99,8 @@ public final class SpeechService implements AssistantSpeechService {
             return new SpeechService(
                     new GptSovitsClient(config),
                     new AudioPlayerService(),
-                    VoiceProfileRegistry.fromConfig(config, message -> System.out.println("GPT-SoVITS 警告：" + message))
+                    VoiceProfileRegistry.fromConfig(config, message -> System.out.println("语音服务警告：" + message)),
+                    config.isQwenTts()
             );
         } catch (RuntimeException exception) {
             return new SpeechService(exception);
@@ -86,7 +109,14 @@ public final class SpeechService implements AssistantSpeechService {
 
     @Override
     public CompletableFuture<Void> warmUp(VoiceProfile profile) {
-        return warmUp(profile, 1);
+        return serverWarmsProfiles ? awaitServerWarmup(profile) : warmUp(profile, 1);
+    }
+
+    private synchronized CompletableFuture<Void> awaitServerWarmup(VoiceProfile profile) {
+        if (serverWarmupFuture == null || serverWarmupFuture.isCompletedExceptionally()) {
+            serverWarmupFuture = warmUp(profile, 1);
+        }
+        return serverWarmupFuture;
     }
 
     public boolean isReady() {
@@ -116,14 +146,21 @@ public final class SpeechService implements AssistantSpeechService {
         }
 
         PlaybackQueue playback = new PlaybackQueue(generation);
-        CompletableFuture<Void> speechFuture = initializeOnce()
+        CompletableFuture<Void> readiness = serverWarmsProfiles ? awaitServerWarmup(profile) : initializeOnce();
+        CompletableFuture<Void> speechFuture = readiness
                 .thenCompose(unused -> {
                     if (!isCurrentSpeech(generation)) return CompletableFuture.completedFuture(null);
-                    CompletableFuture<Void> synthesis = ttsClient.synthesizeStream(new TtsRequest(
-                            speechText, "zh", profile, profile.getSpeedFactor()), playback::accept);
+                    TtsRequest request = new TtsRequest(speechText, "zh", profile, profile.getSpeedFactor());
+                    if (serverWarmsProfiles && !firstPlaybackCompleted) {
+                        // Leave the callback attached so a superseded render can discard its WAV.
+                        return ttsClient.synthesize(request).thenAccept(playback::accept)
+                                .thenCompose(done -> playback.finished())
+                                .thenRun(() -> completeFirstPlayback(generation));
+                    }
+                    CompletableFuture<Void> synthesis = ttsClient.synthesizeStream(request, playback::accept);
                     if (ttsClient.supportsStreaming()) rememberSynthesis(generation, synthesis);
                     return synthesis.whenComplete((done, error) -> {
-                        if (error != null && isCurrentSpeech(generation)) audioPlayerService.stop();
+                        if (error != null) stopPlaybackIfCurrent(generation);
                     }).thenCompose(done -> playback.finished());
                 });
 
@@ -145,16 +182,14 @@ public final class SpeechService implements AssistantSpeechService {
             ));
         }
 
-        return ttsClient.checkAvailable()
-                .thenCompose(unused -> initializeOnce())
-                .thenCompose(unused -> ttsClient.synthesize(new TtsRequest(
-                        WARMUP_TEXT,
-                        "zh",
-                        profile,
-                        profile.getSpeedFactor()
-                )))
-                .thenAccept(this::deleteAudioResult)
-                .thenRun(() -> ready = true)
+        CompletableFuture<Void> warming = ttsClient.checkAvailable();
+        if (!serverWarmsProfiles) {
+            warming = warming.thenCompose(unused -> initializeOnce())
+                    .thenCompose(unused -> ttsClient
+                            .synthesize(new TtsRequest(WARMUP_TEXT, "zh", profile, profile.getSpeedFactor()))
+                            .thenAccept(this::deleteAudioResult));
+        }
+        return warming.thenRun(() -> ready = true)
                 .handle((unused, error) -> {
                     if (error == null) {
                         return CompletableFuture.<Void>completedFuture(null);
@@ -197,20 +232,39 @@ public final class SpeechService implements AssistantSpeechService {
     private final class PlaybackQueue {
         private final long generation;
         private CompletableFuture<Void> tail = CompletableFuture.completedFuture(null);
+        private VoiceAudioStream stream;
+        private boolean streamChecked;
 
         private PlaybackQueue(long generation) { this.generation = generation; }
 
         private synchronized void accept(TtsAudioResult audio) {
-            if (!isCurrentSpeech(generation)) {
-                deleteAudioResult(audio);
-                return;
+            synchronized (SpeechService.this) {
+                if (speechGeneration != generation) {
+                    deleteAudioResult(audio);
+                    return;
+                }
+                if (!streamChecked) {
+                    streamChecked = true;
+                    if (ttsClient.supportsStreaming()) stream = audioPlayerService.openStream();
+                }
             }
-            tail = tail.thenCompose(unused -> playAndDelete(generation, audio))
+            tail = tail.thenCompose(unused -> appendAndDelete(audio))
                     // Also delete queued fragments if an earlier playback fails or is stopped.
                     .whenComplete((unused, error) -> deleteAudioResult(audio));
         }
 
-        private synchronized CompletableFuture<Void> finished() { return tail; }
+        private synchronized CompletableFuture<Void> finished() {
+            return tail.thenCompose(unused->stream==null ? CompletableFuture.completedFuture(null) : stream.finish());
+        }
+
+        private CompletableFuture<Void> appendAndDelete(TtsAudioResult audio){
+            if(stream==null) return playAndDelete(generation,audio);
+            if(!isCurrentSpeech(generation)){deleteAudioResult(audio);return CompletableFuture.completedFuture(null);}
+            if(audio instanceof FileTtsAudioResult file){
+                return stream.append(file.getAudioFile()).whenComplete((unused,error)->deleteTempAudio(file.getAudioFile()));
+            }
+            return CompletableFuture.failedFuture(new VoiceSynthesisException("暂不支持的流式音频结果类型"));
+        }
     }
 
     private synchronized CompletableFuture<Void> initializeOnce() {
@@ -236,17 +290,18 @@ public final class SpeechService implements AssistantSpeechService {
     }
 
     private CompletableFuture<Void> delayedWarmUp(VoiceProfile profile, int attempt) {
+        long delayMillis = serverWarmsProfiles ? QWEN_WARMUP_RETRY_DELAY_MILLIS : WARMUP_RETRY_DELAY_MILLIS;
         return CompletableFuture
                 .runAsync(
                         () -> {
                         },
-                        CompletableFuture.delayedExecutor(WARMUP_RETRY_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+                        CompletableFuture.delayedExecutor(delayMillis, TimeUnit.MILLISECONDS)
                 )
                 .thenCompose(unused -> warmUp(profile, attempt));
     }
 
     private boolean shouldRetryWarmUp(int attempt) {
-        return attempt < WARMUP_MAX_ATTEMPTS
+        return attempt < (serverWarmsProfiles ? QWEN_WARMUP_MAX_ATTEMPTS : WARMUP_MAX_ATTEMPTS)
                 && (initializationFuture == null || !initializationFuture.isCompletedExceptionally());
     }
 
@@ -301,6 +356,14 @@ public final class SpeechService implements AssistantSpeechService {
 
     private synchronized boolean isCurrentSpeech(long generation) {
         return speechGeneration == generation;
+    }
+
+    private synchronized void completeFirstPlayback(long generation) {
+        if (speechGeneration == generation) firstPlaybackCompleted = true;
+    }
+
+    private synchronized void stopPlaybackIfCurrent(long generation) {
+        if (speechGeneration == generation) audioPlayerService.stop();
     }
 
     private synchronized void rememberActiveSpeech(long generation, CompletableFuture<Void> speechFuture) {

@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -32,6 +33,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GptSovitsClientTest {
     private HttpServer server;
+
+    @Test
+    void qwenInitializesThroughHealthWithoutSendingSovitsWeightRequests() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        List<String> paths = Collections.synchronizedList(new ArrayList<>());
+        server.createContext("/", exchange -> {
+            paths.add(exchange.getRequestURI().getPath());
+            writeResponse(exchange, 200, "{\"backend\":\"qwen3-tts\",\"ready\":true}"
+                    .getBytes(StandardCharsets.UTF_8));
+        });
+        server.start();
+
+        new GptSovitsClient(qwenConfig()).initializeModels().get(3, TimeUnit.SECONDS);
+        assertEquals(List.of("/closure/health"), paths);
+    }
+
+    @Test
+    void qwenRejectsAnUnrelatedHttpService() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> writeResponse(exchange, 200,
+                "{\"ready\":true}".getBytes(StandardCharsets.UTF_8)));
+        server.start();
+        assertThrows(ExecutionException.class,
+                () -> new GptSovitsClient(qwenConfig()).checkAvailable().get(3, TimeUnit.SECONDS));
+    }
+
+    private GptSovitsConfig qwenConfig() {
+        Properties properties = new Properties();
+        properties.setProperty(GptSovitsConfig.PROPERTY_BACKEND, GptSovitsConfig.BACKEND_QWEN);
+        properties.setProperty(GptSovitsConfig.PROPERTY_BASE_URL, "http://127.0.0.1:" + server.getAddress().getPort());
+        properties.setProperty("gptSovits.profile.neutral.refAudioPath", "/tmp/qwen-neutral.wav");
+        properties.setProperty("gptSovits.profile.neutral.promptText", "参考文本。");
+        return GptSovitsConfig.fromProperties(properties);
+    }
 
     @AfterEach
     void stopServer() {
