@@ -27,6 +27,8 @@ public final class ChatSpeechController implements AutoCloseable {
     private final VoiceProfileRegistry voiceProfileRegistry;
     private final Consumer<String> warningSink;
     private final Throwable unavailableCause;
+    private final boolean localQwen;
+    private final Object requestLock = new Object();
 
     private CompletableFuture<Void> activeSpeechFuture;
     private CompletableFuture<Void> readyForSpeechFuture;
@@ -42,10 +44,21 @@ public final class ChatSpeechController implements AutoCloseable {
             boolean autoSpeakEnabled,
             Consumer<String> warningSink
     ) {
+        this(speechService, voiceProfileRegistry, autoSpeakEnabled, warningSink, false);
+    }
+
+    ChatSpeechController(
+            AssistantSpeechService speechService,
+            VoiceProfileRegistry voiceProfileRegistry,
+            boolean autoSpeakEnabled,
+            Consumer<String> warningSink,
+            boolean localQwen
+    ) {
         this.speechService = Objects.requireNonNull(speechService, "speechService");
         this.voiceProfileRegistry = Objects.requireNonNull(voiceProfileRegistry, "voiceProfileRegistry");
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
+        this.localQwen = localQwen;
         unavailableCause = null;
         readyForSpeechFuture = startWarmUp();
     }
@@ -56,6 +69,7 @@ public final class ChatSpeechController implements AutoCloseable {
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
+        localQwen = false;
         readyForSpeechFuture = CompletableFuture.failedFuture(unavailableCause);
     }
 
@@ -80,11 +94,13 @@ public final class ChatSpeechController implements AutoCloseable {
                     new SpeechService(
                             new GptSovitsClient(config),
                             new AudioPlayerService(),
-                            voiceProfileRegistry
+                            voiceProfileRegistry,
+                            config.isQwenTts()
                     ),
                     voiceProfileRegistry,
                     config.isAutoSpeakEnabled(),
-                    warningSink
+                    warningSink,
+                    config.isQwenTts()
             );
         } catch (RuntimeException exception) {
             return unavailable(autoSpeakEnabled, warningSink, exception);
@@ -126,6 +142,10 @@ public final class ChatSpeechController implements AutoCloseable {
 
     public CompletableFuture<Void> readyForSpeechFuture() {
         return readyForSpeechFuture;
+    }
+
+    public boolean usesLocalQwen() {
+        return localQwen;
     }
 
     public synchronized void setSpeechLifecycleListener(SpeechLifecycleListener speechLifecycleListener) {
@@ -176,11 +196,25 @@ public final class ChatSpeechController implements AutoCloseable {
         return CompletableFuture.completedFuture(null);
     }
 
+    /** A late background greeting must never cancel a foreground speech request. */
+    public CompletableFuture<Void> speakStartupGreetingIfIdle(String text) {
+        synchronized (requestLock) {
+            if (requestGeneration != 0) return CompletableFuture.completedFuture(null);
+            return speakFullTextAsync(text);
+        }
+    }
+
     public void speakWithEmotion(String speechText, SpeechEmotion emotion) {
         speakWithEmotionAsync(speechText, emotion);
     }
 
     public CompletableFuture<Void> speakWithEmotionAsync(String speechText, SpeechEmotion emotion) {
+        synchronized (requestLock) {
+            return requestSpeech(speechText, emotion);
+        }
+    }
+
+    private CompletableFuture<Void> requestSpeech(String speechText, SpeechEmotion emotion) {
         if (!isAutoSpeakEnabled()) {
             return CompletableFuture.completedFuture(null);
         }
@@ -197,7 +231,7 @@ public final class ChatSpeechController implements AutoCloseable {
             return CompletableFuture.failedFuture(cause);
         }
 
-        VoiceProfile profile = voiceProfileRegistry.get(emotion);
+        VoiceProfile profile = voiceProfileRegistry.get(SpeechProsody.emotionFor(speechText,emotion));
         if (profile == null) {
             return CompletableFuture.completedFuture(null);
         }
@@ -236,15 +270,17 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     public void stop() {
-        synchronized (this) {
-            requestGeneration++;
-            activeSpeechFuture = null;
-        }
+        synchronized (requestLock) {
+            synchronized (this) {
+                requestGeneration++;
+                activeSpeechFuture = null;
+            }
 
-        if (speechService != null) {
-            speechService.stop();
+            if (speechService != null) {
+                speechService.stop();
+            }
+            notifySpeechFinished();
         }
-        notifySpeechFinished();
     }
 
     @Override

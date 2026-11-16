@@ -491,7 +491,11 @@ public class PetWindow extends JFrame {
 
     private void showStartupSpeechBubble() {
         showSpeechBubble(STARTUP_BUBBLE_TEXT);
-        speakSpeechBubble(STARTUP_BUBBLE_TEXT);
+        if (speechController != null && speechController.usesLocalQwen()) {
+            speechController.speakStartupGreetingIfIdle(STARTUP_BUBBLE_TEXT);
+        } else {
+            speakSpeechBubble(STARTUP_BUBBLE_TEXT);
+        }
     }
 
     private void showInteractionSpeechBubble() {
@@ -957,6 +961,11 @@ public class PetWindow extends JFrame {
 
     private void speakStartupGreeting(String greeting, int attempt) {
         if (speechController == null) {
+            return;
+        }
+
+        if (speechController.usesLocalQwen()) {
+            speechController.speakStartupGreetingIfIdle(greeting);
             return;
         }
 

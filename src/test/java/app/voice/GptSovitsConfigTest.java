@@ -13,6 +13,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GptSovitsConfigTest {
     @Test
+    void qwenUsesReferenceProfilesWithoutRequiringSovitsWeights() {
+        Properties properties = requiredProperties();
+        properties.setProperty(GptSovitsConfig.PROPERTY_BACKEND, GptSovitsConfig.BACKEND_QWEN);
+        properties.remove(GptSovitsConfig.PROPERTY_GPT_WEIGHT_PATH);
+        properties.remove(GptSovitsConfig.PROPERTY_SOVITS_WEIGHT_PATH);
+
+        assertTrue(GptSovitsConfig.fromProperties(properties).isQwenTts());
+        properties.remove("gptSovits.profile.neutral.promptText");
+        assertThrows(VoiceSynthesisException.class, () -> GptSovitsConfig.fromProperties(properties));
+    }
+
+    @Test
+    void unknownBackendIsRejectedInsteadOfSilentlySelectingAnotherModel() {
+        Properties properties = requiredProperties();
+        properties.setProperty(GptSovitsConfig.PROPERTY_BACKEND, "unknown-tts");
+        assertThrows(VoiceSynthesisException.class, () -> GptSovitsConfig.fromProperties(properties));
+    }
+
+    @Test
     void existingConstructorKeepsLocalFileValidation() {
         GptSovitsConfig config = new GptSovitsConfig(
                 URI.create("http://tts.example.invalid:9880"),

@@ -63,6 +63,16 @@ class ChatSpeechControllerTest {
     }
 
     @Test
+    void directBubbleQuestionUsesQuestionVoiceWithoutNeedingModelEmotionMetadata() throws Exception {
+        FakeSpeechService speechService=new FakeSpeechService();
+        ChatSpeechController controller=controller(speechService,true,new ArrayList<>());
+        controller.speakFullText("博士，现在要不要先休息一下？");
+        assertEquals("question",speechService.spokenProfiles.getFirst().getId());
+        controller.speakFullText("我正在假装很忙，配合一下。");
+        assertEquals("neutral",speechService.spokenProfiles.getLast().getId());
+    }
+
+    @Test
     void skipsEmptySanitizedReply() throws Exception {
         FakeSpeechService speechService = new FakeSpeechService();
         ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
@@ -100,6 +110,23 @@ class ChatSpeechControllerTest {
 
         assertEquals(List.of("第一条。", "第二条。"), speechService.spokenTexts);
         assertEquals(2, speechService.stopCount);
+    }
+
+    @Test
+    void delayedStartupGreetingDoesNotStopASpeechRequestOrReplay() throws Exception {
+        FakeSpeechService speechService = new FakeSpeechService();
+        ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
+        controller.speakFullText("博士，日常朗读。");
+        controller.speakStartupGreetingIfIdle("后台启动问候。").join();
+
+        assertEquals(List.of("博士，日常朗读。"), speechService.spokenTexts);
+        assertEquals(1, speechService.stopCount);
+
+        FakeSpeechService idleService = new FakeSpeechService();
+        ChatSpeechController idleController = controller(idleService, true, new ArrayList<>());
+        idleController.speakStartupGreetingIfIdle("启动问候。");
+        idleController.speakStartupGreetingIfIdle("重复问候。").join();
+        assertEquals(List.of("启动问候。"), idleService.spokenTexts);
     }
 
     @Test

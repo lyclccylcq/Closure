@@ -25,8 +25,9 @@ public final class AssistantReplyParser {
             throw new IllegalArgumentException("displayText 缺失");
         }
 
-        String speechText = extractStringField(objectJson, "speechText");
+        String speechText = SpeechProsody.preserveQuestion(displayText,extractStringField(objectJson, "speechText"));
         SpeechEmotion declaredEmotion = SpeechEmotion.fromString(extractStringField(objectJson, "dominantEmotion"));
+        declaredEmotion = SpeechProsody.emotionFor(speechText,declaredEmotion);
         SpeechEmotion dominantEmotion = normalizeDominantEmotion(displayText + "\n" + speechText, declaredEmotion);
 
         return new AssistantReply(displayText, speechText, dominantEmotion);

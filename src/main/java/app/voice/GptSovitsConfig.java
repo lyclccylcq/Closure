@@ -14,10 +14,14 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * GPT-SoVITS 服务配置。
+ * 语音服务配置；保留旧类名和属性以兼容 GPT-SoVITS 配置。
  * 真实路径从环境变量或 config/local-voice.properties 读取，不写死在 Java 类中。
  */
 public final class GptSovitsConfig {
+    public static final String ENV_BACKEND = "CLOSURE_VOICE_BACKEND";
+    public static final String PROPERTY_BACKEND = "voice.backend";
+    public static final String BACKEND_GPT_SOVITS = "gpt-sovits";
+    public static final String BACKEND_QWEN = "qwen3-tts";
     public static final String ENV_BASE_URL = "CLOSURE_GPT_SOVITS_BASE_URL";
     public static final String ENV_REMOTE_SERVER = "CLOSURE_GPT_SOVITS_SERVER_REMOTE";
     public static final String ENV_STREAMING = "CLOSURE_GPT_SOVITS_STREAMING";
@@ -70,6 +74,7 @@ public final class GptSovitsConfig {
     private static final int DEFAULT_BATCH_SIZE = 1;
 
     private final URI baseUri;
+    private final String backend;
     private final Path gptWeightPath;
     private final Path sovitsWeightPath;
     private final VoiceProfile neutralVoiceProfile;
@@ -200,9 +205,24 @@ public final class GptSovitsConfig {
             double fragmentInterval, int seed, boolean parallelInfer, boolean splitBucket,
             int batchSize, boolean remoteServer, boolean streaming
     ) {
+        this(baseUri, gptWeightPath, sovitsWeightPath, voiceProfiles, connectTimeout, requestTimeout,
+                autoSpeakEnabled, shortTextMaxChars, shortTextSplitMethod, longTextSplitMethod,
+                fragmentInterval, seed, parallelInfer, splitBucket, batchSize, remoteServer, streaming,
+                BACKEND_GPT_SOVITS);
+    }
+
+    private GptSovitsConfig(
+            URI baseUri, Path gptWeightPath, Path sovitsWeightPath,
+            Map<SpeechEmotion, VoiceProfile> voiceProfiles,
+            Duration connectTimeout, Duration requestTimeout, boolean autoSpeakEnabled,
+            int shortTextMaxChars, String shortTextSplitMethod, String longTextSplitMethod,
+            double fragmentInterval, int seed, boolean parallelInfer, boolean splitBucket,
+            int batchSize, boolean remoteServer, boolean streaming, String backend
+    ) {
         this.baseUri = requireUri(baseUri);
-        this.gptWeightPath = requirePath(gptWeightPath, "gptWeightPath");
-        this.sovitsWeightPath = requirePath(sovitsWeightPath, "sovitsWeightPath");
+        this.backend = backend;
+        this.gptWeightPath = isQwenTts() ? null : requirePath(gptWeightPath, "gptWeightPath");
+        this.sovitsWeightPath = isQwenTts() ? null : requirePath(sovitsWeightPath, "sovitsWeightPath");
         this.voiceProfiles = normalizeVoiceProfiles(voiceProfiles);
         this.neutralVoiceProfile = requireVoiceProfile(this.voiceProfiles.get(SpeechEmotion.NEUTRAL));
         this.connectTimeout = connectTimeout == null ? DEFAULT_CONNECT_TIMEOUT : connectTimeout;
@@ -225,13 +245,17 @@ public final class GptSovitsConfig {
     }
 
     static GptSovitsConfig fromProperties(Properties localProperties) {
+        String backend = configValueOrDefault(ENV_BACKEND, PROPERTY_BACKEND, localProperties, BACKEND_GPT_SOVITS);
+        if (!BACKEND_GPT_SOVITS.equals(backend) && !BACKEND_QWEN.equals(backend)) {
+            throw new VoiceSynthesisException("不支持的语音后端：" + backend);
+        }
         String baseUrl = configValueOrDefault(ENV_BASE_URL, PROPERTY_BASE_URL, localProperties, DEFAULT_BASE_URL);
-        Path gptWeightPath = Path.of(requiredConfigValue(
+        Path gptWeightPath = BACKEND_QWEN.equals(backend) ? null : Path.of(requiredConfigValue(
                 ENV_GPT_WEIGHT_PATH,
                 PROPERTY_GPT_WEIGHT_PATH,
                 localProperties
         ));
-        Path sovitsWeightPath = Path.of(requiredConfigValue(
+        Path sovitsWeightPath = BACKEND_QWEN.equals(backend) ? null : Path.of(requiredConfigValue(
                 ENV_SOVITS_WEIGHT_PATH,
                 PROPERTY_SOVITS_WEIGHT_PATH,
                 localProperties
@@ -285,7 +309,8 @@ public final class GptSovitsConfig {
                 ),
                 configInt(ENV_BATCH_SIZE, PROPERTY_BATCH_SIZE, localProperties, DEFAULT_BATCH_SIZE),
                 configBoolean(ENV_REMOTE_SERVER, PROPERTY_REMOTE_SERVER, localProperties, false),
-                configBoolean(ENV_STREAMING, PROPERTY_STREAMING, localProperties, false)
+                configBoolean(ENV_STREAMING, PROPERTY_STREAMING, localProperties, false),
+                backend
         );
     }
 
@@ -309,9 +334,18 @@ public final class GptSovitsConfig {
                 "REF_AUDIO_PATH"
         )) && hasEnvironmentValue(profileEnvironmentName(SpeechEmotion.NEUTRAL, "PROMPT_TEXT"));
 
-        return hasEnvironmentValue(ENV_GPT_WEIGHT_PATH)
-                && hasEnvironmentValue(ENV_SOVITS_WEIGHT_PATH)
+        boolean hasBackendConfiguration = BACKEND_QWEN.equals(System.getenv(ENV_BACKEND))
+                || (hasEnvironmentValue(ENV_GPT_WEIGHT_PATH) && hasEnvironmentValue(ENV_SOVITS_WEIGHT_PATH));
+        return hasBackendConfiguration
                 && (hasLegacyNeutralEnvironment || hasProfileNeutralEnvironment);
+    }
+
+    public boolean isQwenTts() {
+        return BACKEND_QWEN.equals(backend);
+    }
+
+    public String getBackend() {
+        return backend;
     }
 
     public URI getBaseUri() {

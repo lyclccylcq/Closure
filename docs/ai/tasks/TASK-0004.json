@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0004",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "Warm local Qwen before the first spoken line",
+  "objective": "Fix audible distortion, early cutoff and pauses on the first line synthesized by local Qwen after launch. Keep the packaged opening recording independent. Wait for the actual voice backend to be ready, then buffer the first synthesized utterance ahead of consistent playback.",
+  "architecture": [
+    "Start from origin/main, preserving the offline desktop smoke constructor. Carry forward the narrowly scoped local Qwen 0.6B integration, PCM playback, question routing and pitch-preserving speed selected earlier. These previously implemented source files are a dependency of the repair.",
+    "Keep the bundled opener and other backends' normal startup behavior. Any first real Qwen speech (greeting, chat or interaction) shares one warm-up wait. The Qwen server prewarms each profile through its complete WAV endpoint's rendering path, including configured default tempo. While warming, health identifies Qwen with ready:false, and synthesis returns HTTP 503. Readiness deadlines allow the observed cold startup and recover on a later request.",
+    "Hold the first actual Qwen utterance until a complete WAV is available, then play it through one PCM stream when enabled. Return to ordinary streaming after a successful first playback. A canceled, superseded or failed request must not play or close newer audio. Suppress a late generated startup greeting if another speech request has already been issued.",
+    "Use MLX-Audio 0.6.5, which includes upstream #1116 preserving valid codec ID 0 during full sentence decode. Keep the pinned Qwen model, neutral/question/teasing profiles and pitch-preserving default speed of 0.88. Preserve the small bounded queue and one Metal worker.",
+    "Document an isolated local setup with no machine-specific settings. Checks and PR must exclude model assets, settings, voice files and credentials. User explicitly selected direct Codex implementation for this task because the configured Claude Code transport timed out."
+  ],
+  "non_goals": [
+    "No replacement, editing or repurposing of the packaged opening recording.",
+    "No migration of independent AI chat, weather, reminders, cloud infrastructure, voice model training or unrelated workflow files.",
+    "No credentials, local configuration, recorded audio, generated samples, model weights, logs with user data or actual model calls in CI."
+  ],
+  "allowed_paths": [
+    "deploy/tts/install-macos-qwen.sh",
+    "deploy/tts/prepare-qwen.py",
+    "deploy/tts/qwen-requirements.txt",
+    "deploy/tts/qwen_audio.py",
+    "deploy/tts/qwen_runtime.py",
+    "deploy/tts/serve-qwen.py",
+    "deploy/tts/start-qwen.sh",
+    "src/main/java/app/service/AssistantReplyParser.java",
+    "src/main/java/app/service/AudioPlayerService.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/service/PcmAudioStream.java",
+    "src/main/java/app/service/SpeechProsody.java",
+    "src/main/java/app/service/SpeechService.java",
+    "src/main/java/app/service/VoiceAudioPlayer.java",
+    "src/main/java/app/service/VoiceAudioStream.java",
+    "src/main/java/app/voice/GptSovitsClient.java",
+    "src/main/java/app/voice/GptSovitsConfig.java",
+    "src/test/java/app/service/AssistantReplyParserTest.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/service/PcmAudioStreamTest.java",
+    "src/test/java/app/service/SpeechServiceTest.java",
+    "src/test/java/app/voice/GptSovitsClientTest.java",
+    "src/test/java/app/voice/GptSovitsConfigTest.java",
+    ".gitignore",
+    "deploy/tts/QWEN.md",
+    "scripts/tests/test_qwen_startup.py",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/voice/GptSovitsServerProcess.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "A first Qwen greeting, click or chat request waits for actual server warm-up. A later greeting cannot displace an existing speech request. The separate recorded opener and other backends' startup stay available.",
+      "verification": "Exercise readiness, failed warm-up recovery, cancellation and competing requests with controllable Java futures, and review the PetWindow constructor and recording path."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "The first live Qwen utterance waits for a complete WAV before playback, waits for its final samples, and returns to ordinary streaming after success. A failed or superseded attempt cannot replay stale audio or count as the first successful playback.",
+      "verification": "Offline Java tests inspect whole-WAV vs streaming calls, blocked playback, completion and stale result disposal."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "The server reports warming without accepting requests, then serves valid audio after all profile and tempo warm-up. The installed dependency contains the decoder tail fix, with the same local model and profile speed.",
+      "verification": "Run the fake-engine HTTP contract test and an isolated Apple Metal smoke on the exact source using synthesized test reference clips; compare complete and streamed PCM."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Review and deliver the isolated change with trusted checks, and keep the original unfinished project and private runtime separate.",
+      "verification": "Review the full diff and test evidence. Verify the current PR checks and merged main commit and use the existing build and offline window verification."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    }
+  ],
+  "risks": [
+    "The first utterance starts after full synthesis. It can wait longer than playback of the first streamed fragment.",
+    "Offline CI uses test doubles. The local Metal smoke verifies generated audio transport and sample counts with synthetic references, with final timbre evaluated separately."
+  ],
+  "rollback": "Revert the reviewed change or use the original local project and runtime, which were preserved.",
+  "review_budget": {
+    "max_diff_bytes": 185000
+  }
+}

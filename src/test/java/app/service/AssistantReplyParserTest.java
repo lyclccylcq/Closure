@@ -12,6 +12,26 @@ class AssistantReplyParserTest {
     private final AssistantReplyParser parser = new AssistantReplyParser();
 
     @Test
+    void keepsARealQuestionWhenTheSpeechSummaryAccidentallyBecomesAnExclamation(){
+        var reply=parser.parse("""
+                {"displayText":"博士，现在要不要先休息一下？","speechText":"博士，现在先休息一下！","dominantEmotion":"NEUTRAL"}
+                """);
+        assertEquals("博士，现在要不要先休息一下？",reply.getSpeechText());
+        assertEquals(SpeechEmotion.QUESTION,reply.getDominantEmotion());
+    }
+
+    @Test
+    void genuineQuestionsUseQuestionProfileButMixedSpeechAndTeasingKeepTheirIntent(){
+        var question=parser.parse("""
+                {"displayText":"今天想喝什么？","speechText":"今天想喝什么？","dominantEmotion":"NEUTRAL"}
+                """);
+        assertEquals(SpeechEmotion.QUESTION,question.getDominantEmotion());
+        assertEquals(SpeechEmotion.NEUTRAL,SpeechProsody.emotionFor("已经修好了。还需要帮忙吗？",SpeechEmotion.NEUTRAL));
+        assertEquals(SpeechEmotion.TEASING,SpeechProsody.emotionFor("博士，你又想省维修费了吗？",SpeechEmotion.TEASING));
+        assertEquals(SpeechEmotion.NEUTRAL,SpeechProsody.emotionFor("先看日志？",SpeechEmotion.NEUTRAL));
+    }
+
+    @Test
     void parsesDisplayTextSpeechTextAndDominantEmotion() {
         AssistantReply reply = parser.parse("""
                 {
