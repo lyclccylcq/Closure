@@ -12,8 +12,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from qwen_runtime import MODEL_ID, RUNTIME, DEFAULT_SPEED_FACTOR, sentence_segments, pcm_wav, profiles, validate_request, wav_bytes
+from qwen_runtime import MODEL_ID, MODEL_REVISION, RUNTIME, DEFAULT_SPEED_FACTOR, sentence_segments, pcm_wav, profiles, validate_request, wav_bytes
 from qwen_audio import tempo
+from qwen_adapter import adapter_config_path, apply_adapter
 from stream_protocol import MAGIC
 
 END = object()
@@ -21,13 +22,14 @@ END = object()
 
 class Engine:
     """Keep model loading, lazy GPU evaluation and every generator on one thread."""
-    def __init__(self, model_path, sentence_limit, known_profiles):
+    def __init__(self, model_path, sentence_limit, known_profiles, adapter_config=None):
         self.model_path = model_path
+        self.adapter_config = adapter_config
         self.sentence_limit = sentence_limit
         self.profiles = known_profiles
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen-metal")
         self.slots = threading.BoundedSemaphore(2)
-        self.metrics = {}
+        self.metrics = {"adapter_loaded": False}
         self.loading = self.executor.submit(self._load)
 
     @property
@@ -43,6 +45,8 @@ class Engine:
         mx.set_cache_limit(512 * 1024**2)
         started = time.monotonic()
         self.model = load_model(str(self.model_path))
+        if self.adapter_config is not None:
+            self.metrics.update(apply_adapter(self.model, self.adapter_config, MODEL_ID, MODEL_REVISION))
         for name, profile in self.profiles.items():
             if not Path(profile["path"]).is_file():
                 raise FileNotFoundError(profile["path"])
@@ -214,6 +218,9 @@ def main():
     parser.add_argument("--port", type=int, default=19882)
     parser.add_argument("--model", type=Path, default=RUNTIME / "model")
     parser.add_argument("--runtime", type=Path, default=RUNTIME)
+    adapter = parser.add_mutually_exclusive_group()
+    adapter.add_argument("--adapter-config", type=Path, help="Local adapter manifest (defaults to runtime/active-adapter.json when present)")
+    adapter.add_argument("--no-adapter", action="store_true", help="Use the original base voice even when a local adapter is activated")
     parser.add_argument("--sentence-max-chars", type=int, default=80)
     args = parser.parse_args()
     if not 40 <= args.sentence_max_chars <= 160:
@@ -222,7 +229,8 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
     try:
-        server.engine = Engine(args.model, args.sentence_max_chars, profiles(args.runtime))
+        selected_adapter = adapter_config_path(args.runtime, args.adapter_config, args.no_adapter)
+        server.engine = Engine(args.model, args.sentence_max_chars, profiles(args.runtime), selected_adapter)
         signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
 
         def watch_model():

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0005",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Load the locally fine-tuned Qwen voice before warm-up",
+  "objective": "Use the local Qwen talker adapter the user reported as improved after an A/B listening trial, while retaining the original base model as an explicit fallback and preserving complete first-utterance playback.",
+  "architecture": [
+    "The user temporarily disabled Claude implementation; Codex implements this task directly and performs the same head-bound checks, review, CI and delivery gates. Work from current origin/main in an isolated managed checkout. Preserve the legacy checkout and independent AI/reminder changes.",
+    "Add a stdlib-validated local JSON manifest and lazy MLX adapter loader for the pinned 0.6B Base 8-bit model. Validate format, pinned model id/revision, bounded rank/alpha, exact q/v targets, a contained safetensors file and its SHA256, then exact tensor names, shapes, floating dtypes and finite values. Do not execute external Python, trust remote model code or change the base model files.",
+    "Use the same native-dtype residual LoRA math as the successful private trial: a frozen quantized base plus float32 q/v adapter projections cast back to the base result dtype. Apply only to talker.model, before warming all three reference profiles on the existing single Metal executor. Keep the code predictor and speech codec unchanged.",
+    "Auto-select runtime/active-adapter.json only when present. Support explicit --adapter-config and mutually exclusive --no-adapter. Requested but invalid/missing adapters fail startup; never silently report the tuned voice while using the base. Health reports safe adapter identity/checksum metadata and ready remains false until all adapted profiles finish warm-up. No activation manifest means unchanged base inference.",
+    "Keep the user-specific export, binary adapters, audio, generated samples and runtime activation outside Git. After the reviewed merge passes CI and clean delivery checks, install the saved trial adapter into a versioned local runtime directory and activate it for the normal runnable copy. Record the original local configuration for rollback. No Java changes are required."
+  ],
+  "non_goals": [
+    "No additional training, new model family, cloud resources, fees, conversation-model changes or unrelated product changes.",
+    "No real model calls or audio/model data in CI. Do not publish personal paths, transcripts, weights or activation files.",
+    "Do not merge adapters into or requantize the base weights; do not change tempo, decoding, segmentation or the existing first-utterance playback gate."
+  ],
+  "allowed_paths": [
+    "deploy/tts/qwen_adapter.py",
+    "deploy/tts/serve-qwen.py",
+    "deploy/tts/QWEN.md",
+    "scripts/tests/test_qwen_adapter.py"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "A compatible checked local adapter can be loaded before warm-up, using exactly the validated main-talker q/v residual math without modifying base weight files.",
+      "verification": "Review loader scope and math, run manifest rejection tests and a local fresh-process Metal synthesis against the exported trial adapter; compare the same single-sentence output with the successful trial."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Missing optional activation preserves base behavior; explicit opt-out restores the base; a requested bad adapter fails clearly without synthesis or silent fallback.",
+      "verification": "Offline tests cover activation selection, broken links, base mismatch, unsafe paths and changed weights; engine test verifies adapter failure prevents warm-up and readiness."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "All three voices warm only after adapter loading, health identifies the loaded adapter, and existing complete-WAV/CTTS1 speech paths and cold readiness continue to work.",
+      "verification": "Offline loading-order and cold HTTP tests plus a local ephemeral-port Metal smoke for health, first full WAV and multi-sentence framed audio."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "The source change is portable and contains no private training/runtime data. Document local activation and rollback. Preserve the current project checks, build and offline desktop startup.",
+      "verification": "Review the full scoped diff and artifact inventory, run the frozen checks, required PR/main CI and clean merged delivery checks before activating the normal local runnable copy."
+    }
+  ],
+  "checks": [
+    {"id": "CHECK-1", "command": "git diff --check", "required": true},
+    {"id": "CHECK-2", "command": "python3 scripts/ai_workflow.py validate", "required": true},
+    {"id": "CHECK-3", "command": "python3 -m unittest discover -s scripts/tests -v", "required": true},
+    {"id": "CHECK-4", "command": "./mvnw -B -Djava.awt.headless=true test", "required": true}
+  ],
+  "risks": [
+    "The pilot uses a small single-speaker dataset. The user confirmed an improvement in the trial, not acceptance of every sentence or the final integrated app.",
+    "MLX execution must stay on the single existing Metal worker. Hosted CI checks offline contracts only; the host separately verifies actual weights and speech transport.",
+    "A malformed activation fails startup intentionally. --no-adapter and removing the local activation manifest retain the original pinned base voice."
+  ],
+  "rollback": "Launch the local server with --no-adapter or remove runtime/active-adapter.json and restart Closure. Keep the base model and reference audio unchanged. Revert the scoped source commit if required.",
+  "review_budget": {"max_diff_bytes": 100000}
+}
