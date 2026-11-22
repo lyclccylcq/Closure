@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>app.closure.weather-location</string>
+    <key>CFBundleExecutable</key><string>closure-location</string>
+    <key>CFBundleName</key><string>ClosureLocation</string>
+    <key>CFBundleDisplayName</key><string>可露天气定位</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>LSUIElement</key><true/>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>启动时获取当前位置，并将坐标发送给 Open-Meteo 查询当地天气；不记录定位历史。</string>
+    <key>NSLocationUsageDescription</key>
+    <string>启动时获取当前位置，并将坐标发送给 Open-Meteo 查询当地天气；不记录定位历史。</string>
+</dict>
+</plist>

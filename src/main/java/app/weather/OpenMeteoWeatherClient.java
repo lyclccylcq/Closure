@@ -31,6 +31,7 @@ public final class OpenMeteoWeatherClient implements WeatherClient {
 
     private final WeatherConfig config;
     private final HttpClient httpClient;
+    private final WeatherLocationProvider locationProvider;
 
     public OpenMeteoWeatherClient(WeatherConfig config) {
         this(config, HttpClient.newBuilder()
@@ -39,14 +40,23 @@ public final class OpenMeteoWeatherClient implements WeatherClient {
     }
 
     OpenMeteoWeatherClient(WeatherConfig config, HttpClient httpClient) {
+        this(config, httpClient, locationProvider(config));
+    }
+
+    OpenMeteoWeatherClient(WeatherConfig config, HttpClient httpClient, WeatherLocationProvider locationProvider) {
         this.config = Objects.requireNonNull(config, "config");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+        this.locationProvider = Objects.requireNonNull(locationProvider, "locationProvider");
     }
 
     @Override
     public CompletableFuture<WeatherSnapshot> currentWeather() {
+        return locationProvider.currentLocation().thenCompose(this::weatherAt);
+    }
+
+    private CompletableFuture<WeatherSnapshot> weatherAt(WeatherLocation location) {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(forecastUri())
+                .uri(forecastUri(location))
                 .timeout(config.requestTimeout())
                 .GET()
                 .build();
@@ -54,12 +64,16 @@ public final class OpenMeteoWeatherClient implements WeatherClient {
         return httpClient
                 .sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(this::requireOkResponse)
-                .thenApply(this::parseSnapshot);
+                .thenApply(json -> parseSnapshot(json, location));
     }
 
     URI forecastUri() {
-        String query = "latitude=" + config.latitude()
-                + "&longitude=" + config.longitude()
+        return forecastUri(fixedLocation());
+    }
+
+    URI forecastUri(WeatherLocation location) {
+        String query = "latitude=" + location.latitude()
+                + "&longitude=" + location.longitude()
                 + "&current=" + urlEncode(CURRENT_VARIABLES)
                 + "&daily=" + urlEncode(DAILY_VARIABLES)
                 + "&timezone=auto"
@@ -69,11 +83,15 @@ public final class OpenMeteoWeatherClient implements WeatherClient {
     }
 
     WeatherSnapshot parseSnapshot(String json) {
+        return parseSnapshot(json, fixedLocation());
+    }
+
+    WeatherSnapshot parseSnapshot(String json, WeatherLocation location) {
         String currentObject = object(json, "current");
         String dailyObject = object(json, "daily");
 
         return new WeatherSnapshot(
-                config.locationName(),
+                location.name(),
                 numberField(currentObject, "temperature_2m"),
                 numberField(currentObject, "apparent_temperature"),
                 (int) numberField(currentObject, "weather_code"),
@@ -84,6 +102,21 @@ public final class OpenMeteoWeatherClient implements WeatherClient {
                 firstArrayNumber(dailyObject, "precipitation_probability_max"),
                 firstArrayNumber(dailyObject, "precipitation_sum")
         );
+    }
+
+    private WeatherLocation fixedLocation() {
+        if (config.locationMode() != WeatherConfig.LocationMode.FIXED) {
+            throw new WeatherException("自动天气位置尚未解析");
+        }
+        return new WeatherLocation(config.latitude(), config.longitude(), config.locationName());
+    }
+
+    private static WeatherLocationProvider locationProvider(WeatherConfig config) {
+        if (config.locationMode() == WeatherConfig.LocationMode.AUTO) {
+            return new MacOsWeatherLocationProvider(config.locationHelper(), config.locationTimeout());
+        }
+        WeatherLocation location = new WeatherLocation(config.latitude(), config.longitude(), config.locationName());
+        return () -> CompletableFuture.completedFuture(location);
     }
 
     private String requireOkResponse(HttpResponse<String> response) {
