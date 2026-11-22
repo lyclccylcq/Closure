@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0006",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Use macOS current location for startup weather",
+  "objective": "Replace the fixed default weather city with a one-shot macOS system-location lookup at startup, using the same resolved coordinates and city label for the weather request and greeting. The user selected Mac system location and knows first use requires system authorization.",
+  "architecture": [
+    "Reuse the current clean managed checkout at the reviewed main merge. The user temporarily disabled Claude; Codex directly implements and performs the same head-bound review, CI, merge and delivery gates. Preserve the original checkout, current fine-tuned TTS and unrelated local business edits.",
+    "Introduce a validated WeatherLocation and asynchronous provider. Default environment configuration uses auto native location and ignores legacy fixed coordinates/name. Explicit fixed mode preserves manual coordinates and existing five-argument WeatherConfig callers. Never silently substitute the old city when native location fails.",
+    "Bundle a small one-shot Swift/Core Location app with a usage description. Launch the bundle through macOS Launch Services so the system owns authorization. Request city-level accuracy once, reject stale/invalid locations, reverse-geocode only a locality name, and terminate on success, denial or timeout. Do not read/modify privacy databases, collect addresses or run continuous tracking.",
+    "Use a bounded versioned result protocol through an owner-only short-lived temporary directory; remove the result after reading and never log coordinates. The Java caller runs outside the UI thread with a deadline. No IP geolocation fallback or additional commercial service is used.",
+    "Resolve each weather lookup before building the Open-Meteo URI, bind its resulting snapshot label to that exact resolved point, and retain existing unavailable-weather greeting on failure. A native failure must prevent any forecast request for fabricated/legacy coordinates.",
+    "After exact-head CI, merge, main CI and clean build/startup checks, install the native helper and update only weather sources in the actual runnable copy, preserving user AI settings, tuned voice activation and the normal launcher. First-use system consent remains the user's OS decision."
+  ],
+  "non_goals": [
+    "No Claude implementation calls, additional model training, cloud resources, fees or changes to the tuned voice, chat model, reminders, greeting personality or speech playback.",
+    "No actual system location or network/model calls in CI, no private coordinates or local configuration in Git, no stored location history or permission bypass.",
+    "No continuous location monitoring, other-platform native implementation or broad application packaging migration."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/weather/WeatherConfig.java",
+    "src/main/java/app/weather/WeatherLocation.java",
+    "src/main/java/app/weather/WeatherLocationProvider.java",
+    "src/main/java/app/weather/MacOsWeatherLocationProvider.java",
+    "src/main/java/app/weather/OpenMeteoWeatherClient.java",
+    "src/test/java/app/weather/WeatherConfigTest.java",
+    "src/test/java/app/weather/MacOsWeatherLocationProviderTest.java",
+    "src/test/java/app/weather/OpenMeteoWeatherClientTest.java",
+    "deploy/location/ClosureLocation.swift",
+    "deploy/location/Info.plist",
+    "deploy/location/install-macos-location.sh",
+    "config/local-weather.example.properties",
+    "README.md"
+  ],
+  "acceptance_criteria": [
+    {"id": "AC-1", "requirement": "Automatic weather uses the current native coordinates and locality, re-resolves on later lookups, and cannot use stale configured coordinates or label.", "verification": "Offline config and HTTP integration tests with two different location results; review the single resolved-location flow."},
+    {"id": "AC-2", "requirement": "The Mac helper builds as a local permission-owning app, requests one location with a timeout and city-only reverse geocoding, and has no persistent location history or permission bypass.", "verification": "Review Swift, usage plist and installer; compile/sign/verify on this Mac and exercise real authorization/location when allowed. Report any required OS action honestly."},
+    {"id": "AC-3", "requirement": "Denied, unavailable, invalid, failed or timed-out native lookup does not block the UI or forecast an unrelated city. Explicit fixed mode remains usable.", "verification": "Fake-process lifetime/protocol/cleanup tests, asynchronous forecast gating tests and existing greeting fallback tests; no live native or network calls in CI."},
+    {"id": "AC-4", "requirement": "Document native setup, authorization and manual override. Keep the project build/startup and current tuned voice working in the delivered application.", "verification": "Complete scoped review, frozen checks, PR/main CI and clean merged delivery; install in the normal runnable copy and check native weather plus retained TTS activation."}
+  ],
+  "checks": [
+    {"id": "CHECK-1", "command": "git diff --check", "required": true},
+    {"id": "CHECK-2", "command": "python3 scripts/ai_workflow.py validate", "required": true},
+    {"id": "CHECK-3", "command": "python3 -m unittest discover -s scripts/tests -v", "required": true},
+    {"id": "CHECK-4", "command": "./mvnw -B -Djava.awt.headless=true test", "required": true}
+  ],
+  "risks": [
+    "System location is subject to macOS authorization, enabled services and a usable device location. Unavailability must be visible as no current weather, never a guessed old city.",
+    "The helper requires the macOS Swift SDK for local installation. CI validates Java contracts without collecting any real location.",
+    "The user controls the first system permission dialog. Engineering verification and delivered runtime state are recorded separately from product acceptance."
+  ],
+  "rollback": "Set weather.locationMode=fixed with explicit latitude/longitude/name to use a chosen city, or revert the scoped source commit. Preserve the helper and private settings backup; the tuned TTS model and activation remain unchanged.",
+  "review_budget": {"max_diff_bytes": 120000}
+}

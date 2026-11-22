@@ -125,21 +125,28 @@ gptSovits.server.autoStart=true
 
 ### 天气问候
 
-默认按堪培拉配置。需要修改城市时，复制：
+Mac 默认在启动时通过系统定位获取当前位置，再将坐标发送给 Open-Meteo 查询当地天气。第一次使用会出现“可露天气定位”的系统定位授权；只查询一次，不持续跟踪或保存定位历史。
+
+本地安装定位组件（需要 Xcode Command Line Tools 中的 Swift 编译器）：
 
 ```bash
-cp config/local-weather.example.properties config/local-weather.properties
+bash deploy/location/install-macos-location.sh
 ```
 
-示例：
+组件安装在用户的 `~/Library/Application Support/Closure/Location/`，独立于项目目录，切换工作副本不需要重复授权。
+
+定位被拒绝、服务关闭或暂时不可用时，问候会说明天气暂不可用，不会继续播报旧城市天气。可以在 macOS“系统设置 → 隐私与安全性 → 定位服务”中调整授权。
+
+默认无需填写城市和坐标。需要使用手动固定位置时，在 `config/local-weather.properties` 中明确设置模式及坐标，例如：
 
 ```properties
-weather.locationName=堪培拉
-weather.latitude=-35.2809
-weather.longitude=149.1300
+weather.locationMode=fixed
+weather.locationName=你选择的城市
+weather.latitude=-33.8688
+weather.longitude=151.2093
 ```
 
-天气模块使用当天概况生成短提醒，不会把湿度、风速等详细数据堆到气泡里。启动问候会等待语音模型暖机完成后再显示和朗读。
+`weather.locationMode=auto` 恢复系统定位；旧配置中的坐标和城市名不会覆盖自动定位。其他平台可使用 `fixed` 模式。天气模块使用当天概况生成短提醒，不会把湿度、风速等详细数据堆到气泡里。启动问候会等待语音模型暖机完成后再显示和朗读。
 
 ---
 
