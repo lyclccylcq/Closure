@@ -14,9 +14,19 @@ including the first frame and EOS, rejects source leakage across splits, and
 requires the pinned `model-source.json` created by `prepare-qwen.py` next to the
 model directory. Private data, generated audio and weights belong outside Git.
 
+Prepare an independent full-ICL feature cache matching the deployed service.
+The source directory also supplies its existing `manifest-full.jsonl` and
+canonical `reference.json`; original audio and train/validation IDs stay intact.
+
 ```bash
 python deploy/tts/qwen_joint_training.py \
-  --model /path/to/runtime/model --work-dir /path/to/prepared-experiment \
+  --model /path/to/runtime/model --work-dir /path/to/original-experiment \
+  prepare-icl --output /path/to/new-icl-features
+```
+
+```bash
+python deploy/tts/qwen_joint_training.py \
+  --model /path/to/runtime/model --work-dir /path/to/new-icl-features \
   --memory-gib 8 --frame-batch 16 train \
   --output /path/to/new-independent-candidate --candidate-id joint-candidate \
   --rank 32 --alpha 64 --steps 99 --eval-every 11
@@ -34,7 +44,7 @@ Fresh-process evaluation uses the normal checksum/layout-validated loader:
 
 ```bash
 python deploy/tts/qwen_joint_training.py \
-  --model /path/to/runtime/model --work-dir /path/to/prepared-experiment \
+  --model /path/to/runtime/model --work-dir /path/to/new-icl-features \
   inspect --adapter /path/to/candidate/adapter.json --output /path/to/evaluation.json
 ```
 

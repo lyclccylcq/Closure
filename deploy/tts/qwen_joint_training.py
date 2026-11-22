@@ -1,6 +1,6 @@
 """Local MLX joint-talker experiment. Never imports MLX or reads audio in CI.
 
-Inputs are immutable prepared x-vector teacher features plus all 16 codec IDs.
+Inputs are immutable prepared native teacher features plus all 16 codec IDs.
 Only explicit v2 LoRA arrays change. This is not full-parameter official SFT.
 """
 import argparse
@@ -220,6 +220,53 @@ def manifest(output, ident, rank, alpha):
             "weights": weights.name, "sha256": digest(weights)}
 
 
+def prepare_icl(args):
+    """Match the deployed full-ICL prefill, retaining the original source split."""
+    import shutil
+    from mlx_audio.tts.utils import load_model
+    from mlx_audio.utils import load_audio
+    work, output = args.work_dir.resolve(strict=True), args.output.resolve()
+    if output.is_relative_to(work) or work.is_relative_to(output) or output.is_relative_to(args.model.resolve()):
+        raise ValueError("Prepared output must be independent of source/base")
+    old_rows = load_index(work)
+    source = {row["id"]: row for row in (json.loads(line) for line in
+              (work / "manifest-full.jsonl").read_text().splitlines() if line.strip())}
+    reference = json.loads((work / "reference.json").read_text())
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    (output / "features").mkdir()
+    (output / "codecs").mkdir()
+    model = load_model(str(args.model.resolve()))
+    audio = load_audio(reference["audio"], sample_rate=model.sample_rate)
+    rows = []
+    for old in old_rows:
+        if source[old["id"]]["split"] != old["split"]:
+            raise ValueError("Source manifest and prepared split disagree")
+        codes = mx.array(np.load(work / "codecs" / (old["id"] + ".npy"), allow_pickle=False), dtype=mx.int32)
+        prefix, trailing, pad, _ = model._prepare_icl_generation_inputs(
+            text=source[old["id"]]["text"], ref_audio=audio, ref_text=reference["text"], language="chinese")
+        if trailing.shape[1] != 1:
+            raise ValueError("Expected the deployed full-text ICL layout")
+        embeds = model.talker.get_input_embeddings()(codes[:, 0][None, :])
+        for i in range(15):
+            embeds = embeds + model.talker.code_predictor.codec_embedding[i](codes[:, i + 1][None, :])
+        inputs = mx.concatenate([prefix, embeds + pad], axis=1)
+        labels = mx.concatenate([codes[:, 0], mx.array([model.config.talker_config.codec_eos_token_id])])
+        mx.eval(inputs, labels)
+        feature = output / "features" / (old["id"] + ".npz")
+        np.savez(feature, inputs=np.asarray(inputs.astype(mx.float32)), targets=np.asarray(labels),
+                 offset=np.array(prefix.shape[1] - 1, dtype=np.int32))
+        shutil.copy2(work / "codecs" / (old["id"] + ".npy"), output / "codecs" / (old["id"] + ".npy"))
+        rows.append({**old, "feature_path": str(feature), "prefix_tokens": prefix.shape[1],
+                     "dtype": "float32-storage-native-bf16", "conditioning": "full-icl"})
+        del inputs, labels, codes, prefix, embeds
+        mx.clear_cache()
+    write_json(output / "feature-index.json", rows)
+    write_json(output / "preparation.json", {"source_index_sha256": digest(work / "feature-index.json"),
+               "conditioning": "native full-ICL with the existing canonical reference", "clips": len(rows),
+               "source_split_preserved": True, "source_audio_modified": False})
+    print(json.dumps({"status": "ICL_FEATURES_PREPARED", "clips": len(rows)}))
+
+
 def train(args):
     from mlx_audio.tts.utils import load_model
     work, output = args.work_dir.resolve(strict=True), args.output.resolve()
@@ -248,6 +295,7 @@ def train(args):
               "steps": args.steps, "lr": args.lr, "seed": args.seed, "residual_frames_per_step": args.frame_batch,
               "train_clips": len(training), "validation_clips": len(held_out), "trainable_parameters": count,
               "feature_index_sha256": digest(work / "feature-index.json"), "base_model_id": MODEL_ID,
+              "conditioning": sorted({row.get("conditioning", "legacy-xvector") for row in rows}),
               "base_revision": MODEL_REVISION, "objective": "main_all_frames_and_eos + 0.3 * all_15_residual_codebooks",
               "validation": "all frames/codebooks of held-out source clips", "memory_limit_gib": args.memory_gib}
     write_json(output / "config.json", config)
@@ -341,6 +389,8 @@ def main():
     parser.add_argument("--memory-gib", type=float, default=8)
     parser.add_argument("--frame-batch", type=int, default=16)
     commands = parser.add_subparsers(dest="command", required=True)
+    p = commands.add_parser("prepare-icl")
+    p.add_argument("--output", type=Path, required=True)
     p = commands.add_parser("train")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--candidate-id", default="joint-local-candidate")
@@ -371,7 +421,7 @@ def main():
     mx.set_default_device(mx.gpu)
     mx.set_memory_limit(int(args.memory_gib * 1024**3))
     mx.set_cache_limit(256 * 1024**2)
-    {"train": train, "inspect": inspect_candidate}[args.command](args)
+    {"prepare-icl": prepare_icl, "train": train, "inspect": inspect_candidate}[args.command](args)
 
 
 if __name__ == "__main__":

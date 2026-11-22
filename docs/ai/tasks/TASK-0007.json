@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0007",
-  "spec_version": 1,
+  "spec_version": 2,
   "status": "READY",
   "title": "Train an expanded joint Qwen voice adapter on the local Mac",
   "objective": "Keep the pinned Qwen3-TTS 0.6B base and current source-level train/validation split, expand rank-32 LoRA coverage in both talker and code predictor, and train main and residual codebook objectives together. Deliver a validated independent candidate and same-settings listening comparisons without claiming subjective improvement or silently replacing the active voice.",
   "architecture": [
     "Reuse the clean managed checkout at the previous reviewed main merge. Codex directly implements because the user temporarily disabled Claude. Preserve original workspace changes, active adapter, private settings and weather delivery.",
     "Introduce a versioned joint adapter layout covering q/k/v/o attention projections and gate/up/down MLP projections in the talker backbone and code predictor backbone. Retain exact legacy v1 q/v loading. Validate pinned base, layout, bounded local weights, checksum, exact tensor keys/shapes and finite values before warm-up.",
-    "Provide a local-only MLX trainer with lazy optional dependencies. Reuse immutable prepared x-vector teacher inputs and all 16 source codec targets. Keep embeddings, projection, speaker encoder, acoustic codec and base weights frozen. Joint loss is main codebook/EOS cross entropy plus 0.3 times residual codebook cross entropy, aligned to inference conditioning.",
+    "Provide a local-only MLX trainer with lazy optional dependencies. Preserve the original source clips, split and all 16 codec targets; prepare independent immutable teacher inputs through the deployed native full-ICL prefill and existing canonical reference. The first expanded x-vector candidate passed token metrics but failed real warm-up, so its artifacts remain a rejected experiment. Keep embeddings, projection, speaker encoder, acoustic codec and base weights frozen. Joint loss is main codebook/EOS cross entropy plus 0.3 times residual codebook cross entropy, aligned to inference conditioning.",
     "Batch a bounded deterministic sample of audio frames for the residual objective to stay within an 8 GiB MLX allocation ceiling. Use only train clips for optimization, held-out source clips for checkpoint selection, finite-gradient and nonzero-update checks for both branches, and fresh-process checkpoint reload verification.",
     "Train an independent rank-32 candidate locally, evaluate current v1 and new v2 on identical held-out examples, and synthesize fixed unseen Chinese questions, ordinary speech and teasing phrases using identical references, seeds and tempo. Record objective metrics separately from perceptual acceptance; keep the production adapter unchanged pending listening feedback.",
     "Run offline contracts and normal project checks, publish truthful Codex implementation evidence, and complete exact-head PR CI, merge, main CI and clean merged build/window startup. Real weights, audio, transcripts and model execution remain local and outside Git/CI."
