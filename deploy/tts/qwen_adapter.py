@@ -11,6 +11,33 @@ import re
 
 FORMAT = "closure-qwen-lora-v1"
 TARGETS = ("q_proj", "v_proj")
+JOINT_FORMAT = "closure-qwen-lora-v2"
+JOINT_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")
+JOINT_SCOPES = ("talker.model", "talker.code_predictor.model")
+
+
+def joint_module_path(path):
+    """Only transformer attention/MLP projections, never embeddings or codec."""
+    return bool(re.fullmatch(
+        r"(?:model|code_predictor\.model)\.layers\.[0-9]+\."
+        r"(?:self_attn\.(?:q_proj|k_proj|v_proj|o_proj)|mlp\.(?:gate_proj|up_proj|down_proj))", path))
+
+
+def adapter_modules(model, adapter_format):
+    if adapter_format not in (FORMAT, JOINT_FORMAT):
+        raise ValueError("Unsupported adapter format")
+    import mlx.nn as nn
+    root = model.talker.model if adapter_format == FORMAT else model.talker
+    layers = []
+    for path, layer in root.named_modules():
+        selected = path.rsplit(".", 1)[-1] in TARGETS if adapter_format == FORMAT else joint_module_path(path)
+        if selected and isinstance(layer, (nn.Linear, nn.QuantizedLinear)):
+            layers.append((path, layer))
+    if not layers or (adapter_format == JOINT_FORMAT and not all(
+            any(path.startswith(prefix) for path, _ in layers)
+            for prefix in ("model.layers.", "code_predictor.model.layers."))):
+        raise ValueError("The base model has no compatible adapter backbones")
+    return root, layers
 
 
 def adapter_config_path(runtime, explicit=None, disabled=False):
@@ -28,7 +55,7 @@ def read_adapter_config(path, model_id, revision):
     if not path.is_file() or path.stat().st_size > 16384:
         raise ValueError("Expected a local adapter manifest smaller than 16 KiB")
     config = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(config, dict) or config.get("format") != FORMAT:
+    if not isinstance(config, dict) or config.get("format") not in (FORMAT, JOINT_FORMAT):
         raise ValueError("Unsupported Qwen adapter format")
     if config.get("base_model_id") != model_id or config.get("base_model_revision") != revision:
         raise ValueError("Qwen adapter requires a different pinned base model")
@@ -39,15 +66,18 @@ def read_adapter_config(path, model_id, revision):
         raise ValueError("Invalid adapter rank")
     if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(alpha) or not 0 < alpha <= 256:
         raise ValueError("Invalid adapter scale")
-    if config.get("targets") != list(TARGETS):
-        raise ValueError("Only the reviewed talker q/v adapter layout is supported")
+    joint = config["format"] == JOINT_FORMAT
+    if config.get("targets") != list(JOINT_TARGETS if joint else TARGETS):
+        raise ValueError("Unsupported adapter target layout")
+    if joint and config.get("scopes") != list(JOINT_SCOPES):
+        raise ValueError("Joint adapters must include both reviewed backbones")
     weights = config.get("weights")
     if not isinstance(weights, str) or not weights or Path(weights).is_absolute():
         raise ValueError("Adapter weights must be relative to their local manifest")
     weights = (path.parent / weights).resolve(strict=True)
     if not weights.is_relative_to(path.parent) or weights.suffix != ".safetensors" or not weights.is_file():
         raise ValueError("Adapter weights must be a safetensors file inside the manifest directory")
-    if not 0 < weights.stat().st_size <= 64 * 1024**2:
+    if not 0 < weights.stat().st_size <= (256 if joint else 64) * 1024**2:
         raise ValueError("Invalid adapter weight file size")
     digest = config.get("sha256")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -82,11 +112,9 @@ def apply_adapter(model, manifest, model_id, revision):
             delta = (x.astype(mx.float32) @ self.lora_a.T @ self.lora_b.T) * (config["alpha"] / config["rank"])
             return result + delta.astype(result.dtype)
 
-    backbone = model.talker.model
+    backbone, selected_layers = adapter_modules(model, config["format"])
     layers, expected = [], {}
-    for path, layer in backbone.named_modules():
-        if path.rsplit(".", 1)[-1] not in TARGETS or not isinstance(layer, (nn.Linear, nn.QuantizedLinear)):
-            continue
+    for path, layer in selected_layers:
         if isinstance(layer, nn.QuantizedLinear):
             out_features = layer.scales.shape[0]
             in_features = layer.weight.shape[-1] * (32 // layer.bits)
@@ -112,4 +140,5 @@ def apply_adapter(model, manifest, model_id, revision):
     backbone.update_modules(tree_unflatten(replacements))
     model.eval()
     return {"adapter_loaded": True, "adapter_id": config["id"], "adapter_sha256": config["sha256"],
-            "adapter_rank": config["rank"], "adapter_layers": len(replacements)}
+            "adapter_rank": config["rank"], "adapter_layers": len(replacements),
+            "adapter_format": config["format"]}
