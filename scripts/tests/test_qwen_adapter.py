@@ -86,6 +86,29 @@ class AdapterManifestTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.read()
 
+    def test_joint_manifest_requires_both_backbones_and_exact_targets(self):
+        self.config.update(format=qwen_adapter.JOINT_FORMAT, rank=32, alpha=64,
+                           targets=list(qwen_adapter.JOINT_TARGETS), scopes=list(qwen_adapter.JOINT_SCOPES))
+        self.write()
+        self.assertEqual(self.read()["format"], qwen_adapter.JOINT_FORMAT)
+        for key, value in (("scopes", ["talker.model"]), ("scopes", ["speaker_encoder"]),
+                           ("targets", ["q_proj", "v_proj"])):
+            with self.subTest(key=key, value=value):
+                original = self.config[key]
+                self.config[key] = value
+                self.write()
+                with self.assertRaises(ValueError):
+                    self.read()
+                self.config[key] = original
+
+    def test_joint_paths_cannot_include_embeddings_heads_or_other_networks(self):
+        for name in ("model.layers.0.self_attn.q_proj", "code_predictor.model.layers.4.mlp.down_proj"):
+            self.assertTrue(qwen_adapter.joint_module_path(name))
+        for name in ("model.codec_embedding", "speaker_encoder.layers.0.self_attn.q_proj",
+                     "codec_head", "code_predictor.lm_head.0", "model.layers.0.mlp.unreviewed",
+                     "model.layers.0.self_attn.q_proj.base", "model.layers.-1.self_attn.q_proj"):
+            self.assertFalse(qwen_adapter.joint_module_path(name))
+
     def test_rejects_absolute_escaping_and_linked_outside_weights(self):
         outside = self.root.parent / (self.root.name + "-outside.safetensors")
         outside.write_bytes(b"outside")

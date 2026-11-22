@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0007",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Train an expanded joint Qwen voice adapter on the local Mac",
+  "objective": "Keep the pinned Qwen3-TTS 0.6B base and current source-level train/validation split, expand rank-32 LoRA coverage in both talker and code predictor, and train main and residual codebook objectives together. Deliver a validated independent candidate and same-settings listening comparisons without claiming subjective improvement or silently replacing the active voice.",
+  "architecture": [
+    "Reuse the clean managed checkout at the previous reviewed main merge. Codex directly implements because the user temporarily disabled Claude. Preserve original workspace changes, active adapter, private settings and weather delivery.",
+    "Introduce a versioned joint adapter layout covering q/k/v/o attention projections and gate/up/down MLP projections in the talker backbone and code predictor backbone. Retain exact legacy v1 q/v loading. Validate pinned base, layout, bounded local weights, checksum, exact tensor keys/shapes and finite values before warm-up.",
+    "Provide a local-only MLX trainer with lazy optional dependencies. Reuse immutable prepared x-vector teacher inputs and all 16 source codec targets. Keep embeddings, projection, speaker encoder, acoustic codec and base weights frozen. Joint loss is main codebook/EOS cross entropy plus 0.3 times residual codebook cross entropy, aligned to inference conditioning.",
+    "Batch a bounded deterministic sample of audio frames for the residual objective to stay within an 8 GiB MLX allocation ceiling. Use only train clips for optimization, held-out source clips for checkpoint selection, finite-gradient and nonzero-update checks for both branches, and fresh-process checkpoint reload verification.",
+    "Train an independent rank-32 candidate locally, evaluate current v1 and new v2 on identical held-out examples, and synthesize fixed unseen Chinese questions, ordinary speech and teasing phrases using identical references, seeds and tempo. Record objective metrics separately from perceptual acceptance; keep the production adapter unchanged pending listening feedback.",
+    "Run offline contracts and normal project checks, publish truthful Codex implementation evidence, and complete exact-head PR CI, merge, main CI and clean merged build/window startup. Real weights, audio, transcripts and model execution remain local and outside Git/CI."
+  ],
+  "non_goals": [
+    "No Claude calls, cloud GPU use, new fees, model-size migration, full-parameter retraining, raw audio collection or changes to greeting/weather/chat behavior.",
+    "No real model, audio or network calls in CI. No committed private samples, weights, source transcripts, configurations or local deployment identities.",
+    "No automatic assertion of subjective voice improvement and no silent activation of the candidate in the normal voice service."
+  ],
+  "allowed_paths": [
+    "deploy/tts/qwen_adapter.py",
+    "deploy/tts/qwen_joint_training.py",
+    "scripts/tests/test_qwen_adapter.py",
+    "scripts/tests/test_qwen_joint_training.py",
+    "deploy/tts/README.md"
+  ],
+  "acceptance_criteria": [
+    {"id":"AC-1","requirement":"Expanded v2 adapters target both audio prediction backbones while legacy v1 activation remains compatible and malformed adapters fail before warm-up.","verification":"Offline manifest/scope/checksum tests plus fresh local MLX v1/v2 loading and zero-initialization parity."},
+    {"id":"AC-2","requirement":"The trainer aligns main/EOS and all residual codebook targets correctly, prevents split leakage, bounds memory and checks gradients/updates in both branches.","verification":"Offline source split/frame planning contracts; local cached-versus-full teacher-forcing parity, finite losses and branch gradients, training logs and allocation peak."},
+    {"id":"AC-3","requirement":"Complete a local candidate training round and reload its checkpoint; deliver reproducible unseen-text comparisons against the currently active v1 adapter without changing production voice.","verification":"Host-only training/evaluation/audio integrity and latency records, original activation checksum preserved, local playable comparison artifacts; subjective acceptance remains pending."},
+    {"id":"AC-4","requirement":"Document the training and candidate workflow and deliver the reviewed source through all project and merged delivery gates.","verification":"Frozen offline checks, full scoped review, exact-head PR/main CI, clean merged tests/package/window startup; local data and weights excluded from Git."}
+  ],
+  "checks": [
+    {"id":"CHECK-1","command":"git diff --check","required":true},
+    {"id":"CHECK-2","command":"python3 scripts/ai_workflow.py validate","required":true},
+    {"id":"CHECK-3","command":"python3 -m unittest discover -s scripts/tests -v","required":true},
+    {"id":"CHECK-4","command":"./mvnw -B -Djava.awt.headless=true test","required":true}
+  ],
+  "risks": [
+    "The existing training corpus is small; a lower held-out token loss is not evidence of better emotion, timbre or all-sentence stability.",
+    "Expanded coverage and residual teacher forcing increase memory/compute. Keep the base immutable and allocation bounded; report any necessary measured adjustment through a Spec revision.",
+    "MLX kernels run on one host process/device. Validate actual training and generation separately from offline CI, and keep the old adapter available."
+  ],
+  "rollback": "Keep the original v1 adapter active throughout the experiment. Candidate artifacts are independent; --no-adapter remains available. Revert the scoped source commit if needed; do not alter private runtime configuration or source audio.",
+  "review_budget": {"max_diff_bytes":120000}
+}

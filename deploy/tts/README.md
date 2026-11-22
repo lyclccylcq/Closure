@@ -1,5 +1,52 @@
 # Closure remote TTS
 
+## Local Qwen joint-adapter experiment
+
+The local trainer keeps the pinned 0.6B 8-bit base and prepared source-level
+train/validation split. A v2 adapter adds rank-32 LoRA to q/k/v/o and gate/up/down
+projections in both the talker and residual code predictor. Legacy v1 q/v
+adapters still load through the same service.
+
+`qwen_joint_training.py` requires the local MLX-Audio environment. Its input
+directory contains `feature-index.json`, immutable `features/<id>.npz` teacher
+inputs and `codecs/<id>.npy` complete 16-codebook targets. It checks alignment
+including the first frame and EOS, rejects source leakage across splits, and
+requires the pinned `model-source.json` created by `prepare-qwen.py` next to the
+model directory. Private data, generated audio and weights belong outside Git.
+
+```bash
+python deploy/tts/qwen_joint_training.py \
+  --model /path/to/runtime/model --work-dir /path/to/prepared-experiment \
+  --memory-gib 8 --frame-batch 16 train \
+  --output /path/to/new-independent-candidate --candidate-id joint-candidate \
+  --rank 32 --alpha 64 --steps 99 --eval-every 11
+```
+
+The objective is main-codebook/EOS cross entropy plus 0.3 times residual
+codebook cross entropy. Training samples bounded audio frames for the residual
+branch; validation covers every frame and all codebooks of the held-out source
+clips. Both branches must receive finite nonzero gradients and updates. The
+trainer audits cached versus parallel teacher forcing in fp32 to distinguish
+alignment from bf16 prefill/decode rounding, while training retains native
+precision. It caps MLX allocation at 8 GiB and never activates a candidate.
+
+Fresh-process evaluation uses the normal checksum/layout-validated loader:
+
+```bash
+python deploy/tts/qwen_joint_training.py \
+  --model /path/to/runtime/model --work-dir /path/to/prepared-experiment \
+  inspect --adapter /path/to/candidate/adapter.json --output /path/to/evaluation.json
+```
+
+Compare the current v1 and candidate v2 on the same held-out source clips and
+unseen text, keeping reference profile, seed and tempo identical. Lower token
+loss is an engineering measurement, not evidence of better emotion or timbre.
+Keep the existing `active-adapter.json` unchanged until listening evaluation.
+The service can preview a candidate with `--adapter-config` on an explicitly
+chosen free local port; `--no-adapter` selects the original base voice.
+
+## GPT-SoVITS remote deployment
+
 Closure can run its GPT-SoVITS v2ProPlus voice model on a remote Linux CPU or
 GPU server and connect through an SSH tunnel. The speech API binds to server
 `127.0.0.1:9880`; the desktop uses `127.0.0.1:19880`. Do not expose the API port
