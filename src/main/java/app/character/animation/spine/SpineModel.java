@@ -90,6 +90,12 @@ public final class SpineModel {
             var data = new SkeletonBinary(new DataLoader(regions)).readSkeletonData(
                     new MemoryFile(NAME + ".skel", source.read(root + NAME + ".skel")));
             if (!data.getVersion().startsWith("3.8.")) throw new IOException("Spine 3.8 export required");
+            for (String action : List.of("Relax", "Interact", "Sit", "Sleep")) {
+                var animation = data.findAnimation(action);
+                if (animation == null || !Float.isFinite(animation.getDuration()) || animation.getDuration() <= 0) {
+                    throw new IOException("Missing or invalid required Spine action: " + action);
+                }
+            }
             for (var slot : data.getSlots()) {
                 if (slot.getBlendMode() != BlendMode.normal && slot.getBlendMode() != BlendMode.additive) {
                     throw new IOException("Unsupported slot blend: " + slot.getBlendMode());

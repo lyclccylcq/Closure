@@ -92,4 +92,26 @@ class SpineRendererTest {
             for (var future : futures) assertArrayEquals(expected, future.get(5, java.util.concurrent.TimeUnit.SECONDS));
         }
     }
+
+    @Test
+    void aReadableSkeletonWithAnIncompatibleActionSetFailsBeforePlayback() {
+        var failure = assertThrows(IllegalStateException.class, () -> SpineModel.load(SpineModel.RESOURCE_ROOT, path -> {
+            try (var input = getClass().getResourceAsStream(path)) {
+                assertNotNull(input);
+                byte[] data = input.readAllBytes();
+                if (path.endsWith(".skel")) {
+                    byte[] oldName = "Relax".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                    byte[] replacement = "Other".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                    for (int i = 0; i <= data.length - oldName.length; i++) {
+                        if (Arrays.equals(data, i, i + oldName.length, oldName, 0, oldName.length)) {
+                            System.arraycopy(replacement, 0, data, i, replacement.length);
+                            break;
+                        }
+                    }
+                }
+                return data;
+            }
+        }));
+        assertTrue(failure.getMessage().contains("required Spine action: Relax"));
+    }
 }

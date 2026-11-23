@@ -81,7 +81,8 @@ public final class SpineAnimationPlayer implements AnimationPlayer {
         if (!publishQueued.compareAndSet(false, true)) return;
         SwingUtilities.invokeLater(() -> {
             publishQueued.set(false);
-            if (!closed && token == generation.get()) label.setIcon(new ImageIcon(latest.get()));
+            BufferedImage frame = latest.get();
+            if (!closed && token == generation.get() && frame != null) label.setIcon(new ImageIcon(frame));
         });
     }
 
