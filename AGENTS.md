@@ -1,5 +1,7 @@
 # Closure：Codex 开发入口
 
+> 当前执行覆盖（2026-11-23）：用户明确要求近期暂时停用 Claude 指导执行模式，由 Codex 直接实现与修复，不调用 Claude。恢复须由用户明确要求。独立副本、证据复核、CI、已授权合并及可运行交付要求继续适用；以下 Claude 调度步骤在此期间由 Codex 直接实现流程替代。
+
 对 Closure 的功能开发、修复和重构，默认使用 [.agents/skills/closure-workflow/SKILL.md](.agents/skills/closure-workflow/SKILL.md)。Codex 负责规划、调度、复核、CI、合并和交付，本机 Claude Code 负责实现；不要要求用户搬运材料、切换 Claude 或逐个合并 PR。
 
 用户已于 2026-10-28 明确授权代理运行 CI、处理失败并合并通过检查的 PR，用户只验收最终可运行项目。该授权适用于 Closure 任务范围内的工程流程，保存在可信完成策略中；不等于用户已验收结果，不授权范围外部署、费用或破坏性数据操作。
