@@ -2,6 +2,7 @@ package app.ui.chat;
 
 import app.service.ChatService;
 import app.service.ChatSpeechController;
+import app.character.CharacterActivityListener;
 import app.ui.UiFonts;
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
@@ -22,24 +23,31 @@ public class ChatWindow extends JFrame {
     private final SoundPlayer soundPlayer;
     private final ChatSpeechController chatSpeechController;
     private final boolean ownsSpeechController;
+    private final CharacterActivityListener characterActivity;
     private ChatView chatView;
     private Rectangle anchorBounds;
-    private boolean disposed;
+    private volatile boolean disposed;
 
     public ChatWindow() {
-        this(ChatSpeechController.fromEnvironment(), true);
+        this(ChatSpeechController.fromEnvironment(), true, CharacterActivityListener.NONE);
     }
 
     public ChatWindow(ChatSpeechController chatSpeechController) {
-        this(chatSpeechController, false);
+        this(chatSpeechController, false, CharacterActivityListener.NONE);
     }
 
-    private ChatWindow(ChatSpeechController chatSpeechController, boolean ownsSpeechController) {
+    public ChatWindow(ChatSpeechController chatSpeechController, CharacterActivityListener characterActivity) {
+        this(chatSpeechController, false, characterActivity);
+    }
+
+    private ChatWindow(ChatSpeechController chatSpeechController, boolean ownsSpeechController,
+                       CharacterActivityListener characterActivity) {
         UiFonts.applySwingDefaults();
         fxPanel = new JFXPanel();
         soundPlayer = new SoundPlayer();
         this.chatSpeechController = chatSpeechController;
         this.ownsSpeechController = ownsSpeechController;
+        this.characterActivity = characterActivity == null ? CharacterActivityListener.NONE : characterActivity;
 
         initWindow();
 
@@ -89,7 +97,8 @@ public class ChatWindow extends JFrame {
     }
 
     private void initFxContent(){
-        chatView=new ChatView(new ChatService(),soundPlayer,chatSpeechController);
+        if(disposed){ return; }
+        chatView=new ChatView(new ChatService(),soundPlayer,chatSpeechController,characterActivity);
         fxPanel.setScene(new Scene(chatView));
     }
 

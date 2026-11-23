@@ -207,6 +207,46 @@ else:
         self.assertEqual(self.command("doctor")["status"], "READY")
         self.assertIn("--safe-mode", json.loads((self.bin / "auth-called").read_text()))
 
+    def test_codex_mode_prepares_an_isolated_task_without_any_claude_preflight_or_model(self):
+        path = self.repo / "scripts/ai_dispatch_config.json"
+        config = json.loads(path.read_text())
+        config["implementation_executor"] = "codex"
+        self.write_json("scripts/ai_dispatch_config.json", config)
+        doctor = self.command("doctor")
+        self.assertEqual(doctor["implementation_executor"], "codex")
+        self.assertIsNone(doctor["claude_path"])
+        state = self.start()
+        self.assertEqual(state["status"], "AWAITING_CODEX_IMPLEMENTATION")
+        self.assertEqual(state["round"], 0)
+        self.assertNotEqual(state["workspace"], str(self.repo))
+        self.assertEqual((Path(state["workspace"]) / TASK).read_bytes(), (self.repo / TASK).read_bytes())
+        self.assertFalse((self.bin / "auth-called").exists())
+        self.assertFalse(self.invocations.exists())
+        self.assertNotIn("packet_dir", state)
+
+    def test_codex_repair_returns_current_head_feedback_without_calling_claude(self):
+        path = self.repo / "scripts/ai_dispatch_config.json"
+        config = json.loads(path.read_text()); config["implementation_executor"] = "codex"
+        self.write_json("scripts/ai_dispatch_config.json", config)
+        state = self.start()
+        feedback = self.root / "feedback.json"
+        feedback.write_text(json.dumps({"head_sha": state["head_sha"], "message": "Repair the current CI batch"}))
+        state = self.command("repair", "--run", state["run_dir"], "--feedback", str(feedback))
+        self.assertEqual(state["status"], "AWAITING_CODEX_IMPLEMENTATION")
+        recorded = json.loads(Path(state["codex_feedback_path"]).read_text())
+        self.assertEqual(recorded["head_sha"], state["head_sha"])
+        self.assertIn("Repair the current CI batch", recorded["message"])
+        self.assertFalse((self.bin / "auth-called").exists())
+        self.assertFalse(self.invocations.exists())
+
+    def test_unknown_executor_fails_before_model_preflight(self):
+        path = self.repo / "scripts/ai_dispatch_config.json"
+        config = json.loads(path.read_text()); config["implementation_executor"] = "unknown"
+        self.write_json("scripts/ai_dispatch_config.json", config)
+        self.assertIn("unsupported implementation executor", self.start(ok=False)["reason"])
+        self.assertFalse((self.bin / "auth-called").exists())
+        self.assertFalse(self.invocations.exists())
+
     def command(self, *args, ok=True):
         proc = subprocess.run([sys.executable, "scripts/ai_dispatch.py", *args],
                               cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=30)

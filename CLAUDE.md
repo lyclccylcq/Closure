@@ -1,5 +1,7 @@
 # Closure 开发约定
 
+> 当前执行覆盖（2026-11-23）：用户已明确授权 Codex 直接实现，并暂时停用 Claude 指导执行模式。此期间不启动 Claude，保留独立副本、真实检查、证据复核、CI 和交付要求；不声称实现来自 Claude。恢复须由用户明确要求。
+
 ## 入口和职责
 
 - 默认由 Codex 读取 `AGENTS.md` 并用 `closure-workflow` Skill 调度，详见 [自动化指南](docs/ai/automation.md)。自动运行时 Claude 只改文件，宿主负责检查、Git、证据、CI 和合并。

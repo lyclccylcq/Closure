@@ -1,6 +1,7 @@
 package app.ui;
 
 import app.character.animation.AnimationController;
+import app.character.CharacterController;
 import app.character.animation.AnimationType;
 import app.reminder.AiCourseScheduleImportConverter;
 import app.reminder.AiEventReminderTextGenerator;
@@ -193,6 +194,7 @@ public class PetWindow extends JFrame {
      */
     private PetAnimationPanel petAnimationPanel;
     private AnimationController animationController;
+    private CharacterController characterController;
 
     /**
      * 桌宠组件共用的鼠标监听器。
@@ -446,6 +448,8 @@ public class PetWindow extends JFrame {
     }
 
     private void openPetModel() {
+        if (characterController != null) characterController.close();
+        if (petAnimationPanel != null) petAnimationPanel.dispose();
         if (!PetAction.OPEN.hasFrames()) {
             System.out.println("模型 PNG 帧不存在：" + PetAction.OPEN.frameDirectory());
         }
@@ -462,6 +466,7 @@ public class PetWindow extends JFrame {
                 fallbackIcon
         );
         animationController = new AnimationController(petAnimationPanel.animationPlayer());
+        characterController = new CharacterController(animationController);
         playAnimation(AnimationType.GREETING);
         addPetMouseListeners(petAnimationPanel);
 
@@ -574,12 +579,12 @@ public class PetWindow extends JFrame {
         speechController.setSpeechLifecycleListener(new SpeechLifecycleListener() {
             @Override
             public void onSpeechStarted() {
-                playAnimation(AnimationType.TALK);
+                if (characterController != null) characterController.setTalking(true);
             }
 
             @Override
             public void onSpeechFinished() {
-                playAnimation(AnimationType.IDLE);
+                if (characterController != null) characterController.setTalking(false);
             }
         });
     }
@@ -679,11 +684,11 @@ public class PetWindow extends JFrame {
     }
 
     private void playAnimation(AnimationType animation) {
-        if (animationController == null) {
+        if (characterController == null) {
             return;
         }
 
-        animationController.play(animation);
+        characterController.play(animation);
     }
 
     private void pauseWorkBreakReminder() {
@@ -1082,6 +1087,18 @@ public class PetWindow extends JFrame {
         // 把“通讯”加入菜单
         popupMenu.add(chatItem);
 
+        JMenu characterActions = new JMenu("动作");
+        characterActions.setFont(menuFont);
+        JMenuItem idleAction = new JMenuItem("待机");
+        JMenuItem sleepAction = new JMenuItem("休息");
+        idleAction.setFont(menuFont);
+        sleepAction.setFont(menuFont);
+        idleAction.addActionListener(event -> playAnimation(AnimationType.IDLE));
+        sleepAction.addActionListener(event -> playAnimation(AnimationType.SLEEP));
+        characterActions.add(idleAction);
+        characterActions.add(sleepAction);
+        popupMenu.add(characterActions);
+
         // 添加一条分隔线
         popupMenu.addSeparator();
 
@@ -1133,7 +1150,7 @@ public class PetWindow extends JFrame {
          * 这样可以避免程序一启动就 new ChatWindow。
          */
         if (chatWindow == null) {
-            chatWindow = new ChatWindow(speechController);
+            chatWindow = new ChatWindow(speechController, characterController);
 
             /*
              * 当聊天窗口被关闭/隐藏时，
@@ -1205,6 +1222,7 @@ public class PetWindow extends JFrame {
 
     private void exitApplication() {
         cancelInteractionBubble();
+        if (characterController != null) characterController.close();
         if (workBreakReminder != null) {
             workBreakReminder.dispose();
         }
@@ -1248,5 +1266,12 @@ public class PetWindow extends JFrame {
         }
 
         voiceServerProcessFuture.thenAccept(process -> process.ifPresent(GptSovitsServerProcess::close));
+    }
+
+    @Override
+    public void dispose() {
+        if (characterController != null) characterController.close();
+        if (petAnimationPanel != null) petAnimationPanel.dispose();
+        super.dispose();
     }
 }

@@ -1,0 +1,77 @@
+package app.character.animation.spine;
+
+import app.character.animation.AnimationType;
+import org.junit.jupiter.api.Test;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+class SpineRendererTest {
+    @Test
+    void loadsTheExactPinnedExportAndAllSixActions() throws Exception {
+        SpineModel model = SpineModel.bundled();
+        assertEquals("3.8.99", model.version());
+        assertEquals(297, model.boneCount());
+        assertEquals(Set.of("Default", "Interact", "Move", "Relax", "Sit", "Sleep"), model.animations().keySet());
+        Map<String, String> hashes = Map.of(
+                "atlas", "70428a5b90edcfcd4068a38a576f9ff97cc8a2b9934d68fa8a59d0fa11574077",
+                "png", "64ccddedb06756a7a124a351379b6947dcb1e1edf4d4a5d5af727a93f7f59948",
+                "skel", "7e6ebfc77754da86683b576a94638f0a5a5a4563ade760ea3592b4302fa89ee9");
+        for (var entry : hashes.entrySet()) {
+            try (var input = getClass().getResourceAsStream(SpineModel.RESOURCE_ROOT + "build_char_4228_closur." + entry.getKey())) {
+                assertNotNull(input);
+                assertEquals(entry.getValue(), HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(input.readAllBytes())));
+            }
+        }
+    }
+
+    @Test
+    void everySourcePoseHasVisiblePixelsAndTransparentUnclippedBorders() {
+        SpineRenderer renderer = new SpineRenderer(SpineModel.bundled());
+        var camera = renderer.bounds();
+        for (var action : renderer.animations().entrySet()) {
+            for (int frame = 0; frame < 4; frame++) {
+                BufferedImage image = renderer.render(action.getKey(), action.getValue() * frame / 4, null, 220, 220);
+                long visible = Arrays.stream(image.getRGB(0, 0, 220, 220, null, 0, 220)).filter(p -> (p >>> 24) > 10).count();
+                assertTrue(visible > 500, action.getKey() + ": empty or tiny model");
+                for (int i = 0; i < 220; i++) {
+                    assertEquals(0, image.getRGB(i, 0) >>> 24, action.getKey());
+                    assertEquals(0, image.getRGB(i, 219) >>> 24, action.getKey());
+                    assertEquals(0, image.getRGB(0, i) >>> 24, action.getKey());
+                    assertEquals(0, image.getRGB(219, i) >>> 24, action.getKey());
+                }
+                assertEquals(camera, renderer.bounds(), "Camera must not change with actions");
+            }
+        }
+    }
+
+    @Test
+    void sourceMovementAndProceduralVariantsActuallyChangeTheImage() {
+        SpineRenderer renderer = new SpineRenderer(SpineModel.bundled());
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.TAP, .1f, 220, 220)),
+                pixels(renderer.render(AnimationType.TAP, 1.3f, 220, 220))));
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.IDLE, .123f, 220, 220)),
+                pixels(renderer.render(AnimationType.TALK, .123f, 220, 220))));
+        assertFalse(Arrays.equals(pixels(renderer.render("Sit", .123f, null, 220, 220)),
+                pixels(renderer.render(AnimationType.THINKING, .123f, 220, 220))));
+    }
+
+    @Test
+    void missingAndCorruptAssetsFailWithAnActionableDiagnostic() {
+        assertThrows(IllegalStateException.class, () -> SpineModel.load("/missing-spine/"));
+        for (String broken : List.of(".png", ".skel", ".atlas")) {
+            var error = assertThrows(IllegalStateException.class, () -> SpineModel.load(SpineModel.RESOURCE_ROOT, path -> {
+                if (path.endsWith(broken)) return new byte[]{0, 1, 2};
+                try (var input = getClass().getResourceAsStream(path)) {
+                    if (input == null) throw new IOException(path);
+                    return input.readAllBytes();
+                }
+            }));
+            assertTrue(error.getMessage().contains("Cannot load Spine resources"));
+        }
+    }
+
+    private static int[] pixels(BufferedImage image) { return image.getRGB(0, 0, 220, 220, null, 0, 220); }
+}

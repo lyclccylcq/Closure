@@ -16,9 +16,20 @@
         <maven.compiler.target>21</maven.compiler.target>
         <javafx.version>21.0.6</javafx.version>
         <closure.smokeTest>false</closure.smokeTest>
+        <closure.animation>spine</closure.animation>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.esotericsoftware.spine</groupId>
+            <artifactId>spine-libgdx</artifactId>
+            <version>3.8.99.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.badlogicgames.gdx</groupId>
+            <artifactId>gdx</artifactId>
+            <version>1.10.0</version>
+        </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -78,6 +89,7 @@
                             <mainClass>com.example.closure/app.Main</mainClass>
                             <options>
                                 <option>-Dclosure.smokeTest=${closure.smokeTest}</option>
+                                <option>-Dclosure.animation=${closure.animation}</option>
                             </options>
                             <launcher>app</launcher>
                             <jlinkZipName>app</jlinkZipName>

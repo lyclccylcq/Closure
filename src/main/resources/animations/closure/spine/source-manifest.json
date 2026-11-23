@@ -1,0 +1,24 @@
+{
+  "source": "isHarryh/Ark-Models",
+  "commit": "b799ffe8ee30bbb1b04f3c551234edfab8d5549a",
+  "files": [
+    {
+      "file": "build_char_4228_closur.atlas",
+      "bytes": 12221,
+      "git_blob_sha1": "018bb0a57d1aa0c5fff35be684cb9e06cce39af6",
+      "sha256": "70428a5b90edcfcd4068a38a576f9ff97cc8a2b9934d68fa8a59d0fa11574077"
+    },
+    {
+      "file": "build_char_4228_closur.png",
+      "bytes": 293534,
+      "git_blob_sha1": "56edb226167c0084e6ea4e04e0e610cd2ddc8d6d",
+      "sha256": "64ccddedb06756a7a124a351379b6947dcb1e1edf4d4a5d5af727a93f7f59948"
+    },
+    {
+      "file": "build_char_4228_closur.skel",
+      "bytes": 471847,
+      "git_blob_sha1": "411bab27eea15148fb4d2db1a612f09b66ad2461",
+      "sha256": "7e6ebfc77754da86683b576a94638f0a5a5a4563ade760ea3592b4302fa89ee9"
+    }
+  ]
+}

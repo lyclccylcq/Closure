@@ -10,6 +10,8 @@ module com.example.closure {
     // 课程表 .xlsx 导入使用 JDK XML 解析工作表内容。
     requires java.xml;
     requires java.desktop;
+    requires spine.libgdx;
+    requires gdx;
     // 单元测试使用 JDK HttpServer mock GPT-SoVITS HTTP API。
     requires static jdk.httpserver;
 

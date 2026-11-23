@@ -1,26 +1,28 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0008",
-  "spec_version": 1,
+  "spec_version": 4,
   "status": "READY",
   "title": "Evaluate native Spine rendering and character action scheduling",
   "objective": "Replace the single-animation visual behaviour in an isolated runnable evaluation candidate with the supplied Closure Spine model, visible distinct interaction/idle/sleep and speech/thinking behaviour, and deterministic action recovery. Preserve the current desktop window, dragging, chat, speech and reminder contracts. Complete technical evaluation without new fees or claiming runtime licensing or user acceptance.",
   "architecture": [
-    "The user authorized execution of the discussed plan on 2026-11-23. Follow the Codex planning/review and local Claude implementation workflow. Base this isolated worker on current reviewed origin/main e61bf3b55d86942411e03c972978e273f40289b9. Preserve the dirty legacy checkout and the running application's local-only ChatService change; do not migrate unrelated work or edit private settings.",
+    "On 2026-11-23 the user explicitly authorized Codex to implement directly and temporarily suspended the Claude-guided mode for the coming months because Claude is unavailable. Codex performs implementation, evidence collection and technical review honestly without claiming separate Claude implementation or human acceptance. Base remains reviewed origin/main e61bf3b55d86942411e03c972978e273f40289b9; preserve unrelated legacy and live source changes.",
     "The user supplied isHarryh/Ark-Models commit b799ffe8ee30bbb1b04f3c551234edfab8d5549a, directory models/4228_closur. The host seeds the three hash-verified files under src/main/resources/animations/closure/spine/. The binary is Spine 3.8.99, 297 bones, 117 slots, 74 mesh plus 53 region attachments, one 624x624 premultiplied-alpha texture with 122 atlas regions. Animations: Default 0 seconds; Interact 3.366667; Move, Relax, Sit each 8; Sleep 5.333333. There is no editable .spine project and no authored Talk/Thinking/Happy animation.",
     "Pin com.esotericsoftware.spine:spine-libgdx:3.8.99.1 and compatible libGDX core (1.10.0 was already used for successful host-only parsing). No GPU/OpenGL backend, browser, native game engine, subprocess or external service is required. Adapt the existing Swing PetAnimationPanel to host an interchangeable renderer. Reuse AnimationPlayer and AnimationController, with compatible constructors and a frame-renderer fallback; a closure.animation=frames switch must remain available. The evaluation candidate should visibly use Spine by default in its isolated project.",
-    "Implement a CPU renderer using the runtime's bone/constraint/deform calculations and Java BufferedImage output. It must correctly support weighted meshes, draw order, attachment colours, rotated/trimmed atlas regions and the actual PMA input. Do not flatten the source into prerecorded frames or require a GL Texture for metadata-only parsing. A custom AttachmentLoader can retain atlas metadata; region local offsets must respect crop/original dimensions and mesh UVs must account for atlas rotation/trim. Rendering must preserve transparency with correct alpha composition, avoid triangle seam artefacts and expose unsupported attachment/blend features honestly. This actual model has no clipping attachments. Determine stable camera bounds from sampled poses or another justified fixed envelope, so changing actions does not resize/recentre every frame or clip the head/feet/props.",
+    "Implement a CPU renderer using the runtime's bone/constraint/deform calculations and Java BufferedImage output. It must correctly support weighted meshes, draw order, attachment colours, rotated/trimmed atlas regions and the actual PMA input. Do not flatten the source into prerecorded frames or require a GL Texture for metadata-only parsing. A custom AttachmentLoader can retain atlas metadata; region local offsets must respect crop/original dimensions and mesh UVs must account for atlas rotation/trim. Rendering must preserve transparency with correct alpha composition, avoid triangle seam artefacts and expose unsupported attachment/blend features honestly. This actual model has no clipping attachments. Determine stable camera bounds from sampled poses or another justified fixed envelope, so changing actions does not resize/recentre every frame or clip the head/feet/props. Support the actual one additive-blend slot as well as the 116 normal slots.",
     "Keep UI and synthesis threads responsive: bound rendering to around 30 FPS, keep expensive rendering off the Swing EDT, publish completed images safely, serialize runtime mutation, and stop timers/executors on dispose. One-shot completion must be delivered reliably without stale callbacks overriding a newer action. Missing/corrupt Spine resources must produce a useful diagnostic and fall back to the existing frames rather than crash startup.",
     "Introduce CharacterState and deterministic scheduling separate from rendering. Persist currently requested talking/thinking/idle/sleep base state while a higher-priority tap/greeting/happy action plays. An interaction must complete and restore the current base state, including when speech starts or finishes during the interaction; stop/dispose must invalidate stale completion events. Use Relax as the idle candidate, Interact for short interaction/greeting/happy, Sleep for sleep, and Sit or a documented bounded procedural variant for thinking after visual review. Expose Move/Sit/Sleep and all source actions in an offline preview so none are guessed from names alone. Keep legacy frame behaviour compatible when explicitly selected.",
     "Give TALKING a visible, restrained procedural mouth/head activity layered over an appropriate source pose, gated by the existing real speech start/finish callbacks. THINKING and positive emotion may use authored base actions plus bounded procedural changes; describe these truthfully as program-driven variants, not new authored or phoneme-synchronized animation. Reuse the existing AssistantReply dominantEmotion; do not change the LLM JSON schema or prompts. Connect thinking start/complete/error and positive emotion through a small optional UI/activity listener rather than modifying ChatService or TTS generation. Multiple overlapping requests must not leave the character permanently thinking or interrupt active speech. Existing ChatWindow/ChatView constructors must continue to work.",
     "Provide an offline headless preview/export entry point or focused test fixture that renders all six source actions and the added talk/thinking states into PNG contact sheets and/or GIFs outside tracked source. Include transparent and dark/light-background QA views. Tests must exercise actual model loading/rendering plus scheduling races, fallback and cleanup. The host will inspect the real previews and run native window startup.",
-    "Licensing is not confirmed: the user answered uncertain about a Spine Editor license. This work is a local evaluation under the official runtime evaluation allowance, not a claim of a distributable licensed product. Document the exact asset source, commit, checksums and upstream noncommercial notice plus the official runtime license conditions and evaluation-only status. Do not change the user's running application, purchase anything, publish a PR or merge until Codex resolves that concrete licensing condition. Technical PASS is separate from distribution permission and product acceptance."
+    "Licensing is not confirmed: the user answered uncertain about a Spine Editor license. This work is a local evaluation under the official runtime evaluation allowance, not a claim of a distributable licensed product. Document the exact asset source, commit, checksums and upstream noncommercial notice plus the official runtime license conditions and evaluation-only status. Do not change the user's running application, purchase anything, publish a PR or merge until Codex resolves that concrete licensing condition. Technical PASS is separate from distribution permission and product acceptance.",
+    "Record the explicit temporary Codex-only executor override at the top of AGENTS.md, CLAUDE.md, docs/ai/automation.md and the closure-workflow Skill. Keep all isolation, checks, evidence, review and authorized completion gates. Do not call Claude for implementation or repairs while this override is active. Add an explicit trusted implementation_executor=codex mode: capability/doctor/start/repair/CI-failure handling must never invoke Claude in this mode. Instead freeze the task and return AWAITING_CODEX_IMPLEMENTATION with head-bound feedback; the live Codex completes direct implementation and evidence. Legacy claude mode remains compatible and invalid executor values fail closed.",
+    "The independently authorized temporary executor-mode change is delivered in TASK-0009. After its merge, integrate that reviewed main baseline and keep the Spine feature isolated; do not publish this evaluation feature while licensing remains unconfirmed. The complete binary patch is reviewed through exact upstream blob/SHA-256 verification plus actual decoding/rendering; all textual changes are read, and the untruncated packet retains the full binary diff."
   ],
   "non_goals": [
     "No new artwork, editable Spine project reconstruction, model re-rigging, new fees, license purchases or deployment.",
     "No ChatService changes, AI/TTS model changes, prompt/schema changes, private configuration reads, real audio samples, credentials, schedules or model weights in the worker, Git or CI.",
     "No claims of phoneme-level lip sync, newly authored Talk/Thinking/Happy assets, licensed distribution or user product acceptance. No automatic replacement or restart of the currently running application while licensing is unconfirmed.",
-    "Do not edit the task Spec, dispatcher, workflow instructions, unrelated frontend styles, Maven wrapper or CI to weaken existing checks."
+    "Do not weaken verification, authorization or CI gates. Workflow changes are limited to the user-authorized temporary Codex-only executor mode and its regression tests, plus recording the override. No unrelated styles, Maven wrapper or CI edits."
   ],
   "allowed_paths": [
     "pom.xml",
@@ -35,21 +37,68 @@
     "src/test/java/app/ui/pet/**",
     "src/test/java/app/ui/chat/**",
     "README.md",
-    "docs/character/**"
+    "docs/character/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/ai/automation.md",
+    ".agents/skills/closure-workflow/SKILL.md",
+    "scripts/ai_dispatch.py",
+    "scripts/ai_dispatch_config.json",
+    "scripts/tests/test_ai_dispatch.py"
   ],
   "acceptance_criteria": [
-    {"id":"AC-1","requirement":"The pinned 3.8 model and atlas load offline with verified provenance; all six source actions render as nonempty transparent character images with correct region/mesh/atlas/PMA handling and stable unclipped framing.","verification":"Real-asset headless loading and renderer tests, host inspection of all-action previews on light/dark backgrounds, source hashes and sampled pose bounds."},
-    {"id":"AC-2","requirement":"The evaluation app visibly uses the Spine renderer, retains transparent window size/drag/double-click behaviour, and supports explicit frame fallback and automatic recoverable asset-load fallback without leaked timers/executors.","verification":"Player/panel resource-failure and close tests, actual native window smoke and host default/fallback render observations."},
-    {"id":"AC-3","requirement":"A state layer enforces interaction priority and restores the currently valid talking/thinking/idle state after one-shots; speech start/finish and repeated taps do not get overwritten by stale completions.","verification":"Deterministic scheduling tests covering speech starting/ending during tap, overlapping or replaced actions, stale callbacks and stop/dispose."},
-    {"id":"AC-4","requirement":"Speech lifecycle, chat thinking and existing positive emotion visibly drive documented source-action/procedural variants; completion/error/disposal and concurrent requests restore a valid state without changing model protocols or speech generation.","verification":"Offline activity/listener and scheduling tests, talk/thinking preview differences, inspected UI wiring and regression tests; no real AI or TTS calls."},
-    {"id":"AC-5","requirement":"Provide repeatable evaluation launch/preview/fallback instructions, accurate upstream provenance and license limitations, and pass existing workflow/Java checks plus independent build/native smoke without changing the active application or claiming distribution approval.","verification":"Documentation review, complete host checks and preview evidence, scoped diff, current app/source preservation evidence. Formal publication/merge is held until runtime licensing is confirmed."}
+    {
+      "id": "AC-1",
+      "requirement": "The pinned 3.8 model and atlas load offline with verified provenance; all six source actions render as nonempty transparent character images with correct region/mesh/atlas/PMA handling and stable unclipped framing.",
+      "verification": "Real-asset headless loading and renderer tests, host inspection of all-action previews on light/dark backgrounds, source hashes and sampled pose bounds."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "The evaluation app visibly uses the Spine renderer, retains transparent window size/drag/double-click behaviour, and supports explicit frame fallback and automatic recoverable asset-load fallback without leaked timers/executors.",
+      "verification": "Player/panel resource-failure and close tests, actual native window smoke and host default/fallback render observations."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "A state layer enforces interaction priority and restores the currently valid talking/thinking/idle state after one-shots; speech start/finish and repeated taps do not get overwritten by stale completions.",
+      "verification": "Deterministic scheduling tests covering speech starting/ending during tap, overlapping or replaced actions, stale callbacks and stop/dispose."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Speech lifecycle, chat thinking and existing positive emotion visibly drive documented source-action/procedural variants; completion/error/disposal and concurrent requests restore a valid state without changing model protocols or speech generation.",
+      "verification": "Offline activity/listener and scheduling tests, talk/thinking preview differences, inspected UI wiring and regression tests; no real AI or TTS calls."
+    },
+    {
+      "id": "AC-5",
+      "requirement": "Provide repeatable evaluation launch/preview/fallback instructions, accurate upstream provenance and license limitations, and pass existing workflow/Java checks plus independent build/native smoke without changing the active application or claiming distribution approval.",
+      "verification": "Documentation review, complete host checks and preview evidence, scoped diff, current app/source preservation evidence. Formal publication/merge is held until runtime licensing is confirmed."
+    }
   ],
   "checks": [
-    {"id":"CHECK-1","command":"git diff --check","required":true},
-    {"id":"CHECK-2","command":"python3 scripts/ai_workflow.py validate","required":true},
-    {"id":"CHECK-3","command":"python3 -m unittest discover -s scripts/tests -v","required":true},
-    {"id":"CHECK-4","command":"./mvnw -B -Djava.awt.headless=true test","required":true},
-    {"id":"CHECK-5","command":"./mvnw -B -DskipTests package","required":true}
+    {
+      "id": "CHECK-1",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    }
   ],
   "risks": [
     "Spine runtime licensing is unconfirmed. Local evaluation and objective technical checks do not authorize publishing a licensed product, making purchases or asserting user acceptance.",
@@ -58,5 +107,7 @@
     "The existing live ChatService differs from reviewed main; preserve that local behaviour and never blanket-copy the clean checkout into the live application."
   ],
   "rollback": "Keep the current live application untouched during evaluation. In the evaluation checkout choose -Dclosure.animation=frames to restore the legacy renderer. Revert the scoped commit to remove this feature; never reset the dirty original checkout or alter private settings.",
-  "review_budget": {"max_diff_bytes":180000}
+  "review_budget": {
+    "max_diff_bytes": 1600000
+  }
 }

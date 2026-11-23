@@ -1,0 +1,13 @@
+Source: https://github.com/isHarryh/Ark-Models/tree/b799ffe8ee30bbb1b04f3c551234edfab8d5549a/models/4228_closur
+Commit: b799ffe8ee30bbb1b04f3c551234edfab8d5549a
+Files: build_char_4228_closur.skel, build_char_4228_closur.atlas, build_char_4228_closur.png
+Integrity: see source-manifest.json.
+
+The source repository states that all artwork copyright belongs to Shanghai
+Hypergryph Network Technology Co., Ltd.; it must not be used commercially or
+in ways that harm the copyright holder's interests. These exported game assets
+do not include an editable .spine project.
+
+This project is evaluating the pinned Spine 3.8 runtime. A runtime licence or
+commercial artwork permission is not granted by the presence of these files.
+See docs/character/spine-upgrade.md and SPINE-RUNTIME-LICENSE.txt.
