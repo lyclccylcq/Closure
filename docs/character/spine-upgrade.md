@@ -45,6 +45,14 @@ The renderer uses the pinned 3.8 runtime for bones, IK/transform constraints and
 
 This renderer deliberately rejects clipping attachments, two-colour slot tint, other slot blend modes and atlas rotations other than 0/90 degrees. These features are absent from this pinned model. A different skeleton needs its own compatibility assessment; it must not silently render unsupported features incorrectly.
 
+## Transparent-window presentation
+
+On macOS, painting an entirely nonopaque Swing hierarchy can expose a blank interval: AWT clears the native window before Swing paints its buffered children. The running JDK 21 implementation and the [OpenJDK discussion](https://github.com/openjdk/jdk/pull/12993) identify this path. A solid-background preview does not exercise it. Whole-character flashing must be distinguished from animated eyes or effects; source frames can remain correct while the native window flashes.
+
+`PetWindow` composes its complete transparent scene into a reusable premultiplied back buffer, then copies that completed image with source replacement. Clearing and partial drawing stay off the displayed surface. Transparent pixels replace the previous pose without trails; the buffer follows HiDPI scale and size, and presentation retains the destination clip. Animation cadence, model pixels and state/speech callbacks stay unchanged.
+
+Regression checks cover destination preservation during preparation, transparent replacement, scale/resize/clipping and preparation failure. An offline native-window probe checks the real `PetWindow.paint` path; source-frame sampling separately checks for empty model frames. These checks and native startup do not constitute a screen recording or user visual acceptance.
+
 ## Provenance and permission
 
 The three unmodified assets are from [isHarryh/Ark-Models](https://github.com/isHarryh/Ark-Models/tree/b799ffe8ee30bbb1b04f3c551234edfab8d5549a/models/4228_closur), pinned commit `b799ffe8ee30bbb1b04f3c551234edfab8d5549a`. `source-manifest.json` records SHA-256 and Git blob hashes. The export is Spine **3.8.99**, with 297 bones, 117 slots, 74 mesh and 53 region attachments, one 624×624 PMA texture, and six actions. No `.spine` editor project is supplied.

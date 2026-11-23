@@ -19,6 +19,7 @@ import app.service.SpeechLifecycleListener;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
+import app.ui.pet.TranslucentWindowPainter;
 import app.ui.quick.PetSpeechBubbleWindow;
 import app.ui.reminder.CourseScheduleWindow;
 import app.ui.reminder.TimedReminderWindow;
@@ -65,6 +66,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * ChatWindow 只是它打开的聊天窗口。
  */
 public class PetWindow extends JFrame {
+
+    private final TranslucentWindowPainter windowPainter = new TranslucentWindowPainter();
+
+    @Override
+    public void paint(Graphics graphics) {
+        if (isOpaque() || windowPainter == null || getWidth() <= 0 || getHeight() <= 0
+                || !(graphics instanceof Graphics2D destination)) {
+            super.paint(graphics);
+            return;
+        }
+        // Window.paint clears a translucent native surface before Swing buffers its children.
+        // Compose that clearing and the children together, then present the completed image.
+        windowPainter.paint(destination, getWidth(), getHeight(), super::paint);
+    }
 
     /**
      * 动态模型显示大小。
