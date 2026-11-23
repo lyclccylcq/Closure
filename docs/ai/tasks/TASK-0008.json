@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0008",
-  "spec_version": 7,
+  "spec_version": 8,
   "status": "READY",
   "title": "Adopt native Spine rendering and character action scheduling",
   "objective": "Adopt the supplied Closure Spine model and validated action scheduler in the desktop assistant, preserving the current window, chat, speech, reminders, private settings and local runtime customizations. Complete exact-head CI, reviewed merge, merged delivery and reversible scoped activation under the user's explicit solution selection. Do not infer a Spine licence or incur fees.",
@@ -63,8 +63,8 @@
     },
     {
       "id": "AC-5",
-      "requirement": "Provide repeatable launch/preview/fallback and rollback instructions, accurate provenance/licence requirements, and pass workflow/Java checks plus exact reviewed-head CI/merge and merged build/native smoke. Safely activate the feature in the existing daily runnable copy while preserving local chat customizations, private settings and voice services.",
-      "verification": "Full frozen checks and scoped technical review; actual PR/head CI and main push CI; clean merged delivery tests/package/native window; baseline/backup/installed-source hashes and unchanged protected-source inventory; offline native verification of the activated runtime and process-identity-bound daily app launch evidence. Licensing remains unconfirmed and is not inferred from technical PASS or user solution selection."
+      "requirement": "Provide repeatable launch/preview/fallback and scoped activation/rollback instructions, accurate provenance/licence requirements, passing local workflow/Java/package/native checks and a daily-runtime compatibility preflight that preserves local chat customizations, private settings and voice services. The existing CI/merge/merged-delivery gates and subsequent activation verification remain mandatory completion steps, recorded separately from this prepublication implementation review.",
+      "verification": "Frozen local checks and scoped technical review; real-asset previews; baseline comparison of every proposed activation path, protected-source inventory and reviewed backup/rollback procedure. After publication, the unmodified dispatcher must record actual head CI/main CI/clean merged tests/package/native window before activation; the host then records installed-source/protected-source identity and native/daily-launch evidence. Do not report those future gates as already complete in the prepublication report. Licensing remains unconfirmed."
     }
   ],
   "checks": [
