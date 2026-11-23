@@ -31,10 +31,11 @@
 
 ## 快速启动
 
-Spine 人物与动作升级目前为独立评估版，许可证状态尚未确认。可直接运行
+人物默认采用 Spine 骨骼动画，支持点击、说话、思考和睡眠状态。可直接运行
 [`docs/character/preview-spine.command`](docs/character/preview-spine.command)
 检查动作和说话/思考状态；这个入口不启动 AI、TTS、天气或提醒服务。
-素材来源、限制、导出预览和 PNG 回退方式见 [Spine 评估说明](docs/character/spine-upgrade.md)。
+素材来源、导出预览和 PNG 回退方式见 [Spine 说明](docs/character/spine-upgrade.md)。
+Spine 许可证持有状态尚未确认，使用与分发仍须遵守其中列出的官方许可要求；素材限非商业用途。
 
 需要 Java 21。
 
@@ -261,7 +262,7 @@ config                            本地配置示例
 - [x] 课程表测试提醒
 - [x] 单元测试覆盖核心非 UI 逻辑
 
-已完成独立评估，待确认许可后正式启用：
+人物与动作升级：
 
 - [x] Spine 3.8 原始骨骼、网格和六套动作播放
 - [x] 点击优先级、结束恢复、说话/思考状态和 PNG 回退

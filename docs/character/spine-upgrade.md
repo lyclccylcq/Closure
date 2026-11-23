@@ -1,6 +1,6 @@
-# Spine character evaluation
+# Spine character and actions
 
-This is a local evaluation candidate. Runtime licensing is **unconfirmed**: the user answered “不确定” on 2026-11-23. The current everyday application and its private configuration have not been replaced. Technical tests do not establish a distribution licence or product acceptance.
+The assistant uses the Spine character and action scheduler by default. On 2026-11-23 the user selected the previewed solution for adoption. Runtime licence ownership remains **unconfirmed**; selecting the solution does not establish a licence. Activation preserves the existing daily runtime's local chat customizations, private settings and voice services, with backups of the affected files.
 
 ## Run and inspect
 
@@ -15,7 +15,7 @@ The standalone window runs only the model renderer and action scheduler. It does
 
 The exporter produces contact sheets of all six source actions at four times, individual transparent PNGs, and interaction/talk/thinking GIFs. `preview-metrics.json` records the measured camera and render time. It writes to the chosen directory, outside tracked resources. If Maven uses a custom local repository, set `CLOSURE_MAVEN_REPOSITORY` to that repository directory before launching.
 
-For the normal assistant, the evaluation checkout defaults to Spine:
+For the normal assistant, startup defaults to Spine:
 
 ```sh
 ./mvnw javafx:run
@@ -23,7 +23,9 @@ For the normal assistant, the evaluation checkout defaults to Spine:
 python3 scripts/verify_startup.py
 ```
 
-Normal startup uses the existing assistant integrations and is distinct from the standalone evaluation. The startup verifier uses the real transparent desktop window but skips external services and user reminders. The console must identify `Spine 3.8.99 (CPU, evaluation)` to establish that native startup used Spine rather than fallback. Missing or corrupt resources produce a diagnostic and select the existing PNG player. The explicit `frames` switch selects it directly.
+Normal startup uses the existing assistant integrations and is distinct from the standalone evaluation. The startup verifier uses the real transparent desktop window but skips external services and user reminders. The console must identify `Spine 3.8.99 (CPU)` to establish that native startup used Spine rather than fallback. Missing or corrupt resources produce a diagnostic and select the existing PNG player. The explicit `frames` switch selects it directly. The original desktop launcher remains the daily entry point after scoped activation; no new voice setup is required.
+
+For a scoped activation, require each affected existing file to match the reviewed base, back it up, and record old/new hashes plus newly added paths. Keep every other source file and all private configuration/service data untouched. If activation fails, restore the backed-up files and remove only manifest-listed additions after verifying their installed hashes; rebuild the preserved runtime. The `frames` option above also restores the old visuals without removing the feature.
 
 ## Model and behaviour
 
@@ -49,8 +51,8 @@ The three unmodified assets are from [isHarryh/Ark-Models](https://github.com/is
 
 The upstream repository states that the artwork belongs to Shanghai Hypergryph Network Technology Co., Ltd. and is not for commercial use. See the pinned [upstream notice](https://github.com/isHarryh/Ark-Models/blob/b799ffe8ee30bbb1b04f3c551234edfab8d5549a/README.md).
 
-The runtime dependency is `com.esotericsoftware.spine:spine-libgdx:3.8.99.1` with libGDX core `1.10.0`, without an OpenGL or native backend. The [3.8 runtime README](https://github.com/EsotericSoftware/spine-runtimes/blob/3.8/spine-libgdx/README.md) permits evaluation and describes licensing requirements for integration/distribution. The applicable runtime notice is included with the resources. The [official runtime agreement](https://esotericsoftware.com/spine-runtimes-license) and [Editor agreement](https://esotericsoftware.com/spine-editor-license) must be considered before everyday use or distribution. No licence purchase or claim of an existing licence is made by this task. Publication/merge and replacement of the current application remain held pending confirmation of that condition.
+The runtime dependency is `com.esotericsoftware.spine:spine-libgdx:3.8.99.1` with libGDX core `1.10.0`, without an OpenGL or native backend. The pinned runtime copyright/licence is included with the resources. Under the [official runtime agreement](https://esotericsoftware.com/spine-runtimes-license), users outside integration/evaluation need their own Spine Editor licence unless the integrator has an applicable licence under the [Editor agreement](https://esotericsoftware.com/spine-editor-license). Normal everyday use is distinct from evaluation. Licence ownership remains unconfirmed; this engineering change neither purchases a licence nor establishes commercial permission. Preserve the included runtime and artwork notices when sharing the project.
 
 ## Execution record
 
-The initial Claude attempt failed before implementation because its service could not connect. On 2026-11-23 the user expressly authorized Codex direct implementation and temporarily suspended the Claude-guided mode for the coming months. This candidate is implemented by Codex. Existing isolation, real checks, evidence review and authorized engineering completion requirements remain in effect; no Claude implementation or user acceptance is claimed.
+The initial Claude attempt failed before implementation because its service could not connect. On 2026-11-23 the user expressly authorized Codex direct implementation and temporarily suspended the Claude-guided mode. Codex implemented this feature. After the preview, the user said “没啥问题，先用套方案吧”, selecting this solution for adoption. Exact-head review, CI, merge and merged delivery checks still apply; preview feedback does not substitute for those checks or licence ownership.

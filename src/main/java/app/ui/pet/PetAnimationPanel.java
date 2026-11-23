@@ -33,7 +33,7 @@ public final class PetAnimationPanel extends JPanel {
                 String root = System.getProperty("closure.spine.resources", SpineModel.RESOURCE_ROOT);
                 SpineModel model = root.equals(SpineModel.RESOURCE_ROOT) ? SpineModel.bundled() : SpineModel.load(root);
                 selected = new SpineAnimationPlayer(frameLabel, width, height, model);
-                System.out.println("角色渲染：Spine " + model.version() + " (CPU, evaluation)");
+                System.out.println("角色渲染：Spine " + model.version() + " (CPU)");
             } catch (RuntimeException | LinkageError failure) {
                 System.err.println("Spine 加载失败，使用 PNG 动画：" + failure.getMessage());
             }
