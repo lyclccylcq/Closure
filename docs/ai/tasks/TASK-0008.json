@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0008",
-  "spec_version": 4,
+  "spec_version": 5,
   "status": "READY",
   "title": "Evaluate native Spine rendering and character action scheduling",
   "objective": "Replace the single-animation visual behaviour in an isolated runnable evaluation candidate with the supplied Closure Spine model, visible distinct interaction/idle/sleep and speech/thinking behaviour, and deterministic action recovery. Preserve the current desktop window, dragging, chat, speech and reminder contracts. Complete technical evaluation without new fees or claiming runtime licensing or user acceptance.",
@@ -16,7 +16,8 @@
     "Provide an offline headless preview/export entry point or focused test fixture that renders all six source actions and the added talk/thinking states into PNG contact sheets and/or GIFs outside tracked source. Include transparent and dark/light-background QA views. Tests must exercise actual model loading/rendering plus scheduling races, fallback and cleanup. The host will inspect the real previews and run native window startup.",
     "Licensing is not confirmed: the user answered uncertain about a Spine Editor license. This work is a local evaluation under the official runtime evaluation allowance, not a claim of a distributable licensed product. Document the exact asset source, commit, checksums and upstream noncommercial notice plus the official runtime license conditions and evaluation-only status. Do not change the user's running application, purchase anything, publish a PR or merge until Codex resolves that concrete licensing condition. Technical PASS is separate from distribution permission and product acceptance.",
     "Record the explicit temporary Codex-only executor override at the top of AGENTS.md, CLAUDE.md, docs/ai/automation.md and the closure-workflow Skill. Keep all isolation, checks, evidence, review and authorized completion gates. Do not call Claude for implementation or repairs while this override is active. Add an explicit trusted implementation_executor=codex mode: capability/doctor/start/repair/CI-failure handling must never invoke Claude in this mode. Instead freeze the task and return AWAITING_CODEX_IMPLEMENTATION with head-bound feedback; the live Codex completes direct implementation and evidence. Legacy claude mode remains compatible and invalid executor values fail closed.",
-    "The independently authorized temporary executor-mode change is delivered in TASK-0009. After its merge, integrate that reviewed main baseline and keep the Spine feature isolated; do not publish this evaluation feature while licensing remains unconfirmed. The complete binary patch is reviewed through exact upstream blob/SHA-256 verification plus actual decoding/rendering; all textual changes are read, and the untruncated packet retains the full binary diff."
+    "The independently authorized temporary executor-mode change is delivered in TASK-0009. After its merge, integrate that reviewed main baseline and keep the Spine feature isolated; do not publish this evaluation feature while licensing remains unconfirmed. The complete binary patch is reviewed through exact upstream blob/SHA-256 verification plus actual decoding/rendering; all textual changes are read, and the untruncated packet retains the full binary diff.",
+    "Prewarm the immutable model and fixed camera on a background worker in both real startup and the standalone evaluation, before Swing constructs the panel. Cache the immutable action map so multiple renderers never iterate the runtime shared Array concurrently. Native smoke must still inspect the actual rendered icon; do not weaken its marker checks."
   ],
   "non_goals": [
     "No new artwork, editable Spine project reconstruction, model re-rigging, new fees, license purchases or deployment.",
@@ -44,7 +45,8 @@
     ".agents/skills/closure-workflow/SKILL.md",
     "scripts/ai_dispatch.py",
     "scripts/ai_dispatch_config.json",
-    "scripts/tests/test_ai_dispatch.py"
+    "scripts/tests/test_ai_dispatch.py",
+    "src/main/java/app/Main.java"
   ],
   "acceptance_criteria": [
     {

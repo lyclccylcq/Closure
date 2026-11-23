@@ -2,18 +2,21 @@ package app;
 
 import app.ui.PetWindow;
 import app.ui.UiFonts;
+import app.character.animation.spine.SpineModel;
+import app.character.animation.spine.SpineRenderer;
 
 import javax.swing.*;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Toolkit;
+import java.util.concurrent.CompletableFuture;
 
 public class Main {
     private static final String STARTUP_SMOKE_MARKER = "CLOSURE_STARTUP_SMOKE_PASS";
 
     public static void main(String[] args){
         UiFonts.applySwingDefaults();
-        SwingUtilities.invokeLater(()->{
+        Runnable openWindow=()->SwingUtilities.invokeLater(()->{
             if (Boolean.getBoolean("closure.smokeTest")) {
                 runStartupSmoke();
                 return;
@@ -21,6 +24,14 @@ public class Main {
             PetWindow petWindow=new PetWindow();
             petWindow.setVisible(true);
         });
+        if("frames".equals(System.getProperty("closure.animation","spine"))){
+            openWindow.run();
+        }else{
+            // First-load sampling is CPU work; finish it before creating the window on the EDT.
+            // On failure the panel performs its normal diagnostic and PNG fallback.
+            CompletableFuture.runAsync(()->new SpineRenderer(SpineModel.bundled()))
+                    .handle((ready,error)->{ openWindow.run(); return null; }).join();
+        }
     }
 
     private static boolean hasImage(Component component) {

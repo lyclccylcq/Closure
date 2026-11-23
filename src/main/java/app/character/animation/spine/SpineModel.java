@@ -20,6 +20,7 @@ public final class SpineModel {
     final int textureWidth;
     final int textureHeight;
     SpineRenderer.Bounds cameraBounds;
+    private final Map<String, Float> animations;
 
     record Region(int x, int y, int width, int height, int originalWidth, int originalHeight,
                   float offsetX, float offsetY, boolean rotated) {
@@ -42,6 +43,9 @@ public final class SpineModel {
         textureHeight = image.getHeight();
         // Upstream PNG channels already contain PMA. Preserve those channels; do not premultiply twice.
         texture = image.getRGB(0, 0, textureWidth, textureHeight, null, 0, textureWidth);
+        Map<String, Float> exported = new LinkedHashMap<>();
+        for (var animation : data.getAnimations()) exported.put(animation.getName(), animation.getDuration());
+        animations = Collections.unmodifiableMap(exported);
     }
 
     public static SpineModel bundled() {
@@ -130,9 +134,7 @@ public final class SpineModel {
     }
 
     public Map<String, Float> animations() {
-        Map<String, Float> result = new LinkedHashMap<>();
-        for (var animation : data.getAnimations()) result.put(animation.getName(), animation.getDuration());
-        return Collections.unmodifiableMap(result);
+        return animations;
     }
 
     public int boneCount() { return data.getBones().size; }

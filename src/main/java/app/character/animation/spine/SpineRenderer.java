@@ -21,8 +21,9 @@ public final class SpineRenderer {
 
     public SpineRenderer(SpineModel model) {
         this.model = model;
-        skeleton = new Skeleton(model.data);
         synchronized (model) {
+            // libGDX's data Arrays reuse iterators; serialize skeleton construction as well as sampling.
+            skeleton = new Skeleton(model.data);
             if (model.cameraBounds == null) model.cameraBounds = measureBounds();
             bounds = model.cameraBounds;
         }

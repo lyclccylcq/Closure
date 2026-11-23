@@ -2,11 +2,14 @@ package app.character;
 
 import app.character.animation.*;
 import app.character.animation.spine.SpinePreview;
+import app.character.animation.spine.SpineModel;
+import app.character.animation.spine.SpineRenderer;
 import app.ui.pet.PetAnimationPanel;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
 
 /** Standalone model evaluation: speech/AI events are simulated; no assistant services are created. */
 public final class SpineEvaluation {
@@ -18,7 +21,8 @@ public final class SpineEvaluation {
             return;
         }
         if (args.length != 0) throw new IllegalArgumentException("Usage: SpineEvaluation [--export <directory>]");
-        SwingUtilities.invokeLater(SpineEvaluation::open);
+        CompletableFuture.runAsync(()->new SpineRenderer(SpineModel.bundled()))
+                .handle((ready,error)->{ SwingUtilities.invokeLater(SpineEvaluation::open); return null; }).join();
     }
 
     private static void open() {
