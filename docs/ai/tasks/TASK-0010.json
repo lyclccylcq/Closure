@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0010",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "Prevent whole-character flicker in the transparent pet window",
+  "objective": "Remove the live transparent-window clear-before-draw interval that makes the Spine character repeatedly disappear or flash on macOS, while retaining animation cadence, model appearance, transparency, input, state scheduling, local chat customizations and voice configuration. Complete exact-head review/CI/merge and reversible scoped activation in the existing daily runtime.",
+  "architecture": [
+    "User reports the entire character repeatedly disappearing/appearing or alternating brightness, not isolated animated parts. Exactly one daily Closure Java process was found. Keep the user-authorized temporary Codex direct mode; do not invoke Claude. Reuse the existing clean isolated worktree on a new task branch based on merged main. Preserve all dirty legacy work and private settings.",
+    "The exact running JDK 21.0.11 Window.paint implementation clears the native translucent surface with AlphaComposite.SRC before child painting. Since the label, animation panel, content/layered/root panes are all nonopaque, RepaintManager promotes dirty updates to the top-level window. This matches the documented OpenJDK JDK-8303950 discussion at https://github.com/openjdk/jdk/pull/12993. Existing action exports use an opaque preview stage, which does not cover this native transparency path. Continuous actual-model source-frame sampling must independently exclude empty/vanishing model frames.",
+    "Add a small per-window compositor in app.ui.pet. Paint the complete window scene into a reusable TYPE_INT_ARGB_PRE back buffer and publish only the completed image to the destination using one SRC image copy. Native/front graphics must not be cleared or modified while the scene is being prepared, including if scene painting fails. Preserve the destination clip/transform/composite; honor HiDPI scale, resize and transparent-pixel replacement without trails. No global RepaintManager or JVM pipeline changes.",
+    "Override PetWindow.paint only for its nonopaque window path, routing super.paint through the back buffer. Opaque/non-Graphics2D/zero-size cases retain standard painting. Keep existing Swing children, mouse listeners, dimensions, popup/chat/speech wiring and renderer/player/state code unchanged. Continue at the existing roughly 30 FPS; do not suppress animation, flatten assets, hide the window or switch to frames to mask flicker.",
+    "Add meaningful headless compositor regressions: destination retains its previous complete scene during preparation; transparent pixels erase old pose only at final presentation; HiDPI/resize/clip/composite are preserved; failed painting leaves the destination unchanged. Run a real native transparent-window offline sustained-paint probe that exercises actual PetWindow.paint and records repeated completed compositions without services. It must retain the original native startup marker/checks. CUA desktop inspection timed out; do not claim a screen recording or OS-driven visual verification.",
+    "After local evidence and review, use the original publish/finalize gates: current required PR checks, ready-event check instances, exact-head merge, main CI and clean merged tests/package/native startup. Activate only the reviewed delta in the existing daily runtime after matching old bytes to base, retaining backups and verifying other sources/private-file metadata without opening private contents. Rebuild/test and validate the real window. Apply a necessary graceful app restart only to an exactly identified owned app PID. Preserve any independently running voice service. If the app owns its auto-started local voice process, allow its existing shutdown/startup lifecycle to restore that service, and record the brief reinitialization accurately; do not kill a voice process separately, orphan its output pipes, alter voice settings/weights or send synthesis/paid-model probes."
+  ],
+  "non_goals": [
+    "No Spine model/source/runtime dependency, frame-rate, action scheduling, mouth animation, AI/TTS protocol, model, prompt or voice changes.",
+    "No credentials, private configuration contents, real reminders/audio or model weights in the worker/Git/CI; no paid model calls, purchases, unrelated deployment or independent voice-service restart.",
+    "No dispatcher, workflow, CI, allowlist or check weakening; do not claim user acceptance or confirmed Spine licence ownership."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/pet/TranslucentWindowPainter.java",
+    "src/test/java/app/ui/pet/TranslucentWindowPainterTest.java",
+    "docs/character/spine-upgrade.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The transparent pet window composes its entire scene offscreen and presents it once, without clearing or exposing a partly prepared native frame. Transparent replacement does not accumulate old poses.",
+      "verification": "Destination-preservation and transparent-replacement regression tests, reviewed PetWindow.paint routing, actual-model continuity probe and exact JDK/source-path diagnosis."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Rendering preserves HiDPI scale, resize, partial clipping and caller graphics state; a preparation failure leaves the previous displayed frame intact. Standard opaque painting remains available.",
+      "verification": "Headless compositor tests covering scaled graphics, resizing, clipping/composite/transform preservation and failed preparation; inspected fallback branch."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "The fix preserves model/action pixels, roughly 30 FPS scheduling, state/speech/input contracts and cleanup; native transparent-window startup and sustained repaints remain functional without services.",
+      "verification": "Unchanged renderer/player/state source identities, existing Java regressions, source-frame alpha continuity and native startup/sustained-paint evidence; record native UI automation limits accurately."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Documentation explains the rendering cause and verification scope, local checks pass, and the scoped activation plan preserves unrelated daily/legacy sources and settings. CI/merge/merged delivery and actual activation are mandatory later completion gates, not prepublication claims.",
+      "verification": "Frozen local workflow/Java/package checks, full diff review, daily-source baseline/preflight and guarded backup/activation procedure. Separate completion state records actual remote CI, merged delivery, activation and identified normal app verification."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Native macOS compositor behavior cannot be fully established by offscreen tests or a startup marker. Distinguish removal of the identified blank-frame interval from user visual acceptance; CUA was unavailable.",
+    "HiDPI scaling or incorrect alpha composition could introduce blur, trails or clipping; cover these invariants explicitly.",
+    "The daily ChatService is locally customized and the voice adapter is user tuned; copy only the reviewed UI delta and preserve every other source and private setting. Spine licence ownership remains unconfirmed. A necessary app restart may also reinitialize a local voice process owned by that app; preserve independently running services and verify the existing adapter/profile identity via read-only local health."
+  ],
+  "rollback": "Back up every replaced daily-runtime file after verifying it matches the reviewed base, and record all additions and their hashes. Restore only those verified entries and rebuild if activation fails; preserve unrelated source/settings/services. Revert the scoped feature through normal review if needed. Do not reset or clean the dirty legacy checkout.",
+  "review_budget": {
+    "max_diff_bytes": 120000
+  }
+}
