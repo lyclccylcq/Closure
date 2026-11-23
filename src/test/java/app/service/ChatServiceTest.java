@@ -77,7 +77,7 @@ class ChatServiceTest {
     }
 
     @Test
-    void queuedRequestIsBuiltAfterCommitAndContainsExactlyOneAssistantJson() throws Exception {
+    void queuedRequestIsBuiltAfterCommitAndContainsTheVisibleReplyOnlyOnce() throws Exception {
         var client=new ManualClient();
         try(var service=new ChatService(client)){
             var a=new Outcome(); var b=new Outcome();
@@ -91,7 +91,9 @@ class ChatServiceTest {
             var messages=second.request().getMessages();
             assertEquals(List.of(AiChatRole.SYSTEM,AiChatRole.USER,AiChatRole.ASSISTANT,AiChatRole.USER),messages.stream().map(AiChatMessage::getRole).toList());
             assertEquals("备份文件叫 kite.json。",messages.get(1).getContent());
-            assertEquals(JSON,messages.get(2).getContent());
+            assertEquals("已接收这条合成测试输入。",messages.get(2).getContent());
+            assertFalse(messages.get(2).getContent().contains("speechText"));
+            assertFalse(messages.get(2).getContent().contains("dominantEmotion"));
             assertEquals("刚才选了什么名字？",messages.get(3).getContent());
             second.complete();
             b.success();

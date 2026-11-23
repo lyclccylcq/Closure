@@ -15,8 +15,8 @@
   },
   "role_card": {
     "path": "../closure-role-card.zh-CN.txt",
-    "sha256": "5a65791ab60e39dcb5a2da837a53ac0514a95733c2cf06801f5a6170582d6c5d",
-    "max_characters_design_limit": 700
+    "sha256": "c8c76683a0df9413962d851498ac4459f5ab67c312bba5f87fe89a8954c7b534",
+    "max_characters_design_limit": 1100
   },
   "source_catalog": "source-scenes.json",
   "counts": {
@@ -149,7 +149,7 @@
       "store_seed_fixture"
     ],
     "defaults_merge": "runtime_context 字段合并；其他字段按案例整体替换。缺省使用 generation_input_defaults。",
-    "serialization": "历史通常是完整问答；F02 专门提供合成助手开场。每个 assistant.reply 序列化为一次 JSON 助手消息，user_turns 每次只发送一条。",
+    "serialization": "历史通常是完整问答；F02 提供合成助手开场。历史 assistant.reply 只投影 displayText 为一条助手正文，不发送 speechText 或情绪标签。本轮生成仍须返回统一 JSON 对象。user_turns 每次发送一条。",
     "sequence_execution": "每轮采用实际生成并成功提交的回复；下一轮构造请求前等待上一轮提交。每个候选独立重置。",
     "integration_execution": "steps 仅供驱动器操作；send_turn/enqueue_turn 按索引取 user_turns。先探测能力，按步骤更新实际时钟、项目、历史与存储状态。",
     "integration_runtime_projection": "集成轨道的 runtime_capabilities、历史、摘要、记忆和应用结果来自当前真实测试服务；初始声明只用于种子状态，不反复覆盖服务状态。",

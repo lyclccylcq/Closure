@@ -231,7 +231,10 @@ public final class ChatSpeechController implements AutoCloseable {
             return CompletableFuture.failedFuture(cause);
         }
 
-        VoiceProfile profile = voiceProfileRegistry.get(SpeechProsody.emotionFor(speechText,emotion));
+        // Independent Qwen reference clips can change speaker identity as well as prosody.
+        // Keep its speaker anchor stable; the original SoVITS path retains emotion profiles.
+        SpeechEmotion profileEmotion = localQwen ? SpeechEmotion.NEUTRAL : SpeechProsody.emotionFor(speechText,emotion);
+        VoiceProfile profile = voiceProfileRegistry.get(profileEmotion);
         if (profile == null) {
             return CompletableFuture.completedFuture(null);
         }

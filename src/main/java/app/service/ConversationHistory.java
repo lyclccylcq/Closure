@@ -16,7 +16,7 @@ public final class ConversationHistory {
     public record Turn(long requestId,String userText,String assistantJson,AssistantReply reply) {
         long codePoints(){
             return (long)userText.codePointCount(0,userText.length())
-                    + assistantJson.codePointCount(0,assistantJson.length());
+                    + reply.getDisplayText().codePointCount(0,reply.getDisplayText().length());
         }
     }
 
@@ -44,7 +44,8 @@ public final class ConversationHistory {
         List<AiChatMessage> messages=new ArrayList<>();
         for(Turn turn:selected){
             messages.add(AiChatMessage.user(turn.userText()));
-            messages.add(AiChatMessage.assistant(turn.assistantJson()));
+            // The output envelope is not conversational context. Replay visible meaning once.
+            messages.add(AiChatMessage.assistant(turn.reply().getDisplayText()));
         }
         return List.copyOf(messages);
     }

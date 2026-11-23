@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0014",
+  "spec_version": 3,
+  "status": "READY",
+  "title": "Repair conversational tone and stabilize local speech identity",
+  "objective": "Repair generic/formulaic text and within-reply voice drift in the actual local runtime while preserving conversation, motion, models and private configuration. No remote publication or paid evaluation.",
+  "architecture": [
+    "User reports regression after persona replacement: robotic reassurance/advice templates; Qwen speech changes tone/voice within a reply compared with earlier GPT-SoVITS. User clarified the comparison and provided formulaic expression descriptions, not raw transcripts. Continue Codex direct local-only implementation; reuse clean isolated checkout on codex/reply-quality-local based on 00ab38afe72f71dea57b86e9c970964b225842e7. No Claude, push, PR, remote CI or merge.",
+    "Confirmed text regression mechanism is weaker relationship/conversational guidance: the short role card replaced familiar companion identity with mostly operational constraints. Restore source-grounded confidence, playful/familiar reactions, concise everyday responses and concrete help without answer demonstrations, keyword bans or fabricated shared personal history. Keep capabilities/fact boundaries separate and proportionate. Preserve current model and its existing reasoning parameters because no evidence shows those changed.",
+    "Project prior assistant messages into model context as displayText only, once per turn, so prior speech summaries and emotion labels do not become repeated answer demonstrations. Retain complete-pair budgets, ordering, cancellation, raw reply data for diagnostics and process-only history. Update tests and documentation for this revised context contract.",
+    "Confirmed voice mechanism: one Java profile per reply still became several independent full-ICL model.generate calls in the Qwen server for sentence punctuation. Synthesize each normal reply (up to 120 characters) in one generation. Keep bounded handling of longer auxiliary text and accurately document the remaining boundary. Test real Engine logic with synthetic model/audio modules, never weights or reference recordings.",
+    "Final voice review found that the installed public MLX generation result can reach max_tokens without an explicit failed finish reason. Treat token_count at or above the unchanged 768-token cap as a failed synthesis, and test this boundary with fake results; do not publish truncated WAV as successful.",
+    "For the local Qwen path use one neutral speaker reference across emotions to prioritize consistent identity. Keep emotion metadata and original GPT-SoVITS profile behavior. Do not switch backend, replace adapter, train, read private configuration/audio/weights or alter the actual voice config file. Clearly distinguish neutral-reference stabilization from acoustic parity with GPT-SoVITS.",
+    "Run full Java and Python suites with fake/loopback services, native silent chat lifecycle, package and offline pet startup. Review exact local commit, produce packet/evidence and install only reviewed files into the daily runtime with backups, protected-source/private-metadata guards. The affected app-owned Qwen service may need a normal restart for changed server code; never kill unrelated port listeners. Verify the health revision without real inference.",
+    "Conversation quality and timbre require user evaluation. Permit a small controlled local Qwen synthesis of fixed synthetic text through the existing authorized service, without opening reference samples/weights/configuration or starting a paid service; retain generated A/B audio for listening where an old service is already available. These clips are not objective proof of speaker equivalence or model quality. No cloud/paid inference or acoustic scores."
+  ],
+  "non_goals": [
+    "No model/provider/config/adapter/weights replacement, new downloads, training, paid AI/TTS calls or private dataset reads. Only fixed-text local synthesis through the existing service is permitted for user review.",
+    "No remote push/PR/CI/merge, purchases or external deployment.",
+    "No changes to accepted motion behavior, persistent memory or unrelated files.",
+    "No claim that deterministic tests establish style improvement or acoustic equivalence to GPT-SoVITS."
+  ],
+  "allowed_paths": [
+    "src/main/resources/prompts/closure-role-card.zh-CN.txt",
+    "src/main/resources/prompts/closure-system-prompt.txt",
+    "docs/character/closure-role-card.zh-CN.txt",
+    "src/main/java/app/service/ConversationHistory.java",
+    "src/test/java/app/service/ConversationHistoryTest.java",
+    "src/test/java/app/service/ChatServiceTest.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "deploy/tts/serve-qwen.py",
+    "deploy/tts/qwen_runtime.py",
+    "scripts/tests/test_qwen_startup.py",
+    "scripts/tests/test_qwen_voice_consistency.py",
+    "docs/character/reply-quality-local.md",
+    "docs/character/dialogue-local-validation.md",
+    "docs/character/dialogue-evaluation/README.md",
+    "docs/character/dialogue-evaluation/cases.v1.json"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The deployed role card restores familiar, specific conversational reactions and concrete help without fixed reply examples or automatic reassurance templates.",
+      "verification": "Editorial comparison to prior prompt, source/resource equality and captured actual request; subjective results remain pending user validation."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Multi-turn history contains each prior user/display response once without speech summary/emotion metadata; budgets and lifecycle remain correct.",
+      "verification": "Request-capture, history-budget and full cancellation/queue tests."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "A <=120-character multi-sentence voice reply results in one Qwen generation and neutral speaker anchor; old GPT-SoVITS emotion-profile behavior remains.",
+      "verification": "CPU synthetic Engine tests for punctuation, 120/long limits, framing, cancellation and fixed-anchor Java tests; no real reference/weight reads."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "The exact reviewed local code is installed and starts with original model/voice settings and motion preserved.",
+      "verification": "Full local Java/Python/native/package checks plus scoped backed-up actual-runtime checks and affected-service identity/revision health evidence."
+    },
+    {
+      "id": "AC-5",
+      "requirement": "No remote publication or fabricated quality/listening acceptance.",
+      "verification": "Clean local commit, local packet/report/receipt and explicit user_acceptance=false."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Neutral anchor intentionally reduces reference-driven emotional variation on Qwen; metadata is retained and old GPT-SoVITS behavior remains.",
+    "Long auxiliary text above 120 characters remains bounded in chunks and can still vary; normal assistant speech is limited to 120.",
+    "Quality and timbre require actual local user validation; no acoustic ranking or GPT-SoVITS equivalence is inferred.",
+    "Normal app/service restart clears process-local chat history and may briefly warm the existing voice model.",
+    "Private settings and unrelated services must be preserved; if an independent service cannot safely be refreshed, do not pretend the new server is active."
+  ],
+  "rollback": "Restore exact task-specific source backups after checking installed hashes, remove only newly installed listed files, rebuild, and restart only the identified daily app and its affected owned voice service. Preserve private configuration/weights/adapters and unrelated services.",
+  "review_budget": {
+    "max_diff_bytes": 140000
+  }
+}

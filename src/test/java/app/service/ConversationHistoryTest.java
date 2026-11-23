@@ -7,6 +7,32 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConversationHistoryTest {
+    @Test
+    void budgetCountsTheVisibleContextRatherThanUnusedOutputEnvelope(){
+        var history=new ConversationHistory();
+        String user="甲".repeat(23_900),display="乙".repeat(40),speech="丙".repeat(120);
+        String raw="{\"displayText\":\""+display+"\",\"speechText\":\""+speech+"\",\"dominantEmotion\":\"NEUTRAL\"}";
+        assertTrue(user.length()+raw.length()>ConversationHistory.CONTEXT_CODE_POINT_LIMIT);
+        assertTrue(user.length()+display.length()<ConversationHistory.CONTEXT_CODE_POINT_LIMIT);
+        history.commit(new ConversationHistory.Turn(1,user,raw,new AssistantReply(display,speech,SpeechEmotion.NEUTRAL)));
+        assertEquals(2,history.requestMessages().size());
+        assertEquals(display,history.requestMessages().getLast().getContent());
+    }
+
+    @Test
+    void historyProjectsVisibleMeaningWithoutRepeatingSpeechOrEmotionMetadata(){
+        var history=new ConversationHistory();
+        String json="{\"displayText\":\"完成了。\",\"speechText\":\"语音专用摘要。\",\"dominantEmotion\":\"TEASING\"}";
+        history.commit(new ConversationHistory.Turn(1,"合成输入。",json,
+                new AssistantReply("完成了。","语音专用摘要。",SpeechEmotion.TEASING)));
+        var context=history.requestMessages();
+        assertEquals(2,context.size());
+        assertEquals("完成了。",context.get(1).getContent());
+        assertFalse(context.get(1).getContent().contains("语音专用"));
+        assertFalse(context.get(1).getContent().contains("TEASING"));
+        assertEquals(json,history.completedTurns().getFirst().assistantJson());
+    }
+
     private ConversationHistory.Turn turn(long id,String user){
         String json="{\"displayText\":\"回答\",\"speechText\":\"朗读\",\"dominantEmotion\":\"NEUTRAL\"}";
         return new ConversationHistory.Turn(id,user,json,new AssistantReply("回答","朗读",SpeechEmotion.NEUTRAL));

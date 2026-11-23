@@ -56,6 +56,9 @@ class QwenStartupTest(unittest.TestCase):
             health = json.loads(raw)
             self.assertEqual(status, 200)
             self.assertEqual(health["backend"], "qwen3-tts")
+            self.assertEqual(health["voice_consistency"], "utterance-v1")
+            self.assertEqual(health["generation_max_chars"], 120)
+            self.assertEqual(health["synthesis_mode"], "full-icl-utterance")
             self.assertIs(health["ready"], False)
             for endpoint in ("/tts", "/closure/tts"):
                 status, _, raw = request("POST", endpoint, body)

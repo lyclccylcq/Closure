@@ -26,6 +26,22 @@ class ChatSpeechControllerTest {
     Path tempDir;
 
     @Test
+    void localQwenKeepsOneSpeakerAnchorAcrossQuestionAndTeasingReplies() throws Exception {
+        FakeSpeechService service=new FakeSpeechService();
+        VoiceProfile neutral=profile("neutral","neutral.wav");
+        VoiceProfile question=profile("question","question.wav");
+        VoiceProfile teasing=profile("teasing","teasing.wav");
+        var profiles=new VoiceProfileRegistry(Map.of(SpeechEmotion.NEUTRAL,neutral,
+                SpeechEmotion.QUESTION,question,SpeechEmotion.TEASING,teasing),m -> { });
+        var controller=new ChatSpeechController(service,profiles,true,m -> { },true);
+        controller.speakAssistantReply(new AssistantReply("完成了。","完成了。",SpeechEmotion.NEUTRAL));
+        controller.speakAssistantReply(new AssistantReply("这次选哪个？","这次选哪个？",SpeechEmotion.QUESTION));
+        controller.speakAssistantReply(new AssistantReply("不是吧，又找到一个小机关？","不是吧，又找到一个小机关？",SpeechEmotion.TEASING));
+        assertEquals(List.of("neutral","neutral","neutral"),service.spokenProfiles.stream().map(VoiceProfile::getId).toList());
+        assertEquals(List.of("完成了。","这次选哪个？","不是吧，又找到一个小机关？"),service.spokenTexts);
+    }
+
+    @Test
     void speaksSanitizedReply() throws Exception {
         FakeSpeechService speechService = new FakeSpeechService();
         ChatSpeechController controller = controller(speechService, true, new ArrayList<>());
