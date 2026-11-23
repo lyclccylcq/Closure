@@ -1,6 +1,8 @@
 package app.ui.chat;
 
 import app.chat.model.AssistantReply;
+import app.character.CharacterActivityListener;
+import app.character.ChatActivity;
 import app.chat.model.ChatMessage;
 import app.chat.model.MessageRole;
 import app.service.AssistantDisplayTextStreamExtractor;
@@ -30,11 +32,19 @@ final class ChatView extends BorderPane {
     private final AssistantReplyParser assistantReplyParser;
     private final VBox messageBox;
     private final ScrollPane scrollPane;
+    private final ChatActivity characterActivity;
+    private volatile boolean disposed;
 
     ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController){
+        this(chatService,soundPlayer,chatSpeechController,CharacterActivityListener.NONE);
+    }
+
+    ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController,
+             CharacterActivityListener activityListener){
         this.chatService=chatService;
         this.soundPlayer=soundPlayer;
         this.chatSpeechController=chatSpeechController;
+        characterActivity=new ChatActivity(activityListener);
         assistantReplyParser=new AssistantReplyParser();
 
         setStyle(ChatStyles.BACKGROUND_STYLE);
@@ -84,44 +94,52 @@ final class ChatView extends BorderPane {
     }
 
     private void streamReplyInto(MessageBubble bubble,String userText){
+        ChatActivity.Request activity=characterActivity.start();
         StringBuilder replyText=new StringBuilder();
         boolean[] receivedToken={false};
         StreamingContentRenderer renderer=new StreamingContentRenderer(bubble,REPLY_STREAM_INTERVAL);
 
-        chatService.streamReply(userText,new ChatStreamListener() {
-            @Override
-            public void onToken(String token){
-                if(!receivedToken[0]){
-                    receivedToken[0]=true;
-                    replyText.setLength(0);
+        try {
+            chatService.streamReply(userText,new ChatStreamListener() {
+                @Override
+                public void onToken(String token){
+                    if(!receivedToken[0]){
+                        receivedToken[0]=true;
+                        replyText.setLength(0);
+                    }
+
+                    replyText.append(token);
+                    AssistantDisplayTextStreamExtractor
+                            .visibleText(replyText.toString())
+                            .ifPresent(renderer::setTargetText);
                 }
 
-                replyText.append(token);
-                AssistantDisplayTextStreamExtractor
-                        .visibleText(replyText.toString())
-                        .ifPresent(renderer::setTargetText);
-            }
-
-            @Override
-            public void onComplete(){
-                AssistantReply assistantReply;
-                if(!receivedToken[0]){
-                    assistantReply=new AssistantReply(
-                            "工程部暂时没有收到模型回复。",
-                            "工程部暂时没有收到模型回复。",
-                            SpeechEmotion.NEUTRAL
-                    );
-                }else{
-                    assistantReply=assistantReplyParser.parse(replyText.toString());
+                @Override
+                public void onComplete(){
+                    AssistantReply assistantReply;
+                    if(!receivedToken[0]){
+                        assistantReply=new AssistantReply(
+                                "工程部暂时没有收到模型回复。",
+                                "工程部暂时没有收到模型回复。",
+                                SpeechEmotion.NEUTRAL
+                        );
+                    }else{
+                        assistantReply=assistantReplyParser.parse(replyText.toString());
+                    }
+                    activity.complete(assistantReply.getDominantEmotion());
+                    renderer.finishWith(assistantReply);
                 }
-                renderer.finishWith(assistantReply);
-            }
 
-            @Override
-            public void onError(Throwable error){
-                renderer.showError("模型连接失败：" + error.getMessage());
-            }
-        });
+                @Override
+                public void onError(Throwable error){
+                    activity.close();
+                    renderer.showError("模型连接失败：" + error.getMessage());
+                }
+            });
+        } catch(RuntimeException failure) {
+            activity.close();
+            renderer.showError("模型连接失败：" + failure.getMessage());
+        }
     }
 
     private void streamTextInto(MessageBubble bubble,String content){
@@ -153,6 +171,8 @@ final class ChatView extends BorderPane {
     }
 
     void dispose(){
+        disposed=true;
+        characterActivity.close();
         chatService.close();
         soundPlayer.stopVoice();
     }
@@ -176,7 +196,7 @@ final class ChatView extends BorderPane {
         }
 
         private void setTargetText(String text){
-            if(text==null || text.isBlank()){
+            if(disposed || text==null || text.isBlank()){
                 return;
             }
 
@@ -185,6 +205,7 @@ final class ChatView extends BorderPane {
 
         private void finishWith(AssistantReply assistantReply){
             Platform.runLater(() -> {
+                if(disposed){ return; }
                 pendingFinalReply=assistantReply;
                 setTargetTextOnFx(assistantReply.getDisplayText());
                 // Begin synthesis alongside the typewriter animation.
@@ -198,6 +219,7 @@ final class ChatView extends BorderPane {
 
         private void showError(String message){
             Platform.runLater(() -> {
+                if(disposed){ return; }
                 timeline.stop();
                 pendingFinalReply=null;
                 bubble.setContent(message);
@@ -206,6 +228,7 @@ final class ChatView extends BorderPane {
         }
 
         private void setTargetTextOnFx(String text){
+            if(disposed){ return; }
             if(text.equals(targetText)){
                 return;
             }

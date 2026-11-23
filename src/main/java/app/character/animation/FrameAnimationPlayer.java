@@ -22,9 +22,13 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
     private final int targetHeight;
     private final Map<PetAction, List<Icon>> frameCache = new EnumMap<>(PetAction.class);
 
-    private Timer animationTimer;
+    private volatile Timer animationTimer;
     private PetAction currentAction;
     private int frameIndex;
+    private boolean looping = true;
+    private Runnable completion;
+    private boolean closed;
+    private long generation;
 
     public FrameAnimationPlayer(JLabel frameLabel, int targetWidth, int targetHeight, Icon fallbackIcon) {
         this.frameLabel = Objects.requireNonNull(frameLabel, "frameLabel");
@@ -46,7 +50,27 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
             return;
         }
 
+        if (closed) return;
+        if (looping && action == currentAction && isPlaying()) return;
+        looping = true;
+        completion = null;
+        generation++;
         playFrames(action);
+    }
+
+    @Override
+    public void playOnce(AnimationType animation, Runnable onComplete) {
+        Objects.requireNonNull(animation, "animation");
+        Objects.requireNonNull(onComplete, "onComplete");
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(() -> playOnce(animation, onComplete));
+            return;
+        }
+        if (closed) return;
+        looping = false;
+        completion = onComplete;
+        generation++;
+        playFrames(actionFor(animation));
     }
 
     @Override
@@ -56,6 +80,8 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
             return;
         }
 
+        completion = null;
+        generation++;
         stopTimer();
     }
 
@@ -71,10 +97,6 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
     }
 
     private void playFrames(PetAction action) {
-        if (action == currentAction && isPlaying()) {
-            return;
-        }
-
         List<Icon> frames = framesFor(action);
         currentAction = action;
         frameIndex = 0;
@@ -83,6 +105,12 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
 
         if (frames.isEmpty()) {
             frameLabel.setIcon(fallbackIcon);
+            Runnable finished = completion;
+            completion = null;
+            long token = generation;
+            if (finished != null) SwingUtilities.invokeLater(() -> {
+                if (!closed && token == generation) finished.run();
+            });
             return;
         }
 
@@ -131,6 +159,13 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
             return;
         }
 
+        if (!looping && frameIndex == frames.size() - 1) {
+            stopTimer();
+            Runnable finished = completion;
+            completion = null;
+            if (finished != null) finished.run();
+            return;
+        }
         frameIndex = (frameIndex + 1) % frames.size();
         frameLabel.setIcon(frames.get(frameIndex));
     }
@@ -140,5 +175,16 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
             animationTimer.stop();
             animationTimer = null;
         }
+    }
+
+    @Override
+    public void close() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(this::close);
+            return;
+        }
+        closed = true;
+        stop();
+        frameCache.clear();
     }
 }

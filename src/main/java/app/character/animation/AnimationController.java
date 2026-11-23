@@ -13,13 +13,18 @@ public final class AnimationController {
         this.player = Objects.requireNonNull(player, "player");
     }
 
-    public void play(AnimationType animation) {
+    public synchronized void play(AnimationType animation) {
         Objects.requireNonNull(animation, "animation");
-        player.play(animation);
         currentAnimation = animation;
+        player.play(animation);
     }
 
-    public void stop() {
+    public synchronized void playOnce(AnimationType animation, Runnable completion) {
+        currentAnimation = Objects.requireNonNull(animation, "animation");
+        player.playOnce(animation, Objects.requireNonNull(completion, "completion"));
+    }
+
+    public synchronized void stop() {
         player.stop();
         currentAnimation = null;
     }
@@ -28,7 +33,7 @@ public final class AnimationController {
         return player.isPlaying();
     }
 
-    public AnimationType currentAnimation() {
+    public synchronized AnimationType currentAnimation() {
         return currentAnimation;
     }
 }
