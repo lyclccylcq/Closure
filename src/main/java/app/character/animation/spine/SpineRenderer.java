@@ -47,17 +47,20 @@ public final class SpineRenderer {
     }
 
     public BufferedImage render(String action, float seconds, AnimationType variant, int width, int height) {
-        if (width < 32 || height < 32 || width > 1024 || height > 1024) throw new IllegalArgumentException("Invalid render size");
-        pose(action, seconds, variant);
-        int factor = width <= 512 && height <= 512 ? 2 : 1;
-        BufferedImage rendered = renderCurrentPose(bounds, width * factor, height * factor);
-        if (factor == 1) return rendered;
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE);
-        Graphics2D graphics = image.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        graphics.drawImage(rendered, 0, 0, width, height, null);
-        graphics.dispose();
-        return image;
+        // The cached export shares timeline objects. Serialize pose evaluation and geometry reads.
+        synchronized (model) {
+            if (width < 32 || height < 32 || width > 1024 || height > 1024) throw new IllegalArgumentException("Invalid render size");
+            pose(action, seconds, variant);
+            int factor = width <= 512 && height <= 512 ? 2 : 1;
+            BufferedImage rendered = renderCurrentPose(bounds, width * factor, height * factor);
+            if (factor == 1) return rendered;
+            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE);
+            Graphics2D graphics = image.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(rendered, 0, 0, width, height, null);
+            graphics.dispose();
+            return image;
+        }
     }
 
     private BufferedImage renderCurrentPose(Bounds camera, int width, int height) {

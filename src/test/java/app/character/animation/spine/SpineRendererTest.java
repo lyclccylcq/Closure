@@ -79,17 +79,19 @@ class SpineRendererTest {
     void simultaneousRenderersSafelyShareImmutableModelData() throws Exception {
         var model = SpineModel.bundled();
         int[] expected = pixels(new SpineRenderer(model).render(AnimationType.IDLE, .5f, 220, 220));
-        try (var workers = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
-            var futures = new ArrayList<java.util.concurrent.Future<int[]>>();
-            for (int i = 0; i < 8; i++) futures.add(workers.submit(() -> {
-                var renderer = new SpineRenderer(model);
-                for (int frame = 0; frame < 12; frame++) {
-                    renderer.duration(AnimationType.TALK);
-                    renderer.render(AnimationType.TALK, frame / 30f, 220, 220);
-                }
-                return pixels(renderer.render(AnimationType.IDLE, .5f, 220, 220));
-            }));
-            for (var future : futures) assertArrayEquals(expected, future.get(5, java.util.concurrent.TimeUnit.SECONDS));
+        for (int round = 0; round < 8; round++) {
+            try (var workers = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                var futures = new ArrayList<java.util.concurrent.Future<int[]>>();
+                for (int i = 0; i < 8; i++) futures.add(workers.submit(() -> {
+                    var renderer = new SpineRenderer(model);
+                    for (int frame = 0; frame < 12; frame++) {
+                        renderer.duration(AnimationType.TALK);
+                        renderer.render(AnimationType.TALK, frame / 30f, 220, 220);
+                    }
+                    return pixels(renderer.render(AnimationType.IDLE, .5f, 220, 220));
+                }));
+                for (var future : futures) assertArrayEquals(expected, future.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            }
         }
     }
 
