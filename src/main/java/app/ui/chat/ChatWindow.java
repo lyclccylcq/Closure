@@ -29,6 +29,7 @@ public class ChatWindow extends JFrame {
     private volatile ChatView chatView;
     private Rectangle anchorBounds;
     private volatile boolean disposed;
+    private Runnable finishConversation;
 
     public ChatWindow() {
         this(ChatSpeechController.fromEnvironment(), true, CharacterActivityListener.NONE, null);
@@ -75,6 +76,12 @@ public class ChatWindow extends JFrame {
         }
 
         super.setVisible(visible);
+
+        if(visible && !wasVisible && isVisible() && !disposed){
+            finishConversation=characterActivity.conversationOpened();
+        }else if(!visible){
+            releaseConversation();
+        }
 
         // 每次聊天窗口从隐藏变成显示时，把消息列表滚到最新位置。
         if(visible && !wasVisible){
@@ -193,6 +200,7 @@ public class ChatWindow extends JFrame {
             return;
         }
         disposed=true;
+        releaseConversation();
 
         soundPlayer.stopVoice();
         if(chatView!=null){
@@ -204,5 +212,11 @@ public class ChatWindow extends JFrame {
         if(ownsSpeechController){
             chatSpeechController.close();
         }
+    }
+
+    private void releaseConversation(){
+        Runnable finish=finishConversation;
+        finishConversation=null;
+        if(finish!=null) finish.run();
     }
 }

@@ -1,10 +1,15 @@
 package app.ui.chat;
 
 import app.ai.*;
-import app.character.CharacterActivityListener;
+import app.character.CharacterState;
+import app.character.CharacterController;
+import app.character.animation.AnimationController;
+import app.character.animation.AnimationPlayer;
+import app.character.animation.AnimationType;
 import app.service.AssistantSpeechService;
 import app.service.ChatService;
 import app.service.ChatSpeechController;
+import app.service.SpeechLifecycleListener;
 import app.voice.VoiceProfileRegistry;
 import app.voice.model.SpeechEmotion;
 import app.voice.model.VoiceProfile;
@@ -21,11 +26,13 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.swing.SwingUtilities;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Opt-in real Swing/JavaFX windows, synthetic backend and silent speech spy only. */
@@ -34,6 +41,16 @@ class ChatWindowLifecycleTest {
     @TempDir Path temp;
     private ChatWindow window;
     private JFXPanel panel;
+    private CharacterController character;
+
+    static final class MotionSpy implements AnimationPlayer {
+        volatile AnimationType current;
+        final List<AnimationType> played=new CopyOnWriteArrayList<>();
+        @Override public void play(AnimationType value){ current=value; played.add(value); }
+        @Override public void playOnce(AnimationType value,Runnable completion){ play(value); completion.run(); }
+        @Override public void stop(){ current=null; }
+        @Override public boolean isPlaying(){ return current!=null; }
+    }
 
     record Call(AiChatRequest request,AiStreamListener listener,CompletableFuture<Void> cancelled){
         void finish(String text){
@@ -80,8 +97,9 @@ class ChatWindowLifecycleTest {
 
     private void open(ChatService service,ChatSpeechController speech) throws Exception {
         swing(() -> {
-            window=new ChatWindow(speech,CharacterActivityListener.NONE,service);
+            window=new ChatWindow(speech,character,service);
             window.setVisible(true);
+            assertEquals(CharacterState.THINKING,character.state());
             panel=(JFXPanel)window.getContentPane().getComponent(0);
             assertTrue(window.isShowing());
             return null;
@@ -120,17 +138,37 @@ class ChatWindowLifecycleTest {
         VoiceProfile profile=new VoiceProfile("neutral",placeholder,"合成参考文本。","zh");
         var registry=new VoiceProfileRegistry(Map.of(SpeechEmotion.NEUTRAL,profile),m -> { });
         var speech=new ChatSpeechController(speechSpy,registry,true,m -> { });
+        var clock=new AtomicLong();
+        var motion=new MotionSpy();
+        character=new CharacterController(new AnimationController(motion),clock::get,Duration.ofMinutes(2));
+        speech.setSpeechLifecycleListener(new SpeechLifecycleListener(){
+            @Override public void onSpeechStarted(){ character.setTalking(true); }
+            @Override public void onSpeechFinished(){ character.setTalking(false); }
+        });
         var service=new ChatService(client);
         try{
             open(service,speech);
             send("先处理第二个文件，颜色表。");
             client.take().finish("测试已接收。");
             assertEquals("测试已接收。",speechSpy.take());
-            swing(() -> { window.setVisible(false); window.setVisible(true); return null; });
+            fx(() -> null);
+            assertTrue(motion.played.contains(AnimationType.THINKING_TALK));
+            assertEquals(AnimationType.THINKING,motion.current);
+            swing(() -> {
+                window.setVisible(true); // Repeated show must not leak another visibility lease.
+                window.dispatchEvent(new java.awt.event.WindowEvent(window,java.awt.event.WindowEvent.WINDOW_CLOSING));
+                assertEquals(AnimationType.IDLE,motion.current);
+                clock.addAndGet(Duration.ofMinutes(2).toNanos()); character.checkIdle();
+                assertEquals(AnimationType.SLEEP,motion.current);
+                window.setVisible(true);
+                assertEquals(AnimationType.THINKING,motion.current);
+                return null;
+            });
             assertEquals(1,service.completedTurns().size());
             swing(() -> { window.dispose(); return null; });
             fx(() -> null);
             assertFalse(client.closed.get());
+            assertEquals(AnimationType.IDLE,motion.current);
 
             open(service,speech);
             List<String> text=fx(() -> {
@@ -158,14 +196,18 @@ class ChatWindowLifecycleTest {
             assertEquals(2,fresh.request().getMessages().size());
             fresh.finish("新会话已开始。");
             assertEquals("新会话已开始。",speechSpy.take());
+            fx(() -> null);
+            clock.addAndGet(Duration.ofHours(1).toNanos()); character.checkIdle();
+            assertEquals(AnimationType.THINKING,motion.current);
             assertEquals(1,service.completedTurns().size());
             assertEquals("新会话第一条。",service.completedTurns().getFirst().userText());
             assertTrue(speechSpy.spoken.isEmpty());
-            System.out.println("CLOSURE_CHAT_LOCAL_SMOKE_PASS recreated=true context=true stop=true reset=true staleSpeech=false");
+            System.out.println("CLOSURE_CHAT_LOCAL_SMOKE_PASS recreated=true context=true stop=true reset=true staleSpeech=false chatPose=true idleSleep=true");
         }finally{
             if(window!=null) swing(() -> { window.dispose(); return null; });
             fx(() -> null);
             service.close(); speech.close();
+            character.close();
             Platform.exit();
         }
     }

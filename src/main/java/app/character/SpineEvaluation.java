@@ -35,37 +35,54 @@ public final class SpineEvaluation {
         JPanel controls = new JPanel(new FlowLayout());
         JCheckBox speaking = new JCheckBox("Speech active (simulated)");
         JCheckBox thinking = new JCheckBox("Thinking (simulated)");
+        JCheckBox conversation = new JCheckBox("Chat visible (simulated)");
         AtomicReference<Runnable> finishThinking = new AtomicReference<>(() -> { });
+        AtomicReference<Runnable> finishConversation = new AtomicReference<>(() -> { });
         speaking.addActionListener(event -> character.setTalking(speaking.isSelected()));
         thinking.addActionListener(event -> {
             finishThinking.getAndSet(() -> { }).run();
             if (thinking.isSelected()) finishThinking.set(character.thinkingStarted());
         });
+        conversation.addActionListener(event -> {
+            finishConversation.getAndSet(() -> { }).run();
+            if (conversation.isSelected()) finishConversation.set(character.conversationOpened());
+        });
+        Runnable clearSimulatedState = () -> {
+            speaking.setSelected(false); thinking.setSelected(false); conversation.setSelected(false);
+            character.setTalking(false);
+            finishThinking.getAndSet(() -> { }).run();
+            finishConversation.getAndSet(() -> { }).run();
+        };
         JButton tap = new JButton("Tap");
         tap.addActionListener(event -> character.play(AnimationType.TAP));
         JButton sleep = new JButton("Sleep");
         sleep.addActionListener(event -> {
-            speaking.setSelected(false); thinking.setSelected(false);
-            character.setTalking(false); finishThinking.getAndSet(() -> { }).run();
+            clearSimulatedState.run();
             character.play(AnimationType.SLEEP);
         });
         JButton idle = new JButton("Idle");
         idle.addActionListener(event -> {
-            speaking.setSelected(false); thinking.setSelected(false);
-            character.setTalking(false); finishThinking.getAndSet(() -> { }).run();
+            clearSimulatedState.run();
             character.play(AnimationType.IDLE);
+        });
+        JButton walk = new JButton("Walk");
+        walk.addActionListener(event -> {
+            clearSimulatedState.run();
+            character.play(AnimationType.WALK);
         });
         JButton background = new JButton("Light / dark");
         background.addActionListener(event -> stage.setBackground(stage.getBackground().getRed() > 100
                 ? new Color(27, 32, 40) : new Color(243, 245, 248)));
-        controls.add(tap); controls.add(idle); controls.add(sleep); controls.add(background);
+        controls.add(tap); controls.add(idle); controls.add(walk); controls.add(sleep); controls.add(background);
         JPanel events = new JPanel(new FlowLayout());
-        events.add(speaking); events.add(thinking);
+        events.add(speaking); events.add(thinking); events.add(conversation);
         JPanel footer = new JPanel(new GridLayout(0, 1));
         JLabel status = new JLabel("Evaluation only · no AI, TTS, weather or reminders", SwingConstants.CENTER);
         footer.add(controls); footer.add(events); footer.add(status);
-        Timer stateTimer = new Timer(100, event -> status.setText("State: " + character.state() + " · " + pet.rendererName()
-                + " · simulated events, no services"));
+        Timer stateTimer = new Timer(100, event -> {
+            character.checkIdle();
+            status.setText("State: " + character.state() + " · " + pet.rendererName() + " · simulated events, no services");
+        });
         stateTimer.start();
         window.add(stage, BorderLayout.CENTER);
         window.add(footer, BorderLayout.SOUTH);

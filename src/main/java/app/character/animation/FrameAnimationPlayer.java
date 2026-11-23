@@ -92,7 +92,7 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
 
     private PetAction actionFor(AnimationType animation) {
         return switch (animation) {
-            case IDLE, TALK, TAP, GREETING, HAPPY, THINKING, SLEEP -> PetAction.OPEN;
+            case IDLE, WALK, TALK, TAP, GREETING, HAPPY, THINKING, THINKING_TALK, SLEEP -> PetAction.OPEN;
         };
     }
 

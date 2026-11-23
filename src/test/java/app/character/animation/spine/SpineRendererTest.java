@@ -56,6 +56,19 @@ class SpineRendererTest {
                 pixels(renderer.render(AnimationType.TALK, .123f, 220, 220))));
         assertFalse(Arrays.equals(pixels(renderer.render("Sit", .123f, null, 220, 220)),
                 pixels(renderer.render(AnimationType.THINKING, .123f, 220, 220))));
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.THINKING, .123f, 220, 220)),
+                pixels(renderer.render(AnimationType.THINKING_TALK, .123f, 220, 220))));
+    }
+
+    @Test
+    void walkingUsesTheExistingMoveAndConversationSpeechKeepsTheSitBody(){
+        SpineRenderer renderer=new SpineRenderer(SpineModel.bundled());
+        assertEquals("Move",SpineRenderer.sourceAction(AnimationType.WALK));
+        assertEquals(8f,renderer.duration(AnimationType.WALK));
+        assertEquals("Sit",SpineRenderer.sourceAction(AnimationType.THINKING_TALK));
+        assertEquals(SpineRenderer.sourceAction(AnimationType.THINKING),SpineRenderer.sourceAction(AnimationType.THINKING_TALK));
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.WALK,.25f,220,220)),
+                pixels(renderer.render(AnimationType.WALK,2.25f,220,220))));
     }
 
     @Test

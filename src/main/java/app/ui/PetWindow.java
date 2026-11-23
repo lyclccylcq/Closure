@@ -2,6 +2,7 @@ package app.ui;
 
 import app.character.animation.AnimationController;
 import app.character.CharacterController;
+import app.character.CharacterState;
 import app.character.animation.AnimationType;
 import app.reminder.AiCourseScheduleImportConverter;
 import app.reminder.AiEventReminderTextGenerator;
@@ -229,6 +230,7 @@ public class PetWindow extends JFrame {
      * 桌面闲置随机对白计时器。
      */
     private Timer idleChatterTimer;
+    private Timer idleSleepTimer;
     private long lastDesktopActivityMillis;
 
     /**
@@ -251,6 +253,7 @@ public class PetWindow extends JFrame {
      * 3. 下线
      */
     private JPopupMenu popupMenu;
+    private JMenuItem walkAction;
 
     /**
      * 构造方法：创建桌宠窗口。
@@ -304,6 +307,7 @@ public class PetWindow extends JFrame {
 
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
+        startIdleSleepTimer();
         playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
         startWorkBreakReminder();
         startEventReminder();
@@ -368,7 +372,7 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mousePressed(MouseEvent event) {
-                registerDesktopActivity();
+                registerUserActivity();
 
                 /*
                  * 记录鼠标按下时的位置。
@@ -398,7 +402,7 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseDragged(MouseEvent event) {
-                registerDesktopActivity();
+                registerUserActivity();
 
                 // 获取窗口当前在屏幕上的位置
                 Point currentLocation = getLocation();
@@ -589,6 +593,13 @@ public class PetWindow extends JFrame {
         idleChatterTimer.setRepeats(false);
     }
 
+    private void startIdleSleepTimer() {
+        idleSleepTimer = new Timer(1000, event -> {
+            if (characterController != null) characterController.checkIdle();
+        });
+        idleSleepTimer.start();
+    }
+
     private void initSpeechController() {
         speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
@@ -686,6 +697,9 @@ public class PetWindow extends JFrame {
         if (chatWindow != null && chatWindow.isVisible()) {
             return false;
         }
+        if (characterController != null && characterController.state() == CharacterState.SLEEPING) {
+            return false;
+        }
 
         long idleMillis = System.currentTimeMillis() - lastDesktopActivityMillis;
         return idleMillis >= IDLE_CHATTER_MIN_IDLE_MILLIS;
@@ -698,6 +712,11 @@ public class PetWindow extends JFrame {
 
     private void registerDesktopActivity() {
         lastDesktopActivityMillis = System.currentTimeMillis();
+    }
+
+    private void registerUserActivity() {
+        registerDesktopActivity();
+        if (characterController != null) characterController.userActivity();
     }
 
     private void playAnimation(AnimationType animation) {
@@ -977,7 +996,8 @@ public class PetWindow extends JFrame {
     }
 
     private void finishOpenVoiceAndShowStartupWeatherGreeting() {
-        playAnimation(AnimationType.IDLE);
+        // The greeting one-shot restores the current state itself; a late audio callback
+        // must not replace a newer walk, sleep or visible-conversation request.
         showStartupWeatherGreetingAfterSpeechReady();
     }
 
@@ -1107,12 +1127,16 @@ public class PetWindow extends JFrame {
         JMenu characterActions = new JMenu("动作");
         characterActions.setFont(menuFont);
         JMenuItem idleAction = new JMenuItem("待机");
+        walkAction = new JMenuItem("行走");
         JMenuItem sleepAction = new JMenuItem("休息");
         idleAction.setFont(menuFont);
+        walkAction.setFont(menuFont);
         sleepAction.setFont(menuFont);
         idleAction.addActionListener(event -> playAnimation(AnimationType.IDLE));
+        walkAction.addActionListener(event -> playAnimation(AnimationType.WALK));
         sleepAction.addActionListener(event -> playAnimation(AnimationType.SLEEP));
         characterActions.add(idleAction);
+        characterActions.add(walkAction);
         characterActions.add(sleepAction);
         popupMenu.add(characterActions);
 
@@ -1136,6 +1160,7 @@ public class PetWindow extends JFrame {
      * @param event 鼠标事件
      */
     private void showPopupMenu(MouseEvent event) {
+        if (walkAction != null) walkAction.setEnabled(chatWindow == null || !chatWindow.isVisible());
         /*
          * 在鼠标点击的位置显示菜单。
          *
@@ -1247,6 +1272,7 @@ public class PetWindow extends JFrame {
         if (idleChatterTimer != null) {
             idleChatterTimer.stop();
         }
+        if (idleSleepTimer != null) idleSleepTimer.stop();
         if (courseScheduleReminder != null) {
             courseScheduleReminder.dispose();
         }
@@ -1289,6 +1315,7 @@ public class PetWindow extends JFrame {
 
     @Override
     public void dispose() {
+        if (idleSleepTimer != null) idleSleepTimer.stop();
         if (chatWindow != null) chatWindow.dispose();
         if (chatService != null) chatService.close();
         if (characterController != null) characterController.close();

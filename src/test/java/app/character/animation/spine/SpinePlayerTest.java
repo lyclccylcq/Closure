@@ -10,6 +10,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SpinePlayerTest {
     @Test
+    void walkingAndSeatedSpeechPublishRealLoopingFramesAndCloseCleanly() throws Exception {
+        var label=new JLabel();
+        var player=new SpineAnimationPlayer(label,220,220,SpineModel.bundled());
+        var frames=new CountDownLatch(2);
+        label.addPropertyChangeListener("icon",event -> frames.countDown());
+        try{
+            player.play(AnimationType.WALK);
+            assertTrue(frames.await(5,TimeUnit.SECONDS));
+            assertTrue(player.isPlaying());
+            player.play(AnimationType.THINKING_TALK);
+            SwingUtilities.invokeAndWait(() -> assertNotNull(label.getIcon()));
+        }finally{ player.close(); }
+        assertTrue(player.awaitClosed(1500));
+    }
+
+    @Test
     void aRealOneShotCompletesOnceAndClosingTerminatesTheRenderer() throws Exception {
         var label = new JLabel();
         var player = new SpineAnimationPlayer(label, 220, 220, SpineModel.bundled());

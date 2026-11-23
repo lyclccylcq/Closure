@@ -32,8 +32,9 @@ public final class SpineRenderer {
     public static String sourceAction(AnimationType type) {
         return switch (type) {
             case IDLE, TALK -> "Relax";
+            case WALK -> "Move";
             case TAP, GREETING, HAPPY -> "Interact";
-            case THINKING -> "Sit";
+            case THINKING, THINKING_TALK -> "Sit";
             case SLEEP -> "Sleep";
         };
     }
@@ -90,12 +91,13 @@ public final class SpineRenderer {
         if (animation == null || !Float.isFinite(seconds) || seconds < 0) throw new IllegalArgumentException("Invalid pose: " + action);
         skeleton.setToSetupPose();
         animation.apply(skeleton, 0, seconds, false, null, 1, MixBlend.setup, MixDirection.in);
-        if (variant == AnimationType.TALK) {
+        if (variant == AnimationType.TALK || variant == AnimationType.THINKING_TALK) {
             Bone mouth = skeleton.findBone("F_R_Mouth_II");
             if (mouth != null) mouth.setScaleY(mouth.getScaleY() * (1 + .65f * Math.abs((float) Math.sin(seconds * 15))));
             Bone head = skeleton.findBone("F_Head_I");
             if (head != null) head.setRotation(head.getRotation() + 1.5f * (float) Math.sin(seconds * 7));
-        } else if (variant == AnimationType.THINKING) {
+        }
+        if (variant == AnimationType.THINKING || variant == AnimationType.THINKING_TALK) {
             Bone head = skeleton.findBone("F_Head_I");
             if (head != null) head.setRotation(head.getRotation() + 5 + (float) Math.sin(seconds * 2));
         }

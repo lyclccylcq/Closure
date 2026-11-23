@@ -11,9 +11,9 @@ With JDK 21, double-click `docs/character/preview-spine.command`, or run:
 ./docs/character/preview-spine.command --export /private/tmp/closure-spine-preview
 ```
 
-The standalone window runs only the model renderer and action scheduler. It does not create ChatService, AI, TTS, weather, reminders, an audio player or a server. The speech/thinking controls simulate lifecycle events; they are explicitly labelled as simulated. Test a tap while speech is active, end speech before the tap finishes, and check recovery to IDLE. Repeat with speech starting during a tap and verify recovery to TALKING. Inspect both backgrounds and the sleep pose. Closing the window terminates its renderer.
+The standalone window runs only the model renderer and action scheduler. It does not create ChatService, AI, TTS, weather, reminders, an audio player or a server. The speech/thinking/chat-visible controls simulate lifecycle events; they are explicitly labelled as simulated. Test a tap while speech is active, end speech before the tap finishes, and check recovery to IDLE. Repeat with speech starting during a tap and verify recovery to TALKING. Select chat-visible and verify that speech uses the same sitting body while the mouth moves, then returns to thinking. Inspect Walk, both backgrounds and the sleep pose. Closing the window terminates its renderer.
 
-The exporter produces contact sheets of all six source actions at four times, individual transparent PNGs, and interaction/talk/thinking GIFs. `preview-metrics.json` records the measured camera and render time. It writes to the chosen directory, outside tracked resources. If Maven uses a custom local repository, set `CLOSURE_MAVEN_REPOSITORY` to that repository directory before launching.
+The exporter produces contact sheets of all six source actions and procedural variants at four times, individual transparent PNGs, and interaction/talk/thinking/seated-speech/walking GIFs. `preview-metrics.json` records the measured camera and render time. It writes to the chosen directory, outside tracked resources. If Maven uses a custom local repository, set `CLOSURE_MAVEN_REPOSITORY` to that repository directory before launching.
 
 For the normal assistant, startup defaults to Spine:
 
@@ -31,15 +31,19 @@ For a scoped activation, require each affected existing file to match the review
 
 | Application action | Exported action | Playback |
 | --- | --- | --- |
-| IDLE | Relax | loop |
+| IDLE | Relax | awake standby loop |
+| WALK | Move | native 8-second loop at the current window location |
 | TAP / GREETING / HAPPY | Interact | one shot, then recover current requested state |
-| TALK | Relax | loop plus restrained procedural mouth/head movement |
-| THINKING | Sit | loop plus a small procedural head tilt |
-| SLEEP | Sleep | loop; speech or a chat request wakes the character |
+| TALK | Relax | speech outside the visible chat window; procedural mouth/head movement |
+| THINKING | Sit | persistent while chat is visible, or while a request is pending |
+| THINKING_TALK | Sit | the same seated body plus procedural mouth/head movement during chat speech |
+| SLEEP | Sleep | default after two minutes without pet interaction; background speech temporarily masks sleep |
 
-Move, Sit and the zero-duration Default pose are also included in the all-action exports. The source contains **no authored Talk, Thinking or Happy animation**. Program-driven variants do not create an editable Spine project and are not phoneme-level or audio-envelope lip sync. Actual speech start/finish callbacks gate the TALK state. Existing parsed CHEERFUL/TEASING emotions request the interaction-based HAPPY variant without changing AI prompts or response schemas.
+The zero-duration Default pose is also included in the all-action exports. Move and Sit are now used by WALK and the conversation poses respectively. The source contains **no authored Talk, Thinking or Happy animation**. Program-driven variants do not create an editable Spine project and are not phoneme-level or audio-envelope lip sync. Actual speech start/finish callbacks gate the TALK state. Existing parsed CHEERFUL/TEASING emotions request the interaction-based HAPPY variant without changing AI prompts or response schemas.
 
-`CharacterController` retains talking/thinking/sleep as the requested base while an interaction plays. TAP has priority over GREETING and HAPPY. Generation tokens reject obsolete completion callbacks; overlapping chat requests have individually paired, idempotent completions. Successful, failed and disposed requests all release thinking state. Idle/sleep actions are available in the existing pet context menu.
+`ChatWindow` holds an idempotent conversation-visible lease from show until hide/dispose. This seated base survives request completion, errors, cancellation, speech and emotion feedback. Opening chat preempts an old one-shot and invalidates its callback; interactions cannot replace the body while chat remains visible. Outside chat, TAP retains priority over GREETING and HAPPY, and pending requests remain individually paired. Explicit Idle/Walk/Sleep commands preempt an older one-shot; late startup-audio completion cannot replace the newer mode. Closing the last visible chat starts a fresh inactivity interval.
+
+`CharacterController` uses a monotonic clock for the two-minute long-idle policy. The normal pet window checks it once per second. Clicking/dragging the pet, choosing an explicit action or using chat wakes it; automatic speech bubbles do not reset user inactivity. Sleeping suppresses spontaneous idle chatter. Necessary background speech may temporarily use TALK, then returns to sleep if no interaction occurred. The Actions menu exposes Idle, Walk and Sleep. Walk is disabled while chat is visible, and does not move the desktop window automatically. The PNG fallback continues to use its existing frames.
 
 The renderer uses the pinned 3.8 runtime for bones, IK/transform constraints and weighted mesh deformations, with a CPU triangle rasterizer for the existing Swing window. It supports this model's normal and additive slots, rotated/trimmed atlas regions, PMA input and draw order. A top-left fill rule prevents shared triangle edges being blended twice. It renders at twice the display resolution before downsampling. A sampled visible-pixel envelope is fixed across all actions, avoiding per-frame zoom or recentering. Rendering runs on one daemon worker with a bounded cadence and at most one pending Swing publication; stop/dispose invalidate pending frames and callbacks.
 
@@ -64,3 +68,7 @@ The runtime dependency is `com.esotericsoftware.spine:spine-libgdx:3.8.99.1` wit
 ## Execution record
 
 The initial Claude attempt failed before implementation because its service could not connect. On 2026-11-23 the user expressly authorized Codex direct implementation and temporarily suspended the Claude-guided mode. Codex implemented this feature. After the preview, the user said “没啥问题，先用套方案吧”, selecting this solution for adoption. Exact-head review, CI, merge and merged delivery checks still apply; preview feedback does not substitute for those checks or licence ownership.
+
+## Local motion update
+
+TASK-0013 follows the user’s explicit local-validation/no-push restriction. Its report, complete review packet, exact-file backups and runtime receipt are stored under `.ai-workflow/motion-local/`. No PR, remote CI or merge is requested for this iteration. [Local validation steps](motion-local-validation.md) describe the visible behavior and limits.
