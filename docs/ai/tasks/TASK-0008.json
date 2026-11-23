@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0008",
-  "spec_version": 5,
+  "spec_version": 6,
   "status": "READY",
   "title": "Evaluate native Spine rendering and character action scheduling",
   "objective": "Replace the single-animation visual behaviour in an isolated runnable evaluation candidate with the supplied Closure Spine model, visible distinct interaction/idle/sleep and speech/thinking behaviour, and deterministic action recovery. Preserve the current desktop window, dragging, chat, speech and reminder contracts. Complete technical evaluation without new fees or claiming runtime licensing or user acceptance.",
   "architecture": [
-    "On 2026-11-23 the user explicitly authorized Codex to implement directly and temporarily suspended the Claude-guided mode for the coming months because Claude is unavailable. Codex performs implementation, evidence collection and technical review honestly without claiming separate Claude implementation or human acceptance. Base remains reviewed origin/main e61bf3b55d86942411e03c972978e273f40289b9; preserve unrelated legacy and live source changes.",
+    "On 2026-11-23 the user explicitly authorized Codex direct implementation and temporarily suspended Claude-guided execution for the coming months. TASK-0009 / PR #8 separately delivered that executor mode. This Spine-only evaluation is based on reviewed merged main b9366ae4ea8b8cc22c1b9ae959849a4b78f3493f. Preserve unrelated legacy/live source and private settings; do not claim Claude implementation, licensed distribution or user acceptance.",
     "The user supplied isHarryh/Ark-Models commit b799ffe8ee30bbb1b04f3c551234edfab8d5549a, directory models/4228_closur. The host seeds the three hash-verified files under src/main/resources/animations/closure/spine/. The binary is Spine 3.8.99, 297 bones, 117 slots, 74 mesh plus 53 region attachments, one 624x624 premultiplied-alpha texture with 122 atlas regions. Animations: Default 0 seconds; Interact 3.366667; Move, Relax, Sit each 8; Sleep 5.333333. There is no editable .spine project and no authored Talk/Thinking/Happy animation.",
     "Pin com.esotericsoftware.spine:spine-libgdx:3.8.99.1 and compatible libGDX core (1.10.0 was already used for successful host-only parsing). No GPU/OpenGL backend, browser, native game engine, subprocess or external service is required. Adapt the existing Swing PetAnimationPanel to host an interchangeable renderer. Reuse AnimationPlayer and AnimationController, with compatible constructors and a frame-renderer fallback; a closure.animation=frames switch must remain available. The evaluation candidate should visibly use Spine by default in its isolated project.",
     "Implement a CPU renderer using the runtime's bone/constraint/deform calculations and Java BufferedImage output. It must correctly support weighted meshes, draw order, attachment colours, rotated/trimmed atlas regions and the actual PMA input. Do not flatten the source into prerecorded frames or require a GL Texture for metadata-only parsing. A custom AttachmentLoader can retain atlas metadata; region local offsets must respect crop/original dimensions and mesh UVs must account for atlas rotation/trim. Rendering must preserve transparency with correct alpha composition, avoid triangle seam artefacts and expose unsupported attachment/blend features honestly. This actual model has no clipping attachments. Determine stable camera bounds from sampled poses or another justified fixed envelope, so changing actions does not resize/recentre every frame or clip the head/feet/props. Support the actual one additive-blend slot as well as the 116 normal slots.",
@@ -15,7 +15,6 @@
     "Give TALKING a visible, restrained procedural mouth/head activity layered over an appropriate source pose, gated by the existing real speech start/finish callbacks. THINKING and positive emotion may use authored base actions plus bounded procedural changes; describe these truthfully as program-driven variants, not new authored or phoneme-synchronized animation. Reuse the existing AssistantReply dominantEmotion; do not change the LLM JSON schema or prompts. Connect thinking start/complete/error and positive emotion through a small optional UI/activity listener rather than modifying ChatService or TTS generation. Multiple overlapping requests must not leave the character permanently thinking or interrupt active speech. Existing ChatWindow/ChatView constructors must continue to work.",
     "Provide an offline headless preview/export entry point or focused test fixture that renders all six source actions and the added talk/thinking states into PNG contact sheets and/or GIFs outside tracked source. Include transparent and dark/light-background QA views. Tests must exercise actual model loading/rendering plus scheduling races, fallback and cleanup. The host will inspect the real previews and run native window startup.",
     "Licensing is not confirmed: the user answered uncertain about a Spine Editor license. This work is a local evaluation under the official runtime evaluation allowance, not a claim of a distributable licensed product. Document the exact asset source, commit, checksums and upstream noncommercial notice plus the official runtime license conditions and evaluation-only status. Do not change the user's running application, purchase anything, publish a PR or merge until Codex resolves that concrete licensing condition. Technical PASS is separate from distribution permission and product acceptance.",
-    "Record the explicit temporary Codex-only executor override at the top of AGENTS.md, CLAUDE.md, docs/ai/automation.md and the closure-workflow Skill. Keep all isolation, checks, evidence, review and authorized completion gates. Do not call Claude for implementation or repairs while this override is active. Add an explicit trusted implementation_executor=codex mode: capability/doctor/start/repair/CI-failure handling must never invoke Claude in this mode. Instead freeze the task and return AWAITING_CODEX_IMPLEMENTATION with head-bound feedback; the live Codex completes direct implementation and evidence. Legacy claude mode remains compatible and invalid executor values fail closed.",
     "The independently authorized temporary executor-mode change is delivered in TASK-0009. After its merge, integrate that reviewed main baseline and keep the Spine feature isolated; do not publish this evaluation feature while licensing remains unconfirmed. The complete binary patch is reviewed through exact upstream blob/SHA-256 verification plus actual decoding/rendering; all textual changes are read, and the untruncated packet retains the full binary diff.",
     "Prewarm the immutable model and fixed camera on a background worker in both real startup and the standalone evaluation, before Swing constructs the panel. Cache the immutable action map so multiple renderers never iterate the runtime shared Array concurrently. Native smoke must still inspect the actual rendered icon; do not weaken its marker checks."
   ],
@@ -23,7 +22,7 @@
     "No new artwork, editable Spine project reconstruction, model re-rigging, new fees, license purchases or deployment.",
     "No ChatService changes, AI/TTS model changes, prompt/schema changes, private configuration reads, real audio samples, credentials, schedules or model weights in the worker, Git or CI.",
     "No claims of phoneme-level lip sync, newly authored Talk/Thinking/Happy assets, licensed distribution or user product acceptance. No automatic replacement or restart of the currently running application while licensing is unconfirmed.",
-    "Do not weaken verification, authorization or CI gates. Workflow changes are limited to the user-authorized temporary Codex-only executor mode and its regression tests, plus recording the override. No unrelated styles, Maven wrapper or CI edits."
+    "No further dispatcher/workflow, CI, authorization or check changes; use the independently merged TASK-0009 executor mode. Avoid unrelated styles or Maven wrapper edits."
   ],
   "allowed_paths": [
     "pom.xml",
@@ -39,13 +38,6 @@
     "src/test/java/app/ui/chat/**",
     "README.md",
     "docs/character/**",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "docs/ai/automation.md",
-    ".agents/skills/closure-workflow/SKILL.md",
-    "scripts/ai_dispatch.py",
-    "scripts/ai_dispatch_config.json",
-    "scripts/tests/test_ai_dispatch.py",
     "src/main/java/app/Main.java"
   ],
   "acceptance_criteria": [
