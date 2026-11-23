@@ -11,6 +11,12 @@ public interface AiModelClient extends AutoCloseable {
      */
     void streamChat(AiChatRequest request,AiStreamListener listener);
 
+    /** Existing adapters remain usable; capable transports interrupt only this call. */
+    default AiStreamCall streamChatCancellable(AiChatRequest request,AiStreamListener listener){
+        streamChat(request,listener);
+        return AiStreamCall.NONE;
+    }
+
     @Override
     default void close(){
     }

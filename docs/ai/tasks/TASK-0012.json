@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0012",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Activate the new persona and recent multi-turn chat locally",
+  "objective": "Make the daily local Closure use the reviewed role card and application-owned recent conversation, preserve current model/voice compatibility, and deliver a locally runnable version for user validation without pushing, PR publication, CI or merging.",
+  "architecture": [
+    "User explicitly requested local replacement first and no push. Codex implements directly under the existing override; the current isolated checkout is reused on codex/character-dialogue-local, based on the committed design 9c13606. Do not invoke Claude, publish, finalize, push, create a PR, run remote CI or merge.",
+    "Adopt and hash the exact seven public live-only AI sources/tests before implementation. Preserve configured model and existing reasoning-effort selection, sampling compatibility and SSE error handling. No private configuration, credentials, user schedules, weights or audio are opened or copied into this checkout.",
+    "Load the exact reviewed compact role card from a dedicated bundled resource and keep the reply JSON contract in a separate resource. Remove the old example-anchored prompt and unsupported health assumptions from the chat opener. Current environment facts and explicit lack of persistent memory remain separate runtime context.",
+    "ChatService owns a serialized request queue and an in-memory conversation independent of ChatWindow. The pet application owns the service and passes it to chat windows. Hiding or recreating a window retains completed turns; application restart clears them. New conversation explicitly cancels unfinished requests and clears history.",
+    "Send at most the latest 12 complete pairs under a 24000 Unicode-code-point history budget; never truncate a turn or replay speechText as a second message. Keep a bounded display transcript separately. The current user input is included once. No summaries, SQLite, long-term facts, retrieval or provider switch are implemented in this stage.",
+    "Commit a pair only after a successful terminal model event and a complete validated reply object. Errors, cancellation, stale callbacks and partial/invalid JSON do not commit assistant history or emit speech. Queued requests are built after the preceding commit. Per-request cancellation reaches the transport when supported.",
+    "Preserve declared dominant intent rather than overriding it from a mix of lexical cues. Keep existing readable speech sanitization and genuine-question repair. Expose stop and new-conversation controls with no extra model calls.",
+    "Validate locally using deterministic fake clients and loopback SSE, the full offline unit suite, package and real native startup. Produce head-bound local report, packet and review. These are local engineering checks, not model-quality scores, remote CI, merge evidence or user acceptance.",
+    "After local review, install only explicitly reviewed source/resource/test files into the actual daily runtime using exact baseline checks and recoverable backups. Preserve all other customized sources and private settings. Build and smoke-check the actual runtime, then gracefully restart only the identified pet app. No real chat/TTS inference or training is performed by the agent."
+  ],
+  "non_goals": [
+    "No push, PR, remote CI, merge, cloud deployment, purchases or paid inference.",
+    "No model replacement, provider benchmark, prompt-example training, TTS adapter replacement, animation change or Spine licence assertion.",
+    "No persistent chat store, summary generation, SQLite long-term memory or claim that memory survives process restart.",
+    "No real user transcript/configuration export, secrets/audio/weights reads, blanket copy or cleanup of the dirty original workspace."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/ai/AiChatRequest.java",
+    "src/main/java/app/ai/AiModelConfig.java",
+    "src/main/java/app/ai/AiModelClient.java",
+    "src/main/java/app/ai/AiStreamCall.java",
+    "src/main/java/app/ai/OpenAiCompatibleChatClient.java",
+    "src/main/java/app/service/ChatService.java",
+    "src/main/java/app/service/ChatReasoningPolicy.java",
+    "src/main/java/app/service/ConversationHistory.java",
+    "src/main/java/app/service/ChatStreamListener.java",
+    "src/main/java/app/service/AssistantReplyParser.java",
+    "src/main/java/app/service/ReplyJsonObject.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/chat/ChatWindow.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/ui/chat/ChatInputBar.java",
+    "src/main/resources/prompts/closure-role-card.zh-CN.txt",
+    "src/main/resources/prompts/closure-system-prompt.txt",
+    "src/test/java/app/ai/**",
+    "src/test/java/app/service/ChatService*Test.java",
+    "src/test/java/app/service/ChatReasoningPolicyTest.java",
+    "src/test/java/app/service/ConversationHistoryTest.java",
+    "src/test/java/app/service/AssistantReplyParserTest.java",
+    "src/test/java/app/ui/chat/**",
+    "docs/character/dialogue-local-validation.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "Actual chat requests use the exact reviewed role card plus a separate output contract and current runtime context, retaining the existing model/reasoning compatibility.",
+      "verification": "Resource equality/hash checks, captured real ChatService requests and preserved-adapter tests."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Requests include recent complete turns in order, bounded by pair/character budget; the second queued request is built after the first successful commit and assistant JSON appears once.",
+      "verification": "Deterministic fake-client tests for references, queue order, history serialization and budget eviction."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "Failure, incomplete/malformed responses, cancellation and late callbacks never commit successful history or emit stale UI/voice; stop and explicit new conversation work.",
+      "verification": "Fault/cancel/retry/reset race tests and loopback SSE terminal/error tests; native JavaFX local checks where available."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Window lifetime is separate from conversation lifetime; close/reopen restores completed exchanges within a process and restart is documented to clear them.",
+      "verification": "Service/window ownership inspection and offline native close/recreate probe with a deterministic fake client."
+    },
+    {
+      "id": "AC-5",
+      "requirement": "The original local daily launcher starts the reviewed local version with unchanged model/voice settings, protected customizations and animation, with exact-file rollback available.",
+      "verification": "Scoped install receipt and backup hashes, actual runtime test/package/native startup and identified normal app restart; no inference required."
+    },
+    {
+      "id": "AC-6",
+      "requirement": "All work remains local pending user validation, with no remote publication, CI, merge or fabricated product acceptance.",
+      "verification": "Local Git/evidence inspection and delivery receipt marked LOCAL_VALIDATION_READY, remote publication NOT_REQUESTED."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Prompt quality and identity fidelity need user/live-model evaluation; deterministic tests verify request composition and lifecycle, not conversational quality.",
+    "Recent history is intentionally process-local and bounded; context outside the budget is not summarized or remembered permanently.",
+    "The daily runtime includes adopted public-source changes and private service settings; installation must compare exact baselines and preserve unlisted files.",
+    "No remote CI or merged release exists for this user-requested local validation stage. Local PASS is not user acceptance."
+  ],
+  "rollback": "Stop only the identified pet app, restore the exact listed source/resource/test backups from .ai-workflow/dialogue-local/backup after verifying installed hashes, remove only newly installed listed paths, rebuild and restart the original daily launcher. Do not alter private configuration or independent voice services.",
+  "review_budget": {
+    "max_diff_bytes": 180000
+  }
+}

@@ -6,11 +6,9 @@ import app.character.ChatActivity;
 import app.chat.model.ChatMessage;
 import app.chat.model.MessageRole;
 import app.service.AssistantDisplayTextStreamExtractor;
-import app.service.AssistantReplyParser;
 import app.service.ChatService;
 import app.service.ChatSpeechController;
 import app.service.ChatStreamListener;
-import app.voice.model.SpeechEmotion;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -20,20 +18,26 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicReference;
 
 final class ChatView extends BorderPane {
-    private static final Duration STARTUP_STREAM_INTERVAL=Duration.millis(60);
     private static final Duration REPLY_STREAM_INTERVAL=Duration.millis(95);
-    private static final String CHAT_START_VOICE="/audio.Chinese/Hello.wav";
+    private static final String OPENING="我在，想聊点什么？";
 
     private final ChatService chatService;
     private final SoundPlayer soundPlayer;
     private final ChatSpeechController chatSpeechController;
-    private final AssistantReplyParser assistantReplyParser;
     private final VBox messageBox;
     private final ScrollPane scrollPane;
     private final ChatActivity characterActivity;
+    private final Set<ChatService.Request> pendingRequests=new HashSet<>();
+    private final Set<StreamingContentRenderer> renderers=new HashSet<>();
     private volatile boolean disposed;
+    private volatile long viewEpoch;
 
     ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController){
         this(chatService,soundPlayer,chatSpeechController,CharacterActivityListener.NONE);
@@ -45,45 +49,38 @@ final class ChatView extends BorderPane {
         this.soundPlayer=soundPlayer;
         this.chatSpeechController=chatSpeechController;
         characterActivity=new ChatActivity(activityListener);
-        assistantReplyParser=new AssistantReplyParser();
-
         setStyle(ChatStyles.BACKGROUND_STYLE);
 
-        // VBox 竖向保存所有消息行，ScrollPane 负责滚动。
         messageBox=new VBox(18);
         messageBox.setPadding(new Insets(14));
         messageBox.setFillWidth(true);
         messageBox.setStyle(ChatStyles.BACKGROUND_STYLE);
-
         scrollPane=new ScrollPane(messageBox);
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scrollPane.setStyle(ChatStyles.BACKGROUND_STYLE+" -fx-background: #080c12; -fx-border-color: transparent;");
-        
-        // 新消息会改变 VBox 高度；等 JavaFX 完成这一轮布局后再滚到底部。
         messageBox.heightProperty().addListener((observable,oldHeight,newHeight) -> scrollToLatestMessage());
-
         setCenter(scrollPane);
-        setBottom(new ChatInputBar(this::handleUserMessage));
+        setBottom(new ChatInputBar(this::handleUserMessage,this::cancelReplies,this::startNewConversation));
 
-        addStreamingPetMessage("给，咖啡。看你那黑眼圈，昨晚又熬夜了吧？");
-        soundPlayer.playVoice(CHAT_START_VOICE);
+        List<app.service.ConversationHistory.Turn> turns=chatService.completedTurns();
+        if(turns.isEmpty()){
+            addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
+        }else{
+            for(var turn:turns){
+                addMessage(new ChatMessage(MessageRole.USER,turn.userText()));
+                addMessage(new ChatMessage(MessageRole.CLOSURE,turn.reply().getDisplayText()));
+            }
+        }
+        // The greeting is UI-only, never a user fact or an assistant history entry.
     }
 
-    private void handleUserMessage(String userText) {
-        addUserMessage(userText);
-        MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,"接线中..."));
+    private void handleUserMessage(String userText){
+        if(disposed) return;
+        addMessage(new ChatMessage(MessageRole.USER,userText));
+        MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,"等待回复..."));
         streamReplyInto(bubble,userText);
-    }
-
-    private void addUserMessage(String content) {
-        addMessage(new ChatMessage(MessageRole.USER,content));
-    }
-
-    private void addStreamingPetMessage(String content) {
-        MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,""));
-        streamTextInto(bubble,content);
     }
 
     private MessageBubble addMessage(ChatMessage message){
@@ -94,181 +91,192 @@ final class ChatView extends BorderPane {
     }
 
     private void streamReplyInto(MessageBubble bubble,String userText){
-        ChatActivity.Request activity=characterActivity.start();
+        long epoch=viewEpoch;
+        AtomicReference<ChatActivity.Request> activity=new AtomicReference<>();
         StringBuilder replyText=new StringBuilder();
-        boolean[] receivedToken={false};
-        StreamingContentRenderer renderer=new StreamingContentRenderer(bubble,REPLY_STREAM_INTERVAL);
+        StreamingContentRenderer renderer=new StreamingContentRenderer(bubble,epoch);
+        ChatService.Request[] handle={null};
+        try{
+            handle[0]=chatService.streamReply(userText,new ChatStreamListener(){
+                @Override public void onStarted(){
+                    if(isCurrent(epoch)) activity.set(characterActivity.start());
+                    Platform.runLater(() -> {
+                        if(isCurrent(epoch)) bubble.setContent("接线中...");
+                    });
+                }
 
-        try {
-            chatService.streamReply(userText,new ChatStreamListener() {
-                @Override
-                public void onToken(String token){
-                    if(!receivedToken[0]){
-                        receivedToken[0]=true;
-                        replyText.setLength(0);
-                    }
-
+                @Override public void onToken(String token){
+                    if(!isCurrent(epoch)) return;
                     replyText.append(token);
-                    AssistantDisplayTextStreamExtractor
-                            .visibleText(replyText.toString())
+                    AssistantDisplayTextStreamExtractor.visibleText(replyText.toString())
                             .ifPresent(renderer::setTargetText);
                 }
 
-                @Override
-                public void onComplete(){
-                    AssistantReply assistantReply;
-                    if(!receivedToken[0]){
-                        assistantReply=new AssistantReply(
-                                "工程部暂时没有收到模型回复。",
-                                "工程部暂时没有收到模型回复。",
-                                SpeechEmotion.NEUTRAL
-                        );
-                    }else{
-                        assistantReply=assistantReplyParser.parse(replyText.toString());
+                @Override public void onComplete(AssistantReply reply){
+                    ChatActivity.Request request=activity.get();
+                    if(request!=null){
+                        if(isCurrent(epoch)) request.complete(reply.getDominantEmotion());
+                        else request.close();
                     }
-                    activity.complete(assistantReply.getDominantEmotion());
-                    renderer.finishWith(assistantReply);
+                    Platform.runLater(() -> {
+                        pendingRequests.remove(handle[0]);
+                        if(isCurrent(epoch)) renderer.finishWith(reply);
+                    });
                 }
 
-                @Override
-                public void onError(Throwable error){
-                    activity.close();
-                    renderer.showError("模型连接失败：" + error.getMessage());
+                @Override public void onError(Throwable error){
+                    ChatActivity.Request request=activity.get();
+                    if(request!=null) request.close();
+                    Platform.runLater(() -> {
+                        pendingRequests.remove(handle[0]);
+                        if(!isCurrent(epoch)) return;
+                        String message=error instanceof CancellationException ? "已停止回复"
+                                : "模型回复未完成：" + (error.getMessage()==null ? "连接失败" : error.getMessage());
+                        renderer.showError(message);
+                    });
                 }
             });
-        } catch(RuntimeException failure) {
-            activity.close();
-            renderer.showError("模型连接失败：" + failure.getMessage());
+            pendingRequests.add(handle[0]);
+        }catch(RuntimeException failure){
+            ChatActivity.Request request=activity.get();
+            if(request!=null) request.close();
+            renderer.showError("模型连接失败");
         }
     }
 
-    private void streamTextInto(MessageBubble bubble,String content){
-        int[] codePoints=content.codePoints().toArray();
-        if(codePoints.length==0){
-            bubble.setContent("");
-            return;
-        }
+    private boolean isCurrent(long epoch){
+        return !disposed && epoch==viewEpoch;
+    }
 
-        StringBuilder visibleText=new StringBuilder();
-        int[] nextIndex={0};
+    private void cancelReplies(){
+        for(var request:List.copyOf(pendingRequests)) request.cancel();
+        pendingRequests.clear();
+        for(var renderer:List.copyOf(renderers)) renderer.stopTyping();
+        chatSpeechController.stop();
+    }
 
-        Timeline timeline=new Timeline(new KeyFrame(STARTUP_STREAM_INTERVAL,event -> {
-            visibleText.appendCodePoint(codePoints[nextIndex[0]]);
-            nextIndex[0]++;
-            bubble.setContent(visibleText.toString());
-            scrollToLatestMessage();
-        }));
-
-        timeline.setCycleCount(codePoints.length);
-        timeline.play();
+    private void startNewConversation(){
+        viewEpoch++;
+        cancelReplies();
+        for(var renderer:List.copyOf(renderers)) renderer.dispose();
+        chatService.newConversation();
+        messageBox.getChildren().clear();
+        addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
     }
 
     void scrollToLatestMessage(){
         Platform.runLater(() -> {
+            if(disposed) return;
             scrollPane.layout();
             scrollPane.setVvalue(scrollPane.getVmax());
         });
     }
 
     void dispose(){
+        if(disposed) return;
         disposed=true;
         characterActivity.close();
-        chatService.close();
-        soundPlayer.stopVoice();
+        Platform.runLater(() -> {
+            cancelReplies();
+            for(var renderer:List.copyOf(renderers)) renderer.dispose();
+            soundPlayer.stopVoice();
+        });
     }
 
     private final class StreamingContentRenderer {
         private final MessageBubble bubble;
-        private final Duration interval;
+        private final long epoch;
         private final Timeline timeline;
-
         private String targetText="";
         private String renderedText="";
         private int renderedCodePoints;
         private AssistantReply pendingFinalReply;
-        private boolean speechRequested;
+        private boolean stopped;
 
-        private StreamingContentRenderer(MessageBubble bubble,Duration interval){
+        private StreamingContentRenderer(MessageBubble bubble,long epoch){
             this.bubble=bubble;
-            this.interval=interval;
-            timeline=new Timeline(new KeyFrame(interval,event -> renderNextCodePoint()));
+            this.epoch=epoch;
+            timeline=new Timeline(new KeyFrame(REPLY_STREAM_INTERVAL,event -> renderNextCodePoint()));
             timeline.setCycleCount(Animation.INDEFINITE);
+            renderers.add(this);
         }
 
         private void setTargetText(String text){
-            if(disposed || text==null || text.isBlank()){
-                return;
-            }
-
-            Platform.runLater(() -> setTargetTextOnFx(text));
+            if(!isCurrent(epoch) || text==null || text.isBlank()) return;
+            Platform.runLater(() -> {
+                if(isCurrent(epoch) && !stopped) setTargetTextOnFx(text);
+            });
         }
 
-        private void finishWith(AssistantReply assistantReply){
-            Platform.runLater(() -> {
-                if(disposed){ return; }
-                pendingFinalReply=assistantReply;
-                setTargetTextOnFx(assistantReply.getDisplayText());
-                // Begin synthesis alongside the typewriter animation.
-                if(!speechRequested){
-                    speechRequested=true;
-                    chatSpeechController.speakAssistantReply(assistantReply);
-                }
-                completeIfFinalTextRendered();
-            });
+        private void finishWith(AssistantReply reply){
+            if(!isCurrent(epoch)) return;
+            if(stopped){
+                bubble.setContent(reply.getDisplayText());
+                dispose();
+                return;
+            }
+            pendingFinalReply=reply;
+            setTargetTextOnFx(reply.getDisplayText());
+            chatSpeechController.speakAssistantReply(reply);
+            completeIfFinalTextRendered();
         }
 
         private void showError(String message){
-            Platform.runLater(() -> {
-                if(disposed){ return; }
-                timeline.stop();
-                pendingFinalReply=null;
-                bubble.setContent(message);
-                scrollToLatestMessage();
-            });
+            dispose();
+            pendingFinalReply=null;
+            bubble.setContent(message);
+            scrollToLatestMessage();
         }
 
         private void setTargetTextOnFx(String text){
-            if(disposed){ return; }
-            if(text.equals(targetText)){
-                return;
-            }
-
+            if(text.equals(targetText)) return;
             if(!text.startsWith(renderedText)){
                 renderedText="";
                 renderedCodePoints=0;
                 bubble.setContent("");
             }
-
             targetText=text;
-            if(timeline.getStatus()!=Animation.Status.RUNNING){
-                timeline.play();
-            }
+            if(timeline.getStatus()!=Animation.Status.RUNNING) timeline.play();
         }
 
         private void renderNextCodePoint(){
+            if(!isCurrent(epoch)){
+                dispose();
+                return;
+            }
             int targetCodePoints=targetText.codePointCount(0,targetText.length());
             if(renderedCodePoints>=targetCodePoints){
                 timeline.stop();
                 completeIfFinalTextRendered();
                 return;
             }
-
             renderedCodePoints++;
-            int nextCharIndex=targetText.offsetByCodePoints(0,renderedCodePoints);
-            renderedText=targetText.substring(0,nextCharIndex);
+            renderedText=targetText.substring(0,targetText.offsetByCodePoints(0,renderedCodePoints));
             bubble.setContent(renderedText);
             scrollToLatestMessage();
-
             completeIfFinalTextRendered();
         }
 
         private void completeIfFinalTextRendered(){
-            if(pendingFinalReply==null || !renderedText.equals(pendingFinalReply.getDisplayText())){
-                return;
+            if(pendingFinalReply!=null && renderedText.equals(pendingFinalReply.getDisplayText())){
+                pendingFinalReply=null;
+                dispose();
             }
+        }
 
-            pendingFinalReply=null;
+        private void stopTyping(){
+            stopped=true;
             timeline.stop();
+            if(pendingFinalReply!=null){
+                bubble.setContent(pendingFinalReply.getDisplayText());
+                pendingFinalReply=null;
+                dispose();
+            }
+        }
+
+        private void dispose(){
+            timeline.stop();
+            renderers.remove(this);
         }
     }
 }

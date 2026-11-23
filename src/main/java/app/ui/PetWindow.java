@@ -15,6 +15,7 @@ import app.reminder.EventReminderTextGenerator;
 import app.reminder.TodayReminderTime;
 import app.reminder.WorkBreakReminder;
 import app.service.ChatSpeechController;
+import app.service.ChatService;
 import app.service.SpeechLifecycleListener;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
@@ -155,6 +156,7 @@ public class PetWindow extends JFrame {
      * 这样可以避免程序一启动就创建聊天窗口。
      */
     private ChatWindow chatWindow;
+    private ChatService chatService;
 
     /**
      * 桌宠和聊天窗口共用的自动朗读控制器。
@@ -1164,8 +1166,9 @@ public class PetWindow extends JFrame {
          *
          * 这样可以避免程序一启动就 new ChatWindow。
          */
-        if (chatWindow == null) {
-            chatWindow = new ChatWindow(speechController, characterController);
+        if (chatWindow == null || !chatWindow.isDisplayable()) {
+            if (chatService == null) chatService = new ChatService();
+            chatWindow = new ChatWindow(speechController, characterController, chatService);
 
             /*
              * 当聊天窗口被关闭/隐藏时，
@@ -1265,6 +1268,7 @@ public class PetWindow extends JFrame {
         if (chatWindow != null) {
             chatWindow.dispose();
         }
+        if (chatService != null) chatService.close();
         if (speechController != null) {
             speechController.close();
         }
@@ -1285,6 +1289,8 @@ public class PetWindow extends JFrame {
 
     @Override
     public void dispose() {
+        if (chatWindow != null) chatWindow.dispose();
+        if (chatService != null) chatService.close();
         if (characterController != null) characterController.close();
         if (petAnimationPanel != null) petAnimationPanel.dispose();
         super.dispose();

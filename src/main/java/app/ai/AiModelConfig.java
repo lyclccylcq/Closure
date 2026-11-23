@@ -21,6 +21,7 @@ public final class AiModelConfig {
     public static final String ENV_ENDPOINT="CLOSURE_AI_ENDPOINT";
     public static final String ENV_API_KEY="CLOSURE_AI_API_KEY";
     public static final String ENV_MODEL="CLOSURE_AI_MODEL";
+    public static final String ENV_REASONING_EFFORT="CLOSURE_AI_REASONING_EFFORT";
 
     private static final Path LOCAL_CONFIG_PATH=Path.of("config","local-ai.properties");
     private static final String DEFAULT_ENDPOINT="https://api.openai.com/v1/chat/completions";
@@ -32,6 +33,7 @@ public final class AiModelConfig {
     private final String model;
     private final Duration connectTimeout;
     private final Duration requestTimeout;
+    private final String reasoningEffort;
 
     public AiModelConfig(
             URI endpoint,
@@ -39,6 +41,13 @@ public final class AiModelConfig {
             String model,
             Duration connectTimeout,
             Duration requestTimeout
+    ){
+        this(endpoint,apiKey,model,connectTimeout,requestTimeout,null);
+    }
+
+    public AiModelConfig(
+            URI endpoint,String apiKey,String model,Duration connectTimeout,
+            Duration requestTimeout,String reasoningEffort
     ){
         if(endpoint==null){
             throw new IllegalArgumentException("endpoint 不能为空");
@@ -52,6 +61,7 @@ public final class AiModelConfig {
         this.model=model.trim();
         this.connectTimeout=connectTimeout==null ? DEFAULT_CONNECT_TIMEOUT : connectTimeout;
         this.requestTimeout=requestTimeout==null ? DEFAULT_REQUEST_TIMEOUT : requestTimeout;
+        this.reasoningEffort=AiChatRequest.normalizeReasoningEffort(reasoningEffort);
     }
 
     /**
@@ -60,7 +70,8 @@ public final class AiModelConfig {
      * 配置文件路径：config/local-ai.properties
      * 文件格式示例：
      * CLOSURE_AI_API_KEY=你的 key
-     * CLOSURE_AI_MODEL=gpt-4.1-mini
+     * CLOSURE_AI_MODEL=gpt-6.1-sol
+     * CLOSURE_AI_REASONING_EFFORT=default
      * CLOSURE_AI_ENDPOINT=https://api.openai.com/v1/chat/completions
      */
     public static AiModelConfig fromEnvironment(){
@@ -85,7 +96,8 @@ public final class AiModelConfig {
                 apiKey,
                 model,
                 DEFAULT_CONNECT_TIMEOUT,
-                DEFAULT_REQUEST_TIMEOUT
+                DEFAULT_REQUEST_TIMEOUT,
+                configValue(ENV_REASONING_EFFORT,localProperties)
         );
     }
 
@@ -107,6 +119,11 @@ public final class AiModelConfig {
 
     public Duration getRequestTimeout(){
         return requestTimeout;
+    }
+
+    /** null preserves the selected model's normal default. */
+    public String getReasoningEffort(){
+        return reasoningEffort;
     }
 
     public boolean hasApiKey(){

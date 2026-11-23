@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AssistantReplyParserTest {
     private final AssistantReplyParser parser = new AssistantReplyParser();
@@ -69,7 +70,7 @@ class AssistantReplyParserTest {
     }
 
     @Test
-    void mixedEmotionReplyFallsBackToNeutral() {
+    void lexicalMixturesDoNotOverrideTheDeclaredDominantIntent() {
         AssistantReply reply = parser.parse("""
                 {
                   "displayText": "太好了，编译过了！不过立即停止，这会删除数据！",
@@ -78,7 +79,55 @@ class AssistantReplyParserTest {
                 }
                 """);
 
-        assertEquals(SpeechEmotion.NEUTRAL, reply.getDominantEmotion());
+        assertEquals(SpeechEmotion.CHEERFUL, reply.getDominantEmotion());
+    }
+
+    @Test
+    void teasingQuestionKeepsItsDeclaredIntentInBothParsingPaths(){
+        String json="""
+                {"displayText":"不是吧，你要给每个最终版都发毕业证吗？","speechText":"不是吧，你要给每个最终版都发毕业证吗？","dominantEmotion":"TEASING"}
+                """;
+        assertEquals(SpeechEmotion.TEASING,parser.parse(json).getDominantEmotion());
+        assertEquals(SpeechEmotion.TEASING,parser.parseStructured(json).reply().getDominantEmotion());
+    }
+
+    @Test
+    void strictPathRejectsPartialDuplicateTrailingAndWronglyTypedFields(){
+        String valid="{\"displayText\":\"完整显示\",\"speechText\":\"完整朗读\",\"dominantEmotion\":\"NEUTRAL\"}";
+        for(String invalid:new String[]{
+                "", valid.substring(0,valid.length()-1), valid+"尾巴", "前言"+valid,
+                valid.replace("\"完整朗读\"","null"),
+                valid.replace("\"完整朗读\"","[]"),
+                valid.replace("\"完整朗读\"","\"  \""),
+                valid.replace("NEUTRAL","UNKNOWN"),
+                valid.replace("完整显示","错误\\x转义"),
+                valid.replace("完整显示","未转义\n换行"),
+                valid.replace("\"displayText\":", "\"displayText\":\"重复\",\"displayText\":"),
+                valid.replace("}",",\"extra\":\"字段\"}"),
+                valid.replace("}",",}"),
+                "```json\n"+valid
+        }){
+            assertThrows(IllegalArgumentException.class,()->parser.parseStructured(invalid),invalid);
+        }
+    }
+
+    @Test
+    void strictPathAcceptsEscapedContentAndClosedLegacyJsonFences(){
+        String json="""
+                {"displayText":"路径 C:\\\\draft 和 \\"引号\\"\\n下一行","speechText":"看一下草稿。","dominantEmotion":"NEUTRAL"}
+                """.strip();
+        var parsed=parser.parseStructured("```json\n"+json+"\n```");
+        assertEquals(json,parsed.json());
+        assertEquals("路径 C:\\draft 和 \"引号\"\n下一行",parsed.reply().getDisplayText());
+    }
+
+    @Test
+    void strictSpeechLimitCountsUnicodeCodePoints(){
+        String prefix="{\"displayText\":\"完整\",\"speechText\":\"";
+        String suffix="\",\"dominantEmotion\":\"NEUTRAL\"}";
+        assertEquals(120,parser.parseStructured(prefix+"😀".repeat(120)+suffix).reply()
+                .getSpeechText().codePointCount(0,240));
+        assertThrows(IllegalArgumentException.class,()->parser.parseStructured(prefix+"字".repeat(121)+suffix));
     }
 
     @Test

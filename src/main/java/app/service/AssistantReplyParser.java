@@ -2,11 +2,47 @@ package app.service;
 
 import app.chat.model.AssistantReply;
 import app.voice.model.SpeechEmotion;
+import java.util.Set;
 
 /**
  * 把模型原始响应解析成聊天显示文本、朗读文本和整条回复的主情绪。
  */
 public final class AssistantReplyParser {
+    public record StructuredReply(String json,AssistantReply reply) { }
+
+    /** Only complete contract-valid replies may enter conversation history. */
+    public StructuredReply parseStructured(String rawModelResponse){
+        if(rawModelResponse==null || rawModelResponse.isBlank()){
+            throw new IllegalArgumentException("模型没有返回完整回复");
+        }
+        String raw=rawModelResponse.trim();
+        if(raw.startsWith("```") && !raw.endsWith("```")){
+            throw new IllegalArgumentException("模型回复的代码围栏未结束");
+        }
+        String json=stripCodeFence(raw).trim();
+        var fields=ReplyJsonObject.read(json);
+        if(!fields.keySet().equals(Set.of("displayText","speechText","dominantEmotion"))){
+            throw new IllegalArgumentException("模型回复字段不符合协议");
+        }
+        String display=fields.get("displayText");
+        String speech=fields.get("speechText");
+        if(display.isBlank() || speech.isBlank()){
+            throw new IllegalArgumentException("模型回复文本为空");
+        }
+        if(speech.codePointCount(0,speech.length())>AssistantReply.MAX_SPEECH_TEXT_CODE_POINTS){
+            throw new IllegalArgumentException("模型朗读文本超过 120 字符");
+        }
+        SpeechEmotion emotion;
+        try{
+            emotion=SpeechEmotion.valueOf(fields.get("dominantEmotion"));
+        }catch(IllegalArgumentException invalid){
+            throw new IllegalArgumentException("模型回复情绪标签不符合协议");
+        }
+        speech=SpeechProsody.preserveQuestion(display,speech);
+        emotion=SpeechProsody.emotionFor(speech,emotion);
+        return new StructuredReply(json,new AssistantReply(display,speech,emotion));
+    }
+
     public AssistantReply parse(String rawModelResponse) {
         String normalizedResponse = stripCodeFence(rawModelResponse);
         try {
@@ -28,9 +64,7 @@ public final class AssistantReplyParser {
         String speechText = SpeechProsody.preserveQuestion(displayText,extractStringField(objectJson, "speechText"));
         SpeechEmotion declaredEmotion = SpeechEmotion.fromString(extractStringField(objectJson, "dominantEmotion"));
         declaredEmotion = SpeechProsody.emotionFor(speechText,declaredEmotion);
-        SpeechEmotion dominantEmotion = normalizeDominantEmotion(displayText + "\n" + speechText, declaredEmotion);
-
-        return new AssistantReply(displayText, speechText, dominantEmotion);
+        return new AssistantReply(displayText, speechText, declaredEmotion);
     }
 
     private String fallbackDisplayText(String response) {
@@ -39,63 +73,6 @@ public final class AssistantReplyParser {
         }
 
         return response.trim();
-    }
-
-    private SpeechEmotion normalizeDominantEmotion(String text, SpeechEmotion declaredEmotion) {
-        if (declaredEmotion == SpeechEmotion.NEUTRAL) {
-            return SpeechEmotion.NEUTRAL;
-        }
-
-        int obviousEmotionKinds = 0;
-        if (looksTeasing(text)) {
-            obviousEmotionKinds++;
-        }
-        if (looksSerious(text)) {
-            obviousEmotionKinds++;
-        }
-        if (looksQuestion(text)) {
-            obviousEmotionKinds++;
-        }
-        if (looksCheerful(text)) {
-            obviousEmotionKinds++;
-        }
-
-        if (obviousEmotionKinds > 1) {
-            return SpeechEmotion.NEUTRAL;
-        }
-
-        return declaredEmotion == null ? SpeechEmotion.NEUTRAL : declaredEmotion;
-    }
-
-    private boolean looksTeasing(String text) {
-        return containsAny(text, "维修费", "收费", "打折", "采购", "别戳", "偷懒", "摸鱼", "补觉", "催工期", "不是吧", "哼");
-    }
-
-    private boolean looksSerious(String text) {
-        return containsAny(text, "立即停止", "立刻停止", "马上停止", "禁止继续", "不要继续", "会删除", "删除数据", "危险操作", "严重风险", "高风险");
-    }
-
-    private boolean looksQuestion(String text) {
-        String trimmedText = text == null ? "" : text.trim();
-        return trimmedText.endsWith("？") || trimmedText.endsWith("?");
-    }
-
-    private boolean looksCheerful(String text) {
-        return containsAny(text, "太好了", "好耶", "恭喜", "欢迎", "太棒了", "真棒");
-    }
-
-    private boolean containsAny(String text, String... candidates) {
-        if (text == null || text.isBlank()) {
-            return false;
-        }
-
-        for (String candidate : candidates) {
-            if (text.contains(candidate)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private String stripCodeFence(String text) {
