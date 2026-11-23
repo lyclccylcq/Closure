@@ -2,7 +2,7 @@
 set -euo pipefail
 task_root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$task_root"
-if [[ -z "${JAVA_HOME:-}" && "$(uname)" == "Darwin" ]]; then
+if [[ "$(uname)" == "Darwin" ]]; then
     export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 fi
 ./mvnw -B -DskipTests compile
