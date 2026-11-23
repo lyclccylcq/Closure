@@ -111,6 +111,8 @@ def load_config(raw):
     data = workflow.read_json(raw)
     need(type(data.get("schema_version")) is int and data["schema_version"] == 1,
          "unsupported dispatcher config")
+    need(data.get("implementation_executor", "claude") in ("claude", "codex"),
+         "unsupported implementation executor")
     checks = data.get("allowed_checks")
     need(isinstance(checks, dict) and checks, "trusted config needs allowed_checks")
     for command, argv in checks.items():
@@ -120,6 +122,10 @@ def load_config(raw):
 
 
 def capabilities():
+    config = load_config((root() / "scripts/ai_dispatch_config.json").read_bytes())
+    if config.get("implementation_executor") == "codex":
+        return {"implementation_executor": "codex", "claude_path": None, "claude_version": None,
+                "logged_in": False, "gh_available": bool(shutil.which("gh"))}
     executable = shutil.which("claude")
     need(executable, "Claude Code is not installed or not on PATH")
     code, help_raw, _ = run([executable, "--help"], Path.cwd(), env=clean_env())
@@ -238,6 +244,17 @@ def schema(spec):
 
 def implement(state, feedback=""):
     spec, config = frozen(state)
+    if config.get("implementation_executor") == "codex":
+        current(state, clean=False)
+        state.pop("review_path", None)
+        state.update(status="AWAITING_CODEX_IMPLEMENTATION", implementation_executor="codex",
+                     summary="Codex direct implementation required; no Claude process was started")
+        if feedback:
+            target = Path(state["run_dir"]) / "codex-feedback.json"
+            write(target, json_bytes({"head_sha": state["head_sha"], "message": feedback}))
+            state["codex_feedback_path"] = str(target)
+        save(state)
+        return state
     while True:
         need(state["round"] < state["max_rounds"], "automatic attempt limit reached; Codex must resolve the blocker")
         current(state, clean=False)
@@ -348,6 +365,7 @@ def start(args):
              "base_ref": args.base, "base_sha": base_sha, "head_sha": base_sha,
              "round": 0, "max_rounds": args.max_rounds, "max_turns": args.max_turns, "timeout": args.timeout,
              "claude_path": caps["claude_path"], "claude_version": caps["claude_version"], "status": "RUNNING",
+             "implementation_executor": config.get("implementation_executor", "claude"),
              "controller_changes_excluded": bool(git(repo, "status", "--porcelain", "-z"))}
     write(location / "spec.json", raw)
     write(location / "config.json", config_raw)
@@ -396,7 +414,8 @@ def apply_review(state, args):
 
 
 def repair(state, args):
-    need(state["status"] in ("AWAITING_CI", "AWAITING_REVIEW", "READY_TO_PUBLISH"), "run cannot accept repair feedback")
+    need(state["status"] in ("AWAITING_CI", "AWAITING_REVIEW", "READY_TO_PUBLISH", "AWAITING_CODEX_IMPLEMENTATION"),
+         "run cannot accept repair feedback")
     current(state)
     raw = Path(args.feedback).read_bytes()
     feedback = workflow.read_json(raw)

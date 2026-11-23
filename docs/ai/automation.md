@@ -1,5 +1,7 @@
 # Codex 自动调度、CI、合并与交付
 
+> 临时执行模式（用户于 2026-11-23 指定）：近期由 Codex 直接实现和修复，不调用 Claude。下文的 Claude doctor/start/repair 步骤暂不执行；Codex 创建版本化 Spec，在独立副本实现，运行可信检查并生成真实 report/packet/review，继续使用适用的发布、CI、合并和交付门禁。证据应明确记录 `Codex direct implementation`，不伪造 Claude 回执或用户验收。恢复 Claude 模式须由用户明确要求。
+
 在已更新的 Closure 副本中向 Codex 提执行需求，Codex 将持续推进规划、Claude 实现、技术复核、CI、合并和可运行交付。用户已于 2026-10-28 授权代理运行 CI 和合并 PR，自己只验收最终可运行项目；无需逐次批准普通 CI 或合并。
 
 该授权属于 Closure 需求范围内的工程流程，不代表用户已接受结果，不授权范围外部署、额外费用、破坏性数据操作或对外发消息。用户后续要求先审方案、人工合并等具体限制优先。

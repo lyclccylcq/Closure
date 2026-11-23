@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "implementation_executor": "codex",
   "allowed_checks": {
     "python3 scripts/ai_workflow.py validate": [
       "python3",
