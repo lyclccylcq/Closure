@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0009",
-  "spec_version": 1,
+  "spec_version": 2,
   "status": "READY",
   "title": "Temporarily use Codex direct implementation without Claude",
   "objective": "Persist the user-requested temporary Codex-only execution mode so routine Closure work and CI repairs do not depend on unavailable Claude, while preserving all current scope, evidence, review, CI, merge and delivery checks.",
@@ -39,8 +39,8 @@
     },
     {
       "id": "AC-3",
-      "requirement": "Project instructions persist the explicit temporary override, legacy Claude mode remains compatible, and the merged project passes Java/build/native startup and main CI.",
-      "verification": "Instruction diff, full offline tests and workflow validation; exact-head PR/main CI and clean merged delivery validation."
+      "requirement": "Project instructions persist the explicit temporary override, legacy Claude mode remains compatible, and the project passes existing Java and build checks without real models.",
+      "verification": "Instruction diff, full offline tests, workflow validation and package build. Exact-head PR/main CI and clean merged delivery remain separate mandatory completion-policy gates."
     }
   ],
   "checks": [
