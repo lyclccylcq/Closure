@@ -242,4 +242,44 @@ class CharacterControllerTest {
         assertEquals(CharacterState.IDLE, controller.state());
         assertEquals(AnimationType.IDLE, player.current);
     }
+
+    @Test
+    void autonomousWalkingNeverPostponesLongIdleSleepOrWakesASleepingCharacter(){
+        var now=new AtomicLong();
+        var player=new Player();
+        var controller=new CharacterController(new AnimationController(player),now::get,Duration.ofMinutes(2));
+        now.set(Duration.ofSeconds(110).toNanos());
+        assertTrue(controller.setAutonomousWalking(true));
+        assertEquals(AnimationType.WALK,player.current);
+        controller.setAutonomousWalking(false);
+        assertEquals(AnimationType.IDLE,player.current);
+        now.set(Duration.ofMinutes(2).toNanos());
+        assertFalse(controller.setAutonomousWalking(true));
+        assertEquals(AnimationType.SLEEP,player.current);
+        controller.setAutonomousWalking(false);
+        assertEquals(AnimationType.SLEEP,player.current);
+        controller.userActivity();
+        assertTrue(controller.setAutonomousWalking(true));
+    }
+
+    @Test
+    void autonomousWalkingCannotOverrideConversationSpeechOrAnInteraction(){
+        var player=new Player();
+        var controller=new CharacterController(new AnimationController(player));
+        Runnable hidden=controller.conversationOpened();
+        assertFalse(controller.setAutonomousWalking(true));
+        assertEquals(AnimationType.THINKING,player.current);
+        hidden.run();
+        controller.setTalking(true);
+        assertFalse(controller.setAutonomousWalking(true));
+        assertEquals(AnimationType.TALK,player.current);
+        controller.setTalking(false);
+        controller.play(AnimationType.TAP);
+        assertFalse(controller.setAutonomousWalking(true));
+        assertEquals(AnimationType.TAP,player.current);
+        player.completions.getFirst().run();
+        assertEquals(AnimationType.IDLE,player.current);
+        controller.close();
+        assertFalse(controller.setAutonomousWalking(true));
+    }
 }

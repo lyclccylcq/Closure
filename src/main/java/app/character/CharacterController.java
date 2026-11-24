@@ -66,6 +66,15 @@ public final class CharacterController implements CharacterActivityListener, Aut
         if(!closed) refresh();
     }
 
+    /** Autonomous movement is not user activity and must never postpone sleep or interrupt a task. */
+    public synchronized boolean setAutonomousWalking(boolean active){
+        if(closed) return false;
+        CharacterState current=state();
+        walking=active && (current==CharacterState.IDLE || current==CharacterState.WALKING);
+        refresh();
+        return walking && baseAnimation()==AnimationType.WALK;
+    }
+
     public synchronized void setTalking(boolean active){
         if(closed) return;
         talking=active;

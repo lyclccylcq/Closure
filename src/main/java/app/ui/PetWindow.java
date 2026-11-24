@@ -3,6 +3,7 @@ package app.ui;
 import app.character.animation.AnimationController;
 import app.character.CharacterController;
 import app.character.CharacterState;
+import app.character.DesktopRoamingController;
 import app.character.animation.AnimationType;
 import app.reminder.AiCourseScheduleImportConverter;
 import app.reminder.AiEventReminderTextGenerator;
@@ -231,6 +232,9 @@ public class PetWindow extends JFrame {
      */
     private Timer idleChatterTimer;
     private Timer idleSleepTimer;
+    private Timer roamingTimer;
+    private DesktopRoamingController roamingController;
+    private boolean petMousePressed;
     private long lastDesktopActivityMillis;
 
     /**
@@ -254,6 +258,7 @@ public class PetWindow extends JFrame {
      */
     private JPopupMenu popupMenu;
     private JMenuItem walkAction;
+    private JCheckBoxMenuItem autonomousWalkAction;
 
     /**
      * 构造方法：创建桌宠窗口。
@@ -308,6 +313,7 @@ public class PetWindow extends JFrame {
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
         startIdleSleepTimer();
+        startRoamingTimer();
         playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
         startWorkBreakReminder();
         startEventReminder();
@@ -372,6 +378,7 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mousePressed(MouseEvent event) {
+                petMousePressed = true;
                 registerUserActivity();
 
                 /*
@@ -429,6 +436,7 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseReleased(MouseEvent event) {
+                petMousePressed = false;
                 // 再判断一次是否触发右键菜单，兼容不同系统
                 if (event.isPopupTrigger()) {
                     showPopupMenu(event);
@@ -469,6 +477,7 @@ public class PetWindow extends JFrame {
     }
 
     private void openPetModel() {
+        if (roamingController != null) roamingController.close();
         if (characterController != null) characterController.close();
         if (petAnimationPanel != null) petAnimationPanel.dispose();
         if (!PetAction.OPEN.hasFrames()) {
@@ -488,6 +497,8 @@ public class PetWindow extends JFrame {
         );
         animationController = new AnimationController(petAnimationPanel.animationPlayer());
         characterController = new CharacterController(animationController);
+        roamingController = new DesktopRoamingController();
+        if (autonomousWalkAction != null) roamingController.setEnabled(autonomousWalkAction.isSelected());
         playAnimation(AnimationType.GREETING);
         addPetMouseListeners(petAnimationPanel);
 
@@ -602,6 +613,58 @@ public class PetWindow extends JFrame {
             if (characterController != null) characterController.checkIdle();
         });
         idleSleepTimer.start();
+    }
+
+    private void startRoamingTimer() {
+        if (roamingTimer != null) roamingTimer.stop();
+        roamingTimer = new Timer(33, event -> tickRoaming());
+        roamingTimer.start();
+        System.out.println("CLOSURE_ROAMING_READY auto=" + roamingController.isEnabled());
+    }
+
+    private void tickRoaming() {
+        if (roamingController == null || characterController == null || petAnimationPanel == null) return;
+        CharacterState state = characterController.state();
+        boolean available = isShowing() && !petMousePressed && getMousePosition(true) == null
+                && (popupMenu == null || !popupMenu.isVisible())
+                && (chatWindow == null || !chatWindow.isVisible())
+                && (state == CharacterState.IDLE || state == CharacterState.WALKING);
+        var step = roamingController.tick(getBounds(), usableScreenBounds(), available);
+        if (!characterController.setAutonomousWalking(step.walking())) {
+            if (step.walking()) roamingController.pause();
+            return;
+        }
+        petAnimationPanel.setFacingLeft(step.facingLeft());
+        if (getX() != step.x() || getY() != step.y()) {
+            setLocation(step.x(), step.y());
+            moveSpeechBubbleNextToPet();
+        }
+    }
+
+    private Rectangle usableScreenBounds() {
+        GraphicsConfiguration configuration = getGraphicsConfiguration();
+        if (configuration == null) return new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+        Rectangle screen = configuration.getBounds();
+        Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(configuration);
+        return new Rectangle(screen.x + insets.left, screen.y + insets.top,
+                Math.max(0, screen.width - insets.left - insets.right),
+                Math.max(0, screen.height - insets.top - insets.bottom));
+    }
+
+    private void pauseRoaming() {
+        if (roamingController != null) roamingController.pause();
+        if (characterController != null) characterController.setAutonomousWalking(false);
+    }
+
+    private void startManualWalk() {
+        registerUserActivity();
+        if (characterController != null) characterController.play(AnimationType.IDLE);
+        if (roamingController != null) roamingController.requestWalk();
+    }
+
+    private void closeRoaming() {
+        if (roamingTimer != null) roamingTimer.stop();
+        if (roamingController != null) roamingController.close();
     }
 
     private void initSpeechController() {
@@ -719,6 +782,7 @@ public class PetWindow extends JFrame {
     }
 
     private void registerUserActivity() {
+        pauseRoaming();
         registerDesktopActivity();
         if (characterController != null) characterController.userActivity();
     }
@@ -728,6 +792,7 @@ public class PetWindow extends JFrame {
             return;
         }
 
+        pauseRoaming();
         characterController.play(animation);
     }
 
@@ -1137,11 +1202,18 @@ public class PetWindow extends JFrame {
         walkAction.setFont(menuFont);
         sleepAction.setFont(menuFont);
         idleAction.addActionListener(event -> playAnimation(AnimationType.IDLE));
-        walkAction.addActionListener(event -> playAnimation(AnimationType.WALK));
+        walkAction.addActionListener(event -> startManualWalk());
         sleepAction.addActionListener(event -> playAnimation(AnimationType.SLEEP));
         characterActions.add(idleAction);
         characterActions.add(walkAction);
         characterActions.add(sleepAction);
+        autonomousWalkAction = new JCheckBoxMenuItem("自主走动", true);
+        autonomousWalkAction.setFont(menuFont);
+        autonomousWalkAction.addActionListener(event -> {
+            pauseRoaming();
+            if (roamingController != null) roamingController.setEnabled(autonomousWalkAction.isSelected());
+        });
+        characterActions.add(autonomousWalkAction);
         popupMenu.add(characterActions);
 
         // 添加一条分隔线
@@ -1164,6 +1236,7 @@ public class PetWindow extends JFrame {
      * @param event 鼠标事件
      */
     private void showPopupMenu(MouseEvent event) {
+        registerUserActivity();
         if (walkAction != null) walkAction.setEnabled(chatWindow == null || !chatWindow.isVisible());
         /*
          * 在鼠标点击的位置显示菜单。
@@ -1188,6 +1261,7 @@ public class PetWindow extends JFrame {
      * 2. 右键菜单点击“通讯”
      */
     private void openChatWindow() {
+        pauseRoaming();
         hideSpeechBubble();
 
         /*
@@ -1268,6 +1342,7 @@ public class PetWindow extends JFrame {
     }
 
     private void exitApplication() {
+        closeRoaming();
         cancelInteractionBubble();
         if (characterController != null) characterController.close();
         if (workBreakReminder != null) {
@@ -1319,6 +1394,7 @@ public class PetWindow extends JFrame {
 
     @Override
     public void dispose() {
+        closeRoaming();
         if (idleSleepTimer != null) idleSleepTimer.stop();
         if (chatWindow != null) chatWindow.dispose();
         if (chatService != null) chatService.close();
