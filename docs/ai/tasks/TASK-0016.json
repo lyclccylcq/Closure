@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0016",
-  "spec_version": 2,
+  "spec_version": 3,
   "status": "READY",
   "title": "Activate the selected Drama3 voice in the daily local runtime",
   "objective": "After user confirms their API key is ready, install the reviewed Fish integration in the daily runtime, obtain local-only credential entry without exposing secrets, validate one fixed synthetic speech request and native playback, then enable the normal entry with an exact local rollback. No push.",
@@ -13,7 +13,9 @@
     "After source checks pass, install the reviewed public integration and normally restart only the identified daily app. If the fixed-text live request and native playback pass, activate Fish in the normal runtime launcher and preserve a local fallback. If API credit/permissions block synthesis, complete actual-runtime installation/tests and resume the unchanged local-Qwen entry; keep Fish inactive. Preserve unrelated listeners and original top-level shortcut/private voice settings. Restart clears process-local conversation.",
     "Run required fake/offline tests and actual-runtime build/startup separately from the real manual diagnostic. CI never performs real model calls. Receipt distinguishes local engineering PASS, actual live response, output-device playback and subjective user hearing acceptance. If credentials/quota/permissions fail, finish unaffected installation checks, keep the former normal entry active and report the real blocker; do not fake active readiness.",
     "Add only non-secret runtime markers after Fish config succeeds and immediately before an HTTP synthesis is sent. These report no text, key or private metadata; the normal-start receipt checks the configured marker and zero synthesis markers without reading arbitrary app logs.",
-    "The first single live request returned HTTP402 (API credit insufficient) with no generated audio. Do not retry or activate Fish automatically. Revision2 permits completing installation/offline checks and restarting the original local backend while waiting for an external API-credit update. Existing Java/Python code checks may be retained with identical source hashes; rerun spec validation and actual-runtime checks, and report live criteria BLOCKED rather than PASS."
+    "The first single live request returned HTTP402 (API credit insufficient) with no generated audio. Do not retry or activate Fish automatically. Revision2 permits completing installation/offline checks and restarting the original local backend while waiting for an external API-credit update. Existing Java/Python code checks may be retained with identical source hashes; rerun spec validation and actual-runtime checks, and report live criteria BLOCKED rather than PASS.",
+    "User confirmed API credit top-up. The new manual attempt reached a WAV response but the strict RIFF-length validator rejected it. Official Fish compatibility documentation specifies a fixed reserved-length header RIFF/data size pair (4294967076/4294967040). Normalize only this canonical pair after complete bounded HTTP download, then retain strict PCM/layout/parity validation and finite-length truncation rejection. Add chunked/transport-truncation regression tests and safe byte-count/header-only rejection markers, without logging audio or user text.",
+    "After the reviewed format fix, allow one further controlled fixed-text verification request necessary to validate the corrected adapter. Preserve all prior failed attempt receipts. No automatic HTTP retries, changing the model/reference, or arbitrary additional paid tests. Existing installed sources are the exact b0ddf7606b82b7340f4af9b6afd94b8d7b755f26 baseline; use a separate continuation plan/receipt for changed public files and final launcher activation, preserving the original immutable installation plan."
   ],
   "non_goals": [
     "No remote publication, PR, CI, merge, cloud provisioning, purchases, quota top-up, model training/downloads, or live text-model evaluation.",
@@ -24,7 +26,8 @@
     "deploy/tts/FishVoiceSmoke.java",
     "deploy/tts/FISH.md",
     "src/main/java/app/service/ChatSpeechController.java",
-    "src/main/java/app/voice/FishAudioClient.java"
+    "src/main/java/app/voice/FishAudioClient.java",
+    "src/test/java/app/voice/FishAudioClientTest.java"
   ],
   "acceptance_criteria": [
     {
@@ -85,7 +88,8 @@
     "The fixed test uses API credit and sends only synthetic text. Cancellation/replay cannot undo provider charges; no automatic repeat is allowed.",
     "Audio device completion is not subjective voice acceptance. Provider-side model identity cannot be independently authenticated if no response header reports it.",
     "Normal restart clears process-only history. Launcher rollback and guarded file backups preserve the previous local backend.",
-    "Verified blocker: official Fish endpoint returned HTTP402 for the fixed request. API key creation alone does not provide Drama3 API credit; no purchase or account top-up is authorized to the agent."
+    "Verified blocker: official Fish endpoint returned HTTP402 for the fixed request. API key creation alone does not provide Drama3 API credit; no purchase or account top-up is authorized to the agent.",
+    "Initial funded response exposed a WAV-container integration issue. No audio result from that attempt was delivered or retained; normalize only documented reserved-length headers, not arbitrary finite RIFF length mismatches."
   ],
   "rollback": "Restore the exact saved runtime launcher or use the preserved local-Qwen entry; unset Fish backend variables and restart only the identified daily app. Restore scoped public source backups only if installed hashes still match, rebuild and preserve all private files/weights.",
   "review_budget": {

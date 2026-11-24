@@ -22,6 +22,8 @@ import java.util.function.Consumer;
 /** One complete hosted WAV per utterance; no synthesis on readiness and no automatic retries. */
 public final class FishAudioClient implements VoiceSynthesisClient {
     static final int MAX_WAV_BYTES = 32 * 1024 * 1024;
+    private static final long FISH_STREAM_RIFF_SIZE = 0xffff_ff24L;
+    private static final long FISH_STREAM_DATA_SIZE = 0xffff_ff00L;
     private final FishAudioConfig config;
     private final HttpClient httpClient;
     private final Path temporaryDirectory;
@@ -97,7 +99,18 @@ public final class FishAudioClient implements VoiceSynthesisClient {
                     long declaredLength = response.headers().firstValueAsLong("Content-Length").orElse(-1);
                     if (declaredLength > MAX_WAV_BYTES) throw invalidAudio("音频超过大小上限");
                     byte[] wav = readBounded(stream, completion);
-                    validateWav(wav);
+                    long originalRiffSize = wav.length >= 8 ? unsignedInt(wav, 4) : -1;
+                    long originalDataSize = wav.length >= 44 && tag(wav, 36, "data") ? unsignedInt(wav, 40) : -1;
+                    try {
+                        validateWav(wav);
+                    } catch (VoiceSynthesisException invalid) {
+                        System.out.println("CLOSURE_FISH_WAV_REJECTED bytes=" + wav.length
+                                + " riff_size=" + originalRiffSize + " data_size=" + originalDataSize);
+                        throw invalid;
+                    }
+                    if (originalRiffSize == FISH_STREAM_RIFF_SIZE) {
+                        System.out.println("CLOSURE_FISH_WAV_PLACEHOLDER_NORMALIZED bytes=" + wav.length);
+                    }
                     if (completion.isDone()) return;
                     temporary = temporaryDirectory == null ? Files.createTempFile("closure-fish-", ".wav")
                             : Files.createTempFile(temporaryDirectory, "closure-fish-", ".wav");
@@ -176,6 +189,17 @@ public final class FishAudioClient implements VoiceSynthesisClient {
             throw invalidAudio("不是有效的 WAV");
         }
         long riffSize = unsignedInt(wav, 4);
+        // Fish's documented streaming header uses this exact size pair even for
+        // buffered responses. Repair it only after readBounded reaches clean HTTP EOF.
+        if (riffSize == FISH_STREAM_RIFF_SIZE) {
+            if (wav.length <= 44 || !tag(wav, 12, "fmt ") || unsignedInt(wav, 16) != 16
+                    || !tag(wav, 36, "data") || unsignedInt(wav, 40) != FISH_STREAM_DATA_SIZE) {
+                throw invalidAudio("Fish 流式 WAV 占位头不完整");
+            }
+            writeInt(wav, 4, wav.length - 8L);
+            writeInt(wav, 40, wav.length - 44L);
+            riffSize = wav.length - 8L;
+        }
         if (!unknownLength(riffSize) && riffSize != wav.length - 8L) throw invalidAudio("WAV 长度不完整");
         boolean format = false;
         boolean data = false;

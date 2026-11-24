@@ -10,7 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -129,6 +131,101 @@ class FishAudioClientTest {
                 .get(3, TimeUnit.SECONDS)).getAudioFile();
         assertArrayEquals(wav(), Files.readAllBytes(file));
         Files.delete(file);
+    }
+
+    @Test
+    void documentedFishPlaceholderWaitsForCleanHttpEndThenBecomesPlayableWav() throws Exception {
+        byte[] placeholder = fishPlaceholderWav();
+        CountDownLatch headerSent = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        start(exchange -> {
+            exchange.sendResponseHeaders(200, 0);
+            try (var output = exchange.getResponseBody()) {
+                output.write(placeholder, 0, 44);
+                output.flush();
+                headerSent.countDown();
+                await(release);
+                output.write(placeholder, 44, placeholder.length - 44);
+            }
+        });
+        var pending = client().synthesize(request("第一句。第二句？"));
+        try {
+            assertTrue(headerSent.await(3, TimeUnit.SECONDS));
+            assertFalse(pending.isDone(), "Header alone must not become a playable result");
+        } finally { release.countDown(); }
+        Path file = ((FileTtsAudioResult) pending.get(3, TimeUnit.SECONDS)).getAudioFile();
+        assertArrayEquals(wav(), Files.readAllBytes(file));
+        assertEquals(1, calls.get());
+        Files.delete(file);
+        assertDirectoryEmpty();
+    }
+
+    @Test
+    void fishPlaceholdersDoNotExcuseEmptyOddOrInconsistentAudio() throws Exception {
+        AtomicReference<byte[]> response = new AtomicReference<>();
+        start(exchange -> respond(exchange, 200, response.get()));
+        byte[] onlyRiff = wav();
+        ByteBuffer.wrap(onlyRiff).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 0xffff_ff24);
+        byte[] onlyData = wav();
+        ByteBuffer.wrap(onlyData).order(ByteOrder.LITTLE_ENDIAN).putInt(40, 0xffff_ff00);
+        byte[] unsupported = fishPlaceholderWav(); unsupported[20] = 3;
+        for (byte[] invalid : new byte[][]{Arrays.copyOf(fishPlaceholderWav(), 44),
+                Arrays.copyOf(fishPlaceholderWav(), 51), onlyRiff, onlyData, unsupported}) {
+            response.set(invalid);
+            assertThrows(ExecutionException.class,
+                    () -> client().synthesize(request("测试")).get(3, TimeUnit.SECONDS));
+        }
+        assertDirectoryEmpty();
+    }
+
+    @Test
+    void fishPlaceholderStillRejectsTransportTruncationBeforeHttpEnd() throws Exception {
+        // A raw peer closes the connection at a deterministic truncated EOF;
+        // HttpServer's fixed-length response wrapper may keep it open instead.
+        try (ServerSocket peer = new ServerSocket()) {
+            peer.bind(new InetSocketAddress("127.0.0.1", 0));
+            CompletableFuture<Void> served = new CompletableFuture<>();
+            Thread.ofVirtual().start(() -> {
+                try (var socket = peer.accept()) {
+                    socket.setSoTimeout(3000);
+                    var input = socket.getInputStream();
+                    ByteArrayOutputStream header = new ByteArrayOutputStream();
+                    int end = 0;
+                    byte[] delimiter = {'\r', '\n', '\r', '\n'};
+                    while (end < delimiter.length) {
+                        int next = input.read();
+                        if (next < 0) throw new IOException("Missing request headers");
+                        header.write(next);
+                        end = next == delimiter[end] ? end + 1 : (next == '\r' ? 1 : 0);
+                    }
+                    String headers = header.toString(StandardCharsets.US_ASCII);
+                    var length = java.util.regex.Pattern.compile("(?im)^Content-Length: (\\d+)").matcher(headers);
+                    if (!length.find()) throw new IOException("Missing request length");
+                    input.readNBytes(Integer.parseInt(length.group(1)));
+                    calls.incrementAndGet();
+                    byte[] payload = fishPlaceholderWav();
+                    var output = socket.getOutputStream();
+                    output.write(("HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: "
+                            + (payload.length + 4) + "\r\nConnection: close\r\n\r\n")
+                            .getBytes(StandardCharsets.US_ASCII));
+                    output.write(payload);
+                    output.flush();
+                    served.complete(null);
+                } catch (Throwable failure) { served.completeExceptionally(failure); }
+            });
+            Properties settings = new Properties();
+            settings.setProperty("fish.apiKey", "synthetic-test-token");
+            settings.setProperty("fish.baseUrl", "http://127.0.0.1:" + peer.getLocalPort());
+            FishAudioConfig config = FishAudioConfig.fromProperties(settings);
+            AtomicInteger deliveries = new AtomicInteger();
+            assertThrows(ExecutionException.class, () -> new FishAudioClient(config, directory).synthesizeStream(
+                    new TtsRequest("测试", "zh", config.getVoiceProfile()), audio -> deliveries.incrementAndGet())
+                    .get(3, TimeUnit.SECONDS));
+            served.get(3, TimeUnit.SECONDS);
+            assertEquals(0, deliveries.get());
+            assertEquals(1, calls.get());
+            assertDirectoryEmpty();
+        }
     }
 
     @Test
@@ -283,6 +380,12 @@ class FishAudioClientTest {
                 .putShort((short) 2).putShort((short) 16)
                 .put("data".getBytes(StandardCharsets.US_ASCII)).putInt(8)
                 .putShort((short) 50).putShort((short) -50).putShort((short) 100).putShort((short) -100).array();
+    }
+    private static byte[] fishPlaceholderWav() {
+        byte[] wav = wav();
+        ByteBuffer.wrap(wav).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(4, 0xffff_ff24).putInt(40, 0xffff_ff00);
+        return wav;
     }
     private static void await(CountDownLatch latch) {
         try { latch.await(5, TimeUnit.SECONDS); }

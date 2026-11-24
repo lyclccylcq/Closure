@@ -59,6 +59,8 @@ bash deploy/tts/start-fish-preview.sh
 
 离线检查只验证请求、WAV、错误、取消和播放生命周期，使用回环假服务与合成测试音频；不证明账号已认证、音源可调用或听感已验收。
 
+Fish 的[官方兼容性说明](https://docs.fish.audio/developer-guide/compat/capabilities#audio-formats)记录了流式 WAV 的固定占位长度（RIFF `4294967076`、data `4294967040`）。客户端在 HTTP 音频完整接收后，按实际字节数修复这一对规范占位值，再验证 PCM 格式和长度；普通有限长度不匹配、空音频、半个 PCM 样本和 HTTP 截断仍报错。格式诊断标记只记录头部长度值，不包含音频内容或密钥。
+
 `FishVoiceSmoke.java` 是仅供手动联调的独立诊断：`--check` 只通过应用正常配置读取器检查格式，不联网；`--render output.wav` 使用固定合成测试文字调用一次所选音源，不自动重试；`--playback generated.wav` 只用已保存的合成结果验证本机停止和完整重播，不再次调用云端。真实调用与主观听音状态分别记录，CI 不执行该诊断。控制台的 `CLOSURE_VOICE_CONFIGURED` 和 `CLOSURE_FISH_SYNTHESIS_REQUEST` 只标识后端配置完成与请求开始，不包含密钥或对话内容。
 
 - [Drama3 官方文档](https://docs.fish.audio/features/text-to-speech/drama-3)
