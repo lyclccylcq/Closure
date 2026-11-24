@@ -19,6 +19,7 @@ final class SpinePoseAnimator {
     private final float[] target = new float[5];
     private String action;
     private float transitionTime;
+    private float transitionDuration = .18f;
     private float phase;
     private float landingTime = LANDING_SECONDS;
     private float lean;
@@ -46,6 +47,7 @@ final class SpinePoseAnimator {
         }
         action = next;
         System.arraycopy(weights, 0, from, 0, weights.length);
+        transitionDuration = type == AnimationType.DRAGGING || from[DRAG] > .001f ? .24f : .18f;
         fillWeights(target, type);
         transitionTime = 0;
         if (type == AnimationType.LANDING) landingTime = 0;
@@ -60,7 +62,7 @@ final class SpinePoseAnimator {
         phase += delta;
         landingTime = Math.min(LANDING_SECONDS, landingTime + delta);
         transitionTime += delta;
-        float t = Math.min(1, transitionTime / .18f);
+        float t = Math.min(1, transitionTime / transitionDuration);
         float eased = t * t * (3 - 2 * t);
         for (int i = 0; i < weights.length; i++) weights[i] = from[i] + (target[i] - from[i]) * eased;
         float desired = Float.isFinite(horizontalMotion) ? Math.max(-1, Math.min(1, horizontalMotion)) : 0;
@@ -92,17 +94,18 @@ final class SpinePoseAnimator {
         float landing = (float) Math.sin(Math.PI * Math.min(1, landingTime / LANDING_SECONDS));
         Bone waist = skeleton.findBone("F_Waist_I");
         if (waist != null) {
-            waist.setY(waist.getY() - 6 * weights[PRESS] + 46 * drag - 18 * landing * landing * weights[LAND]);
+            waist.setY(waist.getY() - 6 * weights[PRESS] + 80 * drag - 18 * landing * landing * weights[LAND]);
             waist.setRotation(waist.getRotation() + swing * drag);
         }
         if (drag > 0) {
-            // The exported foot targets are on the standing floor. Let the suspended legs hang free.
+            // Standing foot/hand targets must release while both halves dangle from the waist.
             for (var constraint : skeleton.getIkConstraints()) {
-                if (constraint.getData().getName().startsWith("F_IK_")
-                        && constraint.getData().getName().contains("Foot")) {
+                if (constraint.getData().getName().startsWith("F_IK_")) {
                     constraint.setMix(constraint.getMix() * (1 - drag));
                 }
             }
+            rotate(skeleton, "F_Waist_I2", -95 * drag);
+            rotate(skeleton, "F_Chest_I", -12 * drag);
             float legs = (float) Math.sin(seconds * 3.2 + .6) * 4;
             hang(skeleton, "F_R_Leg_I", 5 + legs, drag);
             hang(skeleton, "F_L_Leg_I", -3 - legs, drag);
@@ -110,6 +113,14 @@ final class SpinePoseAnimator {
             hang(skeleton, "F_L_Calf_I", 12, drag);
             hang(skeleton, "F_R_Foot_I", -42, drag);
             hang(skeleton, "F_L_Foot_I", -25, drag);
+            // Refresh parents before choosing gravity-relative arm angles. No image rotation is used.
+            skeleton.updateWorldTransform();
+            hangingArm(skeleton, "F_L_Arm_II", 4, drag);
+            hangingArm(skeleton, "F_R_Arm_II", -4, drag);
+            hang(skeleton, "F_L_Forearm_I", 14, drag);
+            hang(skeleton, "F_R_Forearm_I", 10, drag);
+            hang(skeleton, "F_L_Hand_I", -8, drag);
+            hang(skeleton, "F_R_Hand_I", -10, drag);
         }
         Bone mouth = skeleton.findBone("F_R_Mouth_II");
         if (mouth != null) mouth.setScaleY(mouth.getScaleY()
@@ -118,11 +129,26 @@ final class SpinePoseAnimator {
         if (head != null) head.setRotation(head.getRotation()
                 + weights[TALK] * 1.5f * (float) Math.sin(seconds * 7)
                 + weights[THINK] * (5 + (float) Math.sin(seconds * 2))
-                - 2 * weights[PRESS] - .4f * swing * drag);
+                - 2 * weights[PRESS] - (18 + .4f * swing) * drag);
+    }
+
+    private static void rotate(Skeleton skeleton, String name, float angle) {
+        Bone bone = skeleton.findBone(name);
+        if (bone != null) bone.setRotation(bone.getRotation() + angle);
+    }
+
+    private static void hangingArm(Skeleton skeleton, String name, float sway, float weight) {
+        Bone bone = skeleton.findBone(name);
+        if (bone != null && bone.getParent() != null) {
+            hang(skeleton, name, -90 - bone.getParent().getWorldRotationX() + sway, weight);
+        }
     }
 
     private static void hang(Skeleton skeleton, String name, float rotation, float weight) {
         Bone bone = skeleton.findBone(name);
-        if (bone != null) bone.setRotation(bone.getRotation() + (rotation - bone.getRotation()) * weight);
+        if (bone != null) {
+            float delta = ((rotation - bone.getRotation()) % 360 + 540) % 360 - 180;
+            bone.setRotation(bone.getRotation() + delta * weight);
+        }
     }
 }
