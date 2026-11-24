@@ -14,11 +14,13 @@ class CharacterControllerTest {
     private static final class Player implements AnimationPlayer {
         AnimationType current;
         boolean playing;
+        float dragMotion;
         List<Runnable> completions = new ArrayList<>();
         public void play(AnimationType animation) { current = animation; playing = true; }
         public void playOnce(AnimationType animation, Runnable completion) { play(animation); completions.add(completion); }
         public void stop() { current = null; playing = false; }
         public boolean isPlaying() { return playing; }
+        public void setDragMotion(float horizontal) { dragMotion=horizontal; }
     }
 
     @Test
@@ -281,5 +283,55 @@ class CharacterControllerTest {
         assertEquals(AnimationType.IDLE,player.current);
         controller.close();
         assertFalse(controller.setAutonomousWalking(true));
+    }
+
+    @Test
+    void pairedPointerGesturePreemptsWalkingAndSpeechThenLandsBeforeRestoringConversation(){
+        var player=new Player();
+        var controller=new CharacterController(new AnimationController(player));
+        Runnable hide=controller.conversationOpened();
+        controller.pointerPressed();
+        assertEquals(CharacterState.PRESSED,controller.state());
+        controller.pointerDragged(5);
+        assertEquals(CharacterState.DRAGGING,controller.state());
+        assertEquals(1,player.dragMotion);
+        controller.setTalking(true);
+        controller.replyEmotion(SpeechEmotion.CHEERFUL);
+        assertFalse(controller.setAutonomousWalking(true));
+        assertEquals(AnimationType.DRAGGING,player.current);
+        controller.pointerReleased();
+        assertEquals(CharacterState.LANDING,controller.state());
+        assertEquals(0,player.dragMotion);
+        controller.pointerReleased();
+        assertEquals(1,player.completions.size());
+        player.completions.getFirst().run();
+        assertEquals(AnimationType.THINKING_TALK,player.current);
+        controller.setTalking(false);
+        assertEquals(AnimationType.THINKING,player.current);
+        hide.run();
+        assertEquals(AnimationType.IDLE,player.current);
+    }
+
+    @Test
+    void shortPressDoesNotLandAndObsoleteLandingCannotInterruptANewGestureOrConversation(){
+        var player=new Player();
+        var controller=new CharacterController(new AnimationController(player));
+        controller.pointerPressed(); controller.pointerReleased();
+        assertEquals(CharacterState.IDLE,controller.state());
+        assertTrue(player.completions.isEmpty());
+        controller.pointerPressed(); controller.pointerDragged(-.5f); controller.pointerReleased();
+        Runnable old=player.completions.getFirst();
+        controller.pointerPressed();
+        old.run();
+        assertEquals(AnimationType.PRESSED,player.current);
+        controller.pointerDragged(.5f); controller.pointerReleased();
+        Runnable newer=player.completions.getLast();
+        controller.conversationOpened();
+        newer.run();
+        assertEquals(AnimationType.THINKING,player.current);
+        controller.close();
+        controller.pointerPressed(); controller.pointerDragged(1); controller.pointerReleased();
+        old.run(); newer.run();
+        assertNull(player.current);
     }
 }

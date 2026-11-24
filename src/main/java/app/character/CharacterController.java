@@ -24,6 +24,8 @@ public final class CharacterController implements CharacterActivityListener, Aut
     private boolean talking;
     private boolean sleeping;
     private boolean walking;
+    private boolean pointerPressed;
+    private boolean dragging;
     private boolean closed;
     private AnimationType interaction;
 
@@ -50,7 +52,7 @@ public final class CharacterController implements CharacterActivityListener, Aut
             case WALK -> { recordActivity(); cancelInteraction(); walking=true; refresh(); }
             case SLEEP -> { cancelInteraction(); sleeping=true; walking=false; refresh(); }
             case IDLE -> { recordActivity(); cancelInteraction(); refresh(); }
-            case THINKING, THINKING_TALK -> throw new IllegalArgumentException("Use paired activity hooks");
+            case THINKING, THINKING_TALK, PRESSED, DRAGGING, LANDING -> throw new IllegalArgumentException("Use paired activity hooks");
         }
     }
 
@@ -64,6 +66,34 @@ public final class CharacterController implements CharacterActivityListener, Aut
     /** Called by the normal window's bounded timer; time itself is injectable in tests. */
     public synchronized void checkIdle(){
         if(!closed) refresh();
+    }
+
+    public synchronized void pointerPressed(){
+        if(closed) return;
+        recordActivity();
+        cancelInteraction();
+        pointerPressed=true;
+        dragging=false;
+        animations.setDragMotion(0);
+        refresh();
+    }
+
+    public synchronized void pointerDragged(float horizontal){
+        if(closed || !pointerPressed) return;
+        recordActivity();
+        dragging=true;
+        animations.setDragMotion(horizontal);
+        refresh();
+    }
+
+    public synchronized void pointerReleased(){
+        if(closed || !pointerPressed) return;
+        boolean landed=dragging;
+        pointerPressed=false;
+        dragging=false;
+        recordActivity();
+        animations.setDragMotion(0);
+        if(landed) interact(AnimationType.LANDING); else refresh();
     }
 
     /** Autonomous movement is not user activity and must never postpone sleep or interrupt a task. */
@@ -129,6 +159,9 @@ public final class CharacterController implements CharacterActivityListener, Aut
 
     public synchronized CharacterState state(){
         if(closed) return CharacterState.IDLE;
+        if(dragging) return CharacterState.DRAGGING;
+        if(pointerPressed) return CharacterState.PRESSED;
+        if(interaction==AnimationType.LANDING) return CharacterState.LANDING;
         if(interaction!=null) return CharacterState.INTERACTING;
         return switch(baseAnimation()){
             case TALK, THINKING_TALK -> CharacterState.TALKING;
@@ -146,7 +179,7 @@ public final class CharacterController implements CharacterActivityListener, Aut
     }
 
     private static int priority(AnimationType type){
-        return type==AnimationType.TAP ? 3 : type==AnimationType.GREETING ? 2 : 1;
+        return type==AnimationType.LANDING ? 4 : type==AnimationType.TAP ? 3 : type==AnimationType.GREETING ? 2 : 1;
     }
 
     private void cancelInteraction(){
@@ -155,7 +188,7 @@ public final class CharacterController implements CharacterActivityListener, Aut
     }
 
     private void interact(AnimationType type){
-        if(!conversations.isEmpty()){
+        if(pointerPressed || dragging || (!conversations.isEmpty() && type!=AnimationType.LANDING)){
             refresh();
             return;
         }
@@ -172,6 +205,8 @@ public final class CharacterController implements CharacterActivityListener, Aut
     }
 
     private AnimationType baseAnimation(){
+        if(dragging) return AnimationType.DRAGGING;
+        if(pointerPressed) return AnimationType.PRESSED;
         if(!conversations.isEmpty()) return talking ? AnimationType.THINKING_TALK : AnimationType.THINKING;
         if(talking) return AnimationType.TALK;
         if(!thinking.isEmpty()) return AnimationType.THINKING;
@@ -196,6 +231,9 @@ public final class CharacterController implements CharacterActivityListener, Aut
         talking=false;
         sleeping=false;
         walking=false;
+        pointerPressed=false;
+        dragging=false;
+        animations.setDragMotion(0);
         animations.stop();
     }
 }

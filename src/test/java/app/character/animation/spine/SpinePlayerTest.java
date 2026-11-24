@@ -57,6 +57,26 @@ class SpinePlayerTest {
     }
 
     @Test
+    void liftedDragTransitionsToAShortLandingAndCompletesOnce() throws Exception {
+        var label=new JLabel();
+        var player=new SpineAnimationPlayer(label,220,220,SpineModel.bundled());
+        var frames=new CountDownLatch(2);
+        label.addPropertyChangeListener("icon",event->frames.countDown());
+        var landed=new CountDownLatch(1);
+        var count=new AtomicInteger();
+        try{
+            player.play(AnimationType.DRAGGING);
+            player.setDragMotion(1);
+            assertTrue(frames.await(2,TimeUnit.SECONDS));
+            player.playOnce(AnimationType.LANDING,()->{count.incrementAndGet();landed.countDown();});
+            assertTrue(landed.await(2,TimeUnit.SECONDS));
+            assertEquals(1,count.get());
+            assertFalse(player.isPlaying());
+        }finally{player.close();}
+        assertTrue(player.awaitClosed(1500));
+    }
+
+    @Test
     void thePanelUsesSpineAndSupportsExplicitAndMissingResourceFallback() throws Exception {
         String oldMode = System.getProperty("closure.animation");
         String oldRoot = System.getProperty("closure.spine.resources");

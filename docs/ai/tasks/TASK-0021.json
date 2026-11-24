@@ -1,0 +1,61 @@
+{
+  "schema_version":1,
+  "task_id":"TASK-0021",
+  "spec_version":1,
+  "status":"READY",
+  "title":"Add waist-lift dragging and smooth interaction transitions",
+  "objective":"Give press/drag/release distinct visual states: a waist-supported lifted body with dangling legs while dragging, a short landing response on release, and a smooth change into the persistent seated conversation pose. Preserve roaming, fixed touch voice and local-only delivery.",
+  "architecture":[
+    "Codex direct implementation from clean isolated fa9c120f89e61826f0c6cdd145c4d12e28a303f0; no Claude, delegation or remote publication. Relevant runtime public baselines match before editing. Existing export has only Default/Interact/Move/Relax/Sit/Sleep: pickup and landing are procedural bone poses, not fictional authored clips.",
+    "Add paired left-pointer hooks and PRESSED/DRAGGING/LANDING states. A small movement dead zone distinguishes clicking from dragging. Pointer hold/drag preempts interaction and roaming; release plays one bounded landing when a drag occurred, then restores the current conversation/speech/idle state. Conversation opening can invalidate obsolete one-shot callbacks. Repeated speech/emotion callbacks cannot steal an active drag.",
+    "Use the exported F_Waist_I as the lift/pivot, relax foot IK during suspension and pose the existing hip/leg/calf/foot bones so feet hang clear of their standing position. Add restrained body/leg sway, with bounded horizontal-motion input that decays when the mouse stops. Release eases the lift out into a short knee/waist landing response with foot IK restored. No cursor reanchoring, sudden whole-window lift or vertical falling physics.",
+    "Use the cached Spine 3.8 AnimationState API to mix native source actions at runtime. Add eased procedural modifier weights so press/drag/landing and talking/thinking changes blend without image ghosting or accumulating offsets. Keep one bounded render worker, immutable complete frames, fixed camera and existing stateless render/preview behavior. Conversation remains THINKING/THINKING_TALK while visible; opening and closing blends into/out of Sit instead of replacing this rule.",
+    "Use absolute screen drag coordinates relative to the original press offset. Latch whether a drag occurred even if the pointer returns to its origin; a drag release must not trigger the fixed touch bubble/voice. Right-click menus keep normal behavior. Mouse press and drag continue counting as real activity; autonomous movement does not. No new TTS calls or voice changes.",
+    "Test gesture priorities, landing completion/stale callbacks, conversation restoration and teardown; verify procedural bone/IK suspension and landing, live transition intermediates, unclipped/opaque frames, input decay and render-thread closure. Extend native real-pet checks for press/drag/drop and add a service-free actual conversation-window transition check with synthetic injected dependencies. Capture only own model/panels, never other apps or desktop screenshots.",
+    "Run offline Java/build/Spec/diff/window and opt-in native pointer/roaming/chat checks. Review head-bound source/evidence, install only allowlisted public files into the known daily runtime with backups/hash guards and private/fixed-audio metadata preservation, verify actual-runtime checks/compiled parity and gracefully restart only the identified app through its unchanged free voice launcher. No push, real model/TTS calls or configuration inspection. Restart clears temporary chat."
+  ],
+  "non_goals":[
+    "No push/PR/remote CI/merge, paid or free live model calls, training, new Spine assets/dependency downloads, private-file inspection or changes to voice cache.",
+    "No image crossfade/double silhouettes, gravity/drop-to-screen-bottom, cursor-to-waist snapping or changes to roaming timing/sleep delay.",
+    "No persona, text, memory, licensing or launcher changes; PNG fallback remains usable without claiming native bone-pose fidelity."
+  ],
+  "allowed_paths":[
+    "src/main/java/app/character/CharacterController.java",
+    "src/main/java/app/character/CharacterState.java",
+    "src/main/java/app/character/animation/AnimationType.java",
+    "src/main/java/app/character/animation/AnimationPlayer.java",
+    "src/main/java/app/character/animation/AnimationController.java",
+    "src/main/java/app/character/animation/FrameAnimationPlayer.java",
+    "src/main/java/app/character/animation/spine/SpineAnimationPlayer.java",
+    "src/main/java/app/character/animation/spine/SpineRenderer.java",
+    "src/main/java/app/character/animation/spine/SpinePoseAnimator.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/test/java/app/character/CharacterControllerTest.java",
+    "src/test/java/app/character/animation/spine/SpineRendererTest.java",
+    "src/test/java/app/character/animation/spine/SpinePlayerTest.java",
+    "src/test/java/app/character/animation/spine/SpinePoseAnimatorTest.java",
+    "src/test/java/app/ui/pet/PetRoamingWindowTest.java",
+    "src/test/java/app/ui/pet/PetPointerWindowTest.java",
+    "docs/character-behavior.md"
+  ],
+  "acceptance_criteria":[
+    {"id":"AC-1","requirement":"Left press, genuine dragging and release have distinct paired states; dragging visibly lifts at the waist with relaxed/dangling legs and landing restores the current base pose.","verification":"Character gesture-state tests, bone/IK pose checks and native own-model pickup/landing captures."},
+    {"id":"AC-2","requirement":"Native and procedural pose changes blend smoothly without image fading or clipped/empty frames; visible conversation retains its seated thinking/talking state and drag/release restores it correctly.","verification":"Controlled live animator transition/endpoint tests, frame visibility and native actual conversation-window transition checks with fake services."},
+    {"id":"AC-3","requirement":"Pointer movement remains under user control, drag-return-to-origin never triggers touch speech, right menu remains valid, roaming pauses for gesture states and stale callbacks/disposal cannot revive them.","verification":"UI gesture dead-zone/latch tests, native pointer/roaming regressions, cancellation/lifecycle and existing fixed-voice/chat tests."},
+    {"id":"AC-4","requirement":"The reviewed daily local runtime starts with the new gestures/transitions while private settings, fixed touch audio, launchers and unrelated code remain preserved; no model calls or push.","verification":"Frozen scope/hash installation, local/runtime checks, changed compiled-class parity, safe startup markers and local-only technical report/review; subjective animation feel awaits user."}
+  ],
+  "checks":[
+    {"id":"CHECK-1","command":"./mvnw -B -Djava.awt.headless=true test","required":true},
+    {"id":"CHECK-2","command":"./mvnw -B -DskipTests package","required":true},
+    {"id":"CHECK-3","command":"python3 scripts/verify_startup.py","required":true},
+    {"id":"CHECK-4","command":"python3 scripts/ai_workflow.py validate","required":true},
+    {"id":"CHECK-5","command":"git diff --check","required":true}
+  ],
+  "risks":[
+    "Procedural lift/landing and blend timing require visual/user acceptance; preserve the authored resource hashes and camera envelope.",
+    "AnimationState is mutable and stays on the existing single render worker under the model synchronization rule; stale UI callbacks remain generation-guarded.",
+    "Native tests must inject synthetic chat dependencies and use startup-smoke pet construction so they cannot inspect real user files or call external services."
+  ],
+  "rollback":"After stopping the identified app, restore only guarded backed-up public files and remove only newly installed public files that were absent at baseline, rebuild and use the unchanged launcher. Keep all private files, fixed audio cache and unrelated sources.",
+  "review_budget":{"max_diff_bytes":100000}
+}

@@ -12,6 +12,9 @@ public interface AnimationPlayer extends AutoCloseable {
 
     boolean isPlaying();
 
+    /** Bounded horizontal pointer motion; renderers without procedural bones can ignore it. */
+    default void setDragMotion(float horizontal) { }
+
     @Override
     default void close() { stop(); }
 }

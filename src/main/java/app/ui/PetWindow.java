@@ -235,6 +235,10 @@ public class PetWindow extends JFrame {
     private Timer roamingTimer;
     private DesktopRoamingController roamingController;
     private boolean petMousePressed;
+    private boolean leftPointerDown;
+    private boolean dragOccurred;
+    private Point lastDragScreenPoint;
+    private long lastDragNanos;
     private long lastDesktopActivityMillis;
 
     /**
@@ -380,6 +384,14 @@ public class PetWindow extends JFrame {
             public void mousePressed(MouseEvent event) {
                 petMousePressed = true;
                 registerUserActivity();
+                cancelInteractionBubble();
+                boolean left = SwingUtilities.isLeftMouseButton(event) && !event.isPopupTrigger();
+                if (leftPointerDown && !left && characterController != null) characterController.pointerReleased();
+                leftPointerDown = left;
+                if (left) dragOccurred = false;
+                lastDragScreenPoint = event.getLocationOnScreen();
+                lastDragNanos = System.nanoTime();
+                if (leftPointerDown && characterController != null) characterController.pointerPressed();
 
                 /*
                  * 记录鼠标按下时的位置。
@@ -409,25 +421,20 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseDragged(MouseEvent event) {
+                if (!leftPointerDown || mousePressedPoint == null || mousePressedScreenPoint == null) return;
                 registerUserActivity();
-
-                // 获取窗口当前在屏幕上的位置
-                Point currentLocation = getLocation();
-
-                /*
-                 * 计算新的窗口位置。
-                 *
-                 * event.getX() - mousePressedPoint.x：
-                 * 表示鼠标相对于按下时在 X 方向移动了多少。
-                 *
-                 * event.getY() - mousePressedPoint.y：
-                 * 表示鼠标相对于按下时在 Y 方向移动了多少。
-                 */
-                int newX = currentLocation.x + event.getX() - mousePressedPoint.x;
-                int newY = currentLocation.y + event.getY() - mousePressedPoint.y;
-
-                // 移动桌宠窗口
-                setLocation(newX, newY);
+                Point screen = event.getLocationOnScreen();
+                if (!dragOccurred && Math.abs(screen.x - mousePressedScreenPoint.x) <= 3
+                        && Math.abs(screen.y - mousePressedScreenPoint.y) <= 3) return;
+                dragOccurred = true;
+                long now = System.nanoTime();
+                double seconds = Math.max(.016, (now - lastDragNanos) / 1_000_000_000.0);
+                float motion = (float) ((screen.x - lastDragScreenPoint.x) / (seconds * 600));
+                lastDragScreenPoint = screen;
+                lastDragNanos = now;
+                if (characterController != null) characterController.pointerDragged(motion);
+                // Preserve the original grab offset even while the render pose changes underneath it.
+                setLocation(screen.x - mousePressedPoint.x, screen.y - mousePressedPoint.y);
                 moveSpeechBubbleNextToPet();
             }
 
@@ -437,6 +444,8 @@ public class PetWindow extends JFrame {
             @Override
             public void mouseReleased(MouseEvent event) {
                 petMousePressed = false;
+                if (leftPointerDown && characterController != null) characterController.pointerReleased();
+                leftPointerDown = false;
                 // 再判断一次是否触发右键菜单，兼容不同系统
                 if (event.isPopupTrigger()) {
                     showPopupMenu(event);
@@ -1021,6 +1030,7 @@ public class PetWindow extends JFrame {
     }
 
     private boolean isClickWithoutDrag(MouseEvent event) {
+        if (dragOccurred) return false;
         if (mousePressedScreenPoint == null) {
             return true;
         }

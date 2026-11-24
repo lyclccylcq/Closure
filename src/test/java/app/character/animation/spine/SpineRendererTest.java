@@ -72,6 +72,51 @@ class SpineRendererTest {
     }
 
     @Test
+    void proceduralPickupAndLandingAreVisibleAndUnclippedAtTheSameCamera(){
+        var renderer=new SpineRenderer(SpineModel.bundled());
+        var bounds=renderer.bounds();
+        for(var type:List.of(AnimationType.PRESSED,AnimationType.DRAGGING,AnimationType.LANDING)){
+            for(float time:new float[]{0,.1f,.2f,.38f}){
+                var image=renderer.render(type,time,220,220);
+                assertTrue(Arrays.stream(pixels(image)).filter(p->(p>>>24)>10).count()>500);
+                for(int n=0;n<220;n++){
+                    assertEquals(0,image.getRGB(n,0)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(n,219)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(0,n)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(219,n)>>>24,type.toString());
+                }
+                assertEquals(bounds,renderer.bounds());
+            }
+        }
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.IDLE,.2f,220,220)),
+                pixels(renderer.render(AnimationType.DRAGGING,.2f,220,220))));
+        assertEquals(.38f,renderer.duration(AnimationType.LANDING));
+    }
+
+    @Test
+    void liveNativeAndProceduralMixesKeepOneVisibleUnclippedModel(){
+        var renderer=new SpineRenderer(SpineModel.bundled());
+        renderer.beginLive(AnimationType.IDLE,true);
+        var camera=renderer.bounds();
+        for(var type:List.of(AnimationType.PRESSED,AnimationType.DRAGGING,AnimationType.LANDING,
+                AnimationType.THINKING,AnimationType.THINKING_TALK,AnimationType.IDLE,AnimationType.SLEEP,
+                AnimationType.WALK,AnimationType.TAP)){
+            renderer.beginLive(type,type!=AnimationType.LANDING && type!=AnimationType.TAP);
+            for(int frame=0;frame<15;frame++){
+                var image=renderer.renderLive(.033f,frame<7?1:-1,220,220);
+                assertTrue(Arrays.stream(pixels(image)).filter(p->(p>>>24)>10).count()>400,type.toString());
+                for(int n=0;n<220;n++){
+                    assertEquals(0,image.getRGB(n,0)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(n,219)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(0,n)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(219,n)>>>24,type.toString());
+                }
+                assertEquals(camera,renderer.bounds());
+            }
+        }
+    }
+
+    @Test
     void missingAndCorruptAssetsFailWithAnActionableDiagnostic() {
         assertThrows(IllegalStateException.class, () -> SpineModel.load("/missing-spine/"));
         for (String broken : List.of(".png", ".skel", ".atlas")) {

@@ -138,9 +138,10 @@ class PetRoamingWindowTest {
 
             MouseEvent press = mouse(MouseEvent.MOUSE_PRESSED, 10, 10);
             for (var listener : panel.getMouseListeners()) listener.mousePressed(press);
-            assertEquals(CharacterState.IDLE, character.state());
+            assertEquals(CharacterState.PRESSED, character.state());
             MouseEvent drag = mouse(MouseEvent.MOUSE_DRAGGED, 25, 15);
             for (var listener : panel.getMouseMotionListeners()) listener.mouseDragged(drag);
+            assertEquals(CharacterState.DRAGGING, character.state());
             Point dragged = window.getLocation();
             assertEquals(stopped.x + 15, dragged.x);
             assertEquals(stopped.y + 5, dragged.y);
