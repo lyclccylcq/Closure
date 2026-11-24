@@ -92,6 +92,7 @@ class PetPointerWindowTest {
             drag(new Point(grip.x+2,grip.y+2));
             assertEquals(original,window.getLocation());
             assertEquals(CharacterState.PRESSED,character.state());
+            assertFalse(panel.isFacingLeft());
             return null;
         });
         awaitFrames(7); capture("pressed.png");
@@ -99,17 +100,35 @@ class PetPointerWindowTest {
             drag(new Point(grip.x+40,grip.y+20));
             assertEquals(new Point(original.x+40,original.y+20),window.getLocation());
             assertEquals(CharacterState.DRAGGING,character.state());
+            assertTrue(panel.isFacingLeft(),"Rightward drag faces left");
+            assertTrue((float)field(panel.animationPlayer(),"dragMotion")<0,"Mirrored sway uses local motion");
             character.setTalking(true);
             assertEquals(CharacterState.DRAGGING,character.state());
             character.setTalking(false);
             return null;
         });
         awaitFrames(9); capture("waist-lift.png");
+        capture("drag-right-facing-left.png");
+        edt(()->{
+            drag(new Point(grip.x+39,grip.y+20));
+            assertTrue(panel.isFacingLeft(),"Small reversal must not flip facing");
+            drag(new Point(grip.x+40,grip.y+35));
+            assertTrue(panel.isFacingLeft(),"Vertical movement retains facing");
+            drag(new Point(grip.x+20,grip.y+35));
+            assertFalse(panel.isFacingLeft(),"Leftward drag faces right");
+            assertTrue((float)field(panel.animationPlayer(),"dragMotion")<0,"Unmirrored sway uses screen motion");
+            drag(new Point(grip.x+20,grip.y+55));
+            assertFalse(panel.isFacingLeft());
+            assertEquals(new Point(original.x+20,original.y+55),window.getLocation());
+            return null;
+        });
+        awaitFrames(9); capture("drag-left-facing-right.png");
         edt(()->{
             drag(grip);
             assertEquals(original,window.getLocation());
             release(grip,1);
             assertEquals(CharacterState.LANDING,character.state());
+            assertFalse(panel.isFacingLeft(),"Landing keeps the last held direction");
             click(grip,1); // A drag returning exactly to its origin still must not become a click.
             assertNull(field(window,"interactionClickTimer"));
             assertNull(field(window,"speechBubbleWindow"));
@@ -118,6 +137,7 @@ class PetPointerWindowTest {
         awaitFrames(6); capture("landing.png");
         await(()->character.state()==CharacterState.IDLE,2000);
         edt(()->{
+            assertFalse(panel.isFacingLeft());
             press(grip,1);
             var right=new MouseEvent(panel,MouseEvent.MOUSE_PRESSED,System.currentTimeMillis(),0,
                     grip.x-window.getX(),grip.y-window.getY(),grip.x,grip.y,1,true,MouseEvent.BUTTON3);
@@ -147,7 +167,7 @@ class PetPointerWindowTest {
         });
         assertEquals(0,aiCalls.get());
         assertEquals(0,speechCalls.get());
-        System.out.println("CLOSURE_POINTER_NATIVE_PASS pressed=true waistLift=true landing=true dragClickSuppressed=true dialog=true noModelCalls=true");
+        System.out.println("CLOSURE_POINTER_NATIVE_PASS pressed=true waistLift=true dragFacing=true landing=true dragClickSuppressed=true dialog=true noModelCalls=true");
     }
 
     private void press(Point screen,int count){

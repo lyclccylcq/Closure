@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0024",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Face against horizontal dragging",
+  "objective": "While held, face left during rightward dragging and right during leftward dragging, without jitter on small reversals or vertical/stationary input. Keep the nape-supported pose and existing local behaviors; deliver locally without pushing.",
+  "architecture": [
+    "Codex direct implementation from the clean isolated dd8e478724e4a0d4a12b87624e6ee3a09299e566 baseline. No Claude, delegation, remote publication or real model calls.",
+    "PetWindow updates the existing panel mirror from horizontal screen displacement during a left drag. Accumulate a small four-logical-pixel direction threshold, reset at press, so tiny reversals and vertical-only movement retain facing. Keep the last held direction through landing/idle; subsequent walking uses its existing direction logic.",
+    "Convert screen-space drag velocity into the mirrored model local space before forwarding the existing pose sway input. Leave the nape animator, original grab offset, input lifecycles, camera, fixed frames and roaming arbitration unchanged.",
+    "Extend the existing real-window synthetic-service pointer check with both directions, small reversal/vertical stability, mirrored sway sign and landing retention, plus captures. Reuse the native roaming/chat/startup checks and existing source-frame mirror test.",
+    "Install only reviewed allowlisted public files into the known daily runtime using head-bound hashes, scoped backups, private/cache metadata guards and compiled parity. Verify actual runtime and restart only the identified daily app through the unchanged original launcher; temporary conversation clears."
+  ],
+  "non_goals": [
+    "No changes to nape/limb pose, click/deadzone/landing timing, roaming/sleep/voice/text behavior, assets, private configuration or dependencies.",
+    "No API calls, costs, push, PR, CI, merge or delegation."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/ui/PetWindow.java",
+    "src/test/java/app/ui/pet/PetPointerWindowTest.java",
+    "docs/character-behavior.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "Rightward horizontal dragging faces left; leftward dragging faces right. Small horizontal jitter, vertical movement and stationary hold do not flip the character.",
+      "verification": "Actual-window pointer assertions for both directions, small reversal, vertical movement and captured model frames."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Held sway uses the displayed orientation, and landing retains the last held facing. Existing grab offset, nape posture, click suppression, dialog and walk orientation stay correct.",
+      "verification": "Mirrored motion-sign and landing assertions, existing bone/frame/mirror tests, and native pointer/roaming/chat checks."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "The reviewed fix runs in the daily local app with unrelated sources, launchers, private configuration and fixed audio cache preserved, without remote publication or model calls.",
+      "verification": "Guarded scoped installation, actual-runtime test/build/startup and changed-class parity."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Immediate sprite mirroring is the existing display mechanism. The threshold prevents small-motion chatter but intentional direction reversals still flip facing.",
+    "A restart clears the current temporary conversation. Visual acceptance remains with the user."
+  ],
+  "rollback": "Stop only the identified daily app, restore guarded backed-up public files, rebuild and relaunch through the unchanged local entry; preserve private settings, audio cache and unrelated sources.",
+  "review_budget": {
+    "max_diff_bytes": 30000
+  }
+}

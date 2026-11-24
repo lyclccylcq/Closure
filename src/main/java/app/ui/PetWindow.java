@@ -88,6 +88,7 @@ public class PetWindow extends JFrame {
      * 动态模型显示大小。
      */
     private static final int MODEL_SIZE = 220;
+    private static final int DRAG_FACING_THRESHOLD = 4;
 
     /**
      * 模型打开后默认放在屏幕右侧靠上位置。
@@ -237,6 +238,7 @@ public class PetWindow extends JFrame {
     private boolean petMousePressed;
     private boolean leftPointerDown;
     private boolean dragOccurred;
+    private int dragFacingAnchorX;
     private Point lastDragScreenPoint;
     private long lastDragNanos;
     private long lastDesktopActivityMillis;
@@ -390,6 +392,7 @@ public class PetWindow extends JFrame {
                 leftPointerDown = left;
                 if (left) dragOccurred = false;
                 lastDragScreenPoint = event.getLocationOnScreen();
+                dragFacingAnchorX = lastDragScreenPoint.x;
                 lastDragNanos = System.nanoTime();
                 if (leftPointerDown && characterController != null) characterController.pointerPressed();
 
@@ -432,6 +435,15 @@ public class PetWindow extends JFrame {
                 float motion = (float) ((screen.x - lastDragScreenPoint.x) / (seconds * 600));
                 lastDragScreenPoint = screen;
                 lastDragNanos = now;
+                if (petAnimationPanel != null) {
+                    int horizontal = screen.x - dragFacingAnchorX;
+                    if (Math.abs(horizontal) >= DRAG_FACING_THRESHOLD) {
+                        petAnimationPanel.setFacingLeft(horizontal > 0);
+                        dragFacingAnchorX = screen.x;
+                    }
+                    // Pose sway is model-local; the displayed frame may face against the drag.
+                    if (petAnimationPanel.isFacingLeft()) motion = -motion;
+                }
                 if (characterController != null) characterController.pointerDragged(motion);
                 // Preserve the original grab offset even while the render pose changes underneath it.
                 setLocation(screen.x - mousePressedPoint.x, screen.y - mousePressedPoint.y);
