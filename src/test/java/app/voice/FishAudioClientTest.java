@@ -70,9 +70,10 @@ class FishAudioClientTest {
         assertEquals("POST", method.get());
         assertEquals("s2.1-pro-free", model.get());
         assertEquals("Bearer synthetic-test-token", auth.get());
-        assertEquals("{\"text\":\"博士，\\\"找到了\\\"？\\n杯垫\\\\下面。\","
+        assertEquals("{\"text\":\"[natural conversational delivery, steady tone] 博士，\\\"找到了\\\"？\\n杯垫\\\\下面。\","
                 + "\"reference_id\":\"4632f51d7f524e6da1952135e498a6a3\",\"format\":\"wav\","
-                + "\"sample_rate\":44100,\"latency\":\"normal\",\"temperature\":0.7,\"top_p\":0.7,"
+                + "\"sample_rate\":44100,\"latency\":\"normal\",\"temperature\":0.5,\"top_p\":0.7,"
+                + "\"chunk_length\":300,\"min_chunk_length\":100,\"condition_on_previous_chunks\":true,"
                 + "\"prosody\":{\"speed\":1.0}}", body.get());
         assertFalse(body.get().contains("ref_audio_path"));
         assertFalse(body.get().contains("seed"));
@@ -96,7 +97,26 @@ class FishAudioClientTest {
                 new TtsRequest("同一个音源。", "zh", config.getVoiceProfile()))
                 .get(3, TimeUnit.SECONDS)).getAudioFile();
         assertEquals("drama-3", selected.get());
-        assertTrue(body.get().contains("\"reference_id\":\"4632f51d7f524e6da1952135e498a6a3\""));
+        assertEquals("{\"text\":\"同一个音源。\",\"reference_id\":\"4632f51d7f524e6da1952135e498a6a3\","
+                + "\"format\":\"wav\",\"sample_rate\":44100,\"latency\":\"normal\","
+                + "\"temperature\":0.7,\"top_p\":0.7,\"prosody\":{\"speed\":1.0}}", body.get());
+        assertEquals(1, calls.get());
+        Files.delete(file);
+    }
+
+    @Test
+    void multiSentenceSpeechAtChatLimitStaysOneRequestWithOneInitialCue() throws Exception {
+        AtomicReference<String> body = new AtomicReference<>();
+        start(exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, wav());
+        });
+        String text = "找到它啦？在杯垫下。".repeat(12);
+        assertEquals(120, text.codePointCount(0, text.length()));
+        Path file = ((FileTtsAudioResult) client().synthesize(request(text))
+                .get(3, TimeUnit.SECONDS)).getAudioFile();
+        assertTrue(body.get().startsWith("{\"text\":\"[natural conversational delivery, steady tone] " + text + "\","));
+        assertEquals(1, body.get().chars().filter(character -> character == '[').count());
         assertEquals(1, calls.get());
         Files.delete(file);
     }

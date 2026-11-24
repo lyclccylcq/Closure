@@ -167,9 +167,17 @@ public final class FishAudioClient implements VoiceSynthesisClient {
     }
 
     private String requestJson(String text) {
-        return "{\"text\":\"" + escapeJson(text) + "\",\"reference_id\":\"" + config.getReferenceId()
+        boolean steadyS2 = FishAudioConfig.FREE_MODEL.equals(config.getModel());
+        // One cue for the whole reply, without switching speaker references or per-sentence emotions.
+        // These documented controls reduce variation; they do not lock the generated voice/prosody.
+        String spokenText = steadyS2 ? "[natural conversational delivery, steady tone] " + text : text;
+        String continuity = steadyS2
+                ? "\"chunk_length\":300,\"min_chunk_length\":100,\"condition_on_previous_chunks\":true,"
+                : "";
+        return "{\"text\":\"" + escapeJson(spokenText) + "\",\"reference_id\":\"" + config.getReferenceId()
                 + "\",\"format\":\"wav\",\"sample_rate\":44100,\"latency\":\"normal\","
-                + "\"temperature\":0.7,\"top_p\":0.7,\"prosody\":{\"speed\":1.0}}";
+                + "\"temperature\":" + (steadyS2 ? "0.5" : "0.7") + ",\"top_p\":0.7,"
+                + continuity + "\"prosody\":{\"speed\":1.0}}";
     }
 
     private static byte[] readBounded(InputStream stream, CompletableFuture<?> completion) throws IOException {

@@ -58,7 +58,11 @@ bash deploy/tts/start-fish-preview.sh
 | `CLOSURE_FISH_CONNECT_TIMEOUT_SECONDS` | `fish.connectTimeoutSeconds` | `10` |
 | `CLOSURE_FISH_REQUEST_TIMEOUT_SECONDS` | `fish.requestTimeoutSeconds` | `60` |
 
-客户端始终明确发送所选的完整 `model` 值。仅允许 `s2.1-pro-free` 与 `drama-3`，拼写错误及付费 `s2.1-pro` 会在本机拒绝，因为官方接口省略或拼错型号可能静默回退到付费 `s2.1-pro`。通用 `fish` 后端默认免费；旧 `fish-drama3` 后端别名保留原来的 Drama3 默认，显式模型环境变量优先。本版不添加表演标签，不混入本地参考录音或旧情绪 profile。
+客户端始终明确发送所选的完整 `model` 值。仅允许 `s2.1-pro-free` 与 `drama-3`，拼写错误及付费 `s2.1-pro` 会在本机拒绝，因为官方接口省略或拼错型号可能静默回退到付费 `s2.1-pro`。通用 `fish` 后端默认免费；旧 `fish-drama3` 后端别名保留原来的 Drama3 默认，显式模型环境变量优先。不混入本地参考录音或旧情绪 profile。
+
+免费 S2.1 的整段请求在原朗读正文之前增加一次 `[natural conversational delivery, steady tone]`，使用 `temperature=0.5`、`top_p=0.7`，并显式发送 `chunk_length=300`、`min_chunk_length=100`、`condition_on_previous_chunks=true`。原正文、标点和显示文字保持原样，客户端仍只请求一次、完整接收后播放。付费 Drama3 保留原参数，不添加这一提示。
+
+这些设置依据 [S2 口吻提示说明](https://docs.fish.audio/developer-guide/core-features/emotions)及 [TTS 参数说明](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech)，用于减少采样变化和过早分段；`condition_on_previous_chunks` 本来就默认开启，此处明确声明。服务端仍可能分段，语气也会受文本、音源和生成模型影响，单个提示及较低随机性不等于锁定声线或保证逐次完全相同。对照试听保存在 `.ai-workflow/fish-tone-local/`，听感需由用户确认。
 
 离线检查只验证请求、WAV、错误、取消和播放生命周期，使用回环假服务与合成测试音频；不证明账号已认证、音源可调用或听感已验收。
 

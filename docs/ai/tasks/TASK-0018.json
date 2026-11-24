@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0018",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Evaluate steadier delivery for the free Fish character voice",
+  "objective": "Address reported tone changes within one utterance with explicit free S2.1 delivery controls, preserve the current speaker and full-reply request, and provide a generated local comparison without claiming acoustic acceptance. No push.",
+  "architecture": [
+    "Continue Codex direct implementation on the existing isolated checkout, clean baseline 5adb619ccc943cc421ecb52d6cdbedfca0c48310; no Claude or delegation. Current client already uses one HTTP request and full WAV per reply. This does not guarantee invariant prosody inside Fish output.",
+    "For exact s2.1-pro-free only, add one concise initial S2 natural-language bracket cue for natural conversational delivery and steady tone, use temperature 0.5 and retain top_p 0.7. Explicitly request chunk_length 300, min_chunk_length 100 and condition_on_previous_chunks true. These are documented controls, not a deterministic voice or emotion lock. The last option already defaults true; making it explicit is contract hardening rather than proof of a bug.",
+    "Keep paid Drama3 payload and sampling unchanged. Do not alter the text model, reply prompt, history, emotion-profile selection or shared text sanitizer. Preserve all original spoken text and punctuation and do not split, retry, blend voices or fabricate seed support.",
+    "Exercise exact captured free and paid HTTP contracts offline, including the same whole text/reference, cancellation and WAV behavior. Use the normal application configuration reader for one controlled free-model render of the existing fixed synthetic sample; do not inspect private configuration or reference recordings, or make paid calls.",
+    "After local review, install only changed reviewed public files in the known daily runtime with frozen per-file hashes/backups and private metadata guards. Preserve all launchers and unrelated sources/services. Verify actual-runtime tests/build/offline startup, then gracefully restart only the identified app with the existing free entry. Restart clears process-local conversation. Compare generated output via user listening rather than metadata assertions."
+  ],
+  "non_goals": [
+    "No push, PR, remote CI, merge, spending or paid model requests.",
+    "No fixed-voice guarantee, unsupported provider controls, acoustic quality score from unit tests, reference downloads, retraining or model switch.",
+    "No animation, personality, memory, private configuration, local voice or launcher changes."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/voice/FishAudioClient.java",
+    "src/test/java/app/voice/FishAudioClientTest.java",
+    "deploy/tts/FISH.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The free-model request carries one initial delivery cue, conservative sampling and explicit continuity settings while preserving the whole utterance, exact free model and single speaker reference.",
+      "verification": "Captured loopback request and request-count assertions, including long text and punctuation; all existing lifecycle/WAV tests remain passing."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Paid Drama3 payload, local voice/text paths, all launchers and private settings remain unchanged; no automatic retry or fallback is introduced.",
+      "verification": "Exact paid payload test, complete diff review, public-file hashes and private metadata guards."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "Produce one valid non-silent free-model sample of the same synthetic text and verify native playback, with subjective tone consistency explicitly pending user listening.",
+      "verification": "Head-bound manual render and native stop/replay receipts, safe output metadata, saved previous/new sample links; no paid synthesis."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "The daily runtime contains exactly the reviewed public changes and starts via its original free entry after successful checks; local delivery and pending subjective acceptance are recorded accurately.",
+      "verification": "Frozen scoped activation plan, actual-runtime tests/build/offline window startup, compiled client parity, safe normal startup markers and local-only report/review."
+    }
+  ],
+  "checks": [
+    {"id": "CHECK-1", "command": "./mvnw -B -Djava.awt.headless=true test", "required": true},
+    {"id": "CHECK-2", "command": "./mvnw -B -DskipTests package", "required": true},
+    {"id": "CHECK-3", "command": "python3 scripts/verify_startup.py", "required": true},
+    {"id": "CHECK-4", "command": "python3 scripts/ai_workflow.py validate", "required": true},
+    {"id": "CHECK-5", "command": "git diff --check", "required": true}
+  ],
+  "risks": [
+    "Provider generation, voice reference and interpretation of text can still change delivery; these controls do not prove or guarantee acoustic consistency.",
+    "A cue and lower temperature may change expressiveness; the user must judge the saved comparison. If drift persists, reevaluate the voice/model rather than declare it fixed.",
+    "Free service remains subject to current fair-use and latency limits. A normal restart clears temporary in-process chat history."
+  ],
+  "rollback": "Stop the identified daily app and restore only the guarded public-file backups if current hashes still match this installation, rebuild and start its unchanged free launcher. Keep private files and launchers untouched. The prior generated free sample is preserved for listening.",
+  "review_budget": {"max_diff_bytes": 40000}
+}
