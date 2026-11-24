@@ -528,7 +528,7 @@ public class PetWindow extends JFrame {
         playAnimation(AnimationType.TAP);
         String interactionLine = randomInteractionLine();
         showSpeechBubble(interactionLine);
-        speakSpeechBubble(interactionLine);
+        if (speechController != null) speechController.speakFixedPhrase(interactionLine);
     }
 
     private String randomInteractionLine() {

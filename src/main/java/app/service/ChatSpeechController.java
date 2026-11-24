@@ -247,6 +247,18 @@ public final class ChatSpeechController implements AutoCloseable {
         return CompletableFuture.completedFuture(null);
     }
 
+    /** Reuse generated audio only for the pet's fixed touch lines, never arbitrary chat. */
+    public void speakFixedPhrase(String text) {
+        speakFixedPhraseAsync(text);
+    }
+
+    public CompletableFuture<Void> speakFixedPhraseAsync(String text) {
+        String speechText = SpeechTextSanitizer.sanitizeFull(text);
+        synchronized (requestLock) {
+            return requestSpeech(speechText, SpeechEmotion.NEUTRAL, true);
+        }
+    }
+
     /** A late background greeting must never cancel a foreground speech request. */
     public CompletableFuture<Void> speakStartupGreetingIfIdle(String text) {
         synchronized (requestLock) {
@@ -267,6 +279,10 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     private CompletableFuture<Void> requestSpeech(String speechText, SpeechEmotion emotion) {
+        return requestSpeech(speechText, emotion, false);
+    }
+
+    private CompletableFuture<Void> requestSpeech(String speechText, SpeechEmotion emotion, boolean fixedPhrase) {
         if (!isAutoSpeakEnabled()) {
             return CompletableFuture.completedFuture(null);
         }
@@ -295,7 +311,8 @@ public final class ChatSpeechController implements AutoCloseable {
         long requestId = startNewRequest();
         CompletableFuture<Void> speechFuture;
         try {
-            speechFuture = speechService.speak(speechText, profile);
+            speechFuture = fixedPhrase ? speechService.speakFixedPhrase(speechText, profile)
+                    : speechService.speak(speechText, profile);
         } catch (RuntimeException exception) {
             notifySpeechFinished();
             warnOnce(errorKey(exception), warningMessage(exception));

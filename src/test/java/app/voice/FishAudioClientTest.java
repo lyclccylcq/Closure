@@ -70,10 +70,9 @@ class FishAudioClientTest {
         assertEquals("POST", method.get());
         assertEquals("s2.1-pro-free", model.get());
         assertEquals("Bearer synthetic-test-token", auth.get());
-        assertEquals("{\"text\":\"[natural conversational delivery, steady tone] 博士，\\\"找到了\\\"？\\n杯垫\\\\下面。\","
+        assertEquals("{\"text\":\"博士，\\\"找到了\\\"？\\n杯垫\\\\下面。\","
                 + "\"reference_id\":\"4632f51d7f524e6da1952135e498a6a3\",\"format\":\"wav\","
-                + "\"sample_rate\":44100,\"latency\":\"normal\",\"temperature\":0.5,\"top_p\":0.7,"
-                + "\"chunk_length\":300,\"min_chunk_length\":100,\"condition_on_previous_chunks\":true,"
+                + "\"sample_rate\":44100,\"latency\":\"normal\",\"temperature\":0.7,\"top_p\":0.7,"
                 + "\"prosody\":{\"speed\":1.0}}", body.get());
         assertFalse(body.get().contains("ref_audio_path"));
         assertFalse(body.get().contains("seed"));
@@ -105,7 +104,7 @@ class FishAudioClientTest {
     }
 
     @Test
-    void multiSentenceSpeechAtChatLimitStaysOneRequestWithOneInitialCue() throws Exception {
+    void multiSentenceSpeechAtChatLimitStaysOneRequestWithoutAddingToneCues() throws Exception {
         AtomicReference<String> body = new AtomicReference<>();
         start(exchange -> {
             body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
@@ -115,8 +114,8 @@ class FishAudioClientTest {
         assertEquals(120, text.codePointCount(0, text.length()));
         Path file = ((FileTtsAudioResult) client().synthesize(request(text))
                 .get(3, TimeUnit.SECONDS)).getAudioFile();
-        assertTrue(body.get().startsWith("{\"text\":\"[natural conversational delivery, steady tone] " + text + "\","));
-        assertEquals(1, body.get().chars().filter(character -> character == '[').count());
+        assertTrue(body.get().startsWith("{\"text\":\"" + text + "\","));
+        assertFalse(body.get().contains("["));
         assertEquals(1, calls.get());
         Files.delete(file);
     }
@@ -387,7 +386,146 @@ class FishAudioClientTest {
         start(exchange -> respond(exchange, 200, wav()));
         assertThrows(ExecutionException.class,
                 () -> client().synthesize(request("字".repeat(2001))).get(1, TimeUnit.SECONDS));
+        assertThrows(ExecutionException.class, () -> client().synthesizeFixedPhraseStream(
+                request("字".repeat(2001)), audio -> fail("Excessive text delivered audio"))
+                .get(1, TimeUnit.SECONDS));
         assertEquals(0, calls.get());
+    }
+
+    @Test
+    void fixedPhraseReplaysIdenticalAudioAfterCopyDeletionAndNewClientButChatBypassesCache() throws Exception {
+        start(exchange -> respond(exchange, 200, wav()));
+        String text = "别戳啦，我在呢。";
+        FishAudioClient firstClient = client();
+        Path first = fixedAudio(firstClient, text);
+        byte[] original = Files.readAllBytes(first);
+        Files.delete(first);
+        Path second = fixedAudio(client(), text);
+        assertNotEquals(first, second);
+        assertArrayEquals(original, Files.readAllBytes(second));
+        Files.delete(second);
+        assertEquals(1, calls.get());
+        try (var files = Files.list(directory.resolve("fixed-lines"))) {
+            var cached = files.toList();
+            assertEquals(1, cached.size());
+            assertTrue(cached.getFirst().getFileName().toString().matches("[0-9a-f]{64}\\.wav"));
+            assertArrayEquals(original, Files.readAllBytes(cached.getFirst()));
+        }
+        for (int i = 0; i < 2; i++) {
+            Path chat = ((FileTtsAudioResult) firstClient.synthesize(request(text)).get(3, TimeUnit.SECONDS)).getAudioFile();
+            Files.delete(chat);
+        }
+        assertEquals(3, calls.get());
+    }
+
+    @Test
+    void cacheOnlyVerificationFailsOnMissWithoutCloudFallback() throws Exception {
+        start(exchange -> respond(exchange, 200, wav()));
+        assertThrows(ExecutionException.class, () -> client().replayFixedPhraseStream(request("尚未缓存。"),
+                audio -> fail("Missing cache must not deliver audio")).get(3, TimeUnit.SECONDS));
+        assertEquals(0, calls.get());
+        assertDirectoryEmpty();
+    }
+
+    @Test
+    void fixedCacheSeparatesTextModelAndReference() throws Exception {
+        start(exchange -> respond(exchange, 200, wav()));
+        Files.delete(fixedAudio(client(), "第一句。"));
+        Files.delete(fixedAudio(client(), "第二句。"));
+        Properties drama = properties();
+        drama.setProperty("fish.model", "drama-3");
+        Files.delete(fixedAudio(new FishAudioClient(FishAudioConfig.fromProperties(drama), directory), "第一句。"));
+        Properties otherVoice = properties();
+        otherVoice.setProperty("fish.referenceId", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        Files.delete(fixedAudio(new FishAudioClient(FishAudioConfig.fromProperties(otherVoice), directory), "第一句。"));
+        Files.delete(fixedAudio(client(), "第一句。"));
+        assertEquals(4, calls.get());
+        try (var files = Files.list(directory.resolve("fixed-lines"))) { assertEquals(4, files.count()); }
+    }
+
+    @Test
+    void overlappingFixedRequestsShareOneSynthesisAndCancelledWaiterNeverReceivesAudio() throws Exception {
+        CountDownLatch received = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        start(exchange -> {
+            received.countDown();
+            await(release);
+            respond(exchange, 200, wav());
+        });
+        FishAudioClient client = client();
+        AtomicInteger cancelledDeliveries = new AtomicInteger();
+        AtomicReference<Path> delivered = new AtomicReference<>();
+        CompletableFuture<Void> cancelled = client.synthesizeFixedPhraseStream(request("同一条。"),
+                audio -> cancelledDeliveries.incrementAndGet());
+        CompletableFuture<Void> surviving;
+        try {
+            assertTrue(received.await(3, TimeUnit.SECONDS));
+            assertTrue(cancelled.cancel(true));
+            surviving = client.synthesizeFixedPhraseStream(request("同一条。"),
+                    audio -> delivered.set(((FileTtsAudioResult) audio).getAudioFile()));
+        } finally { release.countDown(); }
+        surviving.get(3, TimeUnit.SECONDS);
+        assertEquals(1, calls.get());
+        assertEquals(0, cancelledDeliveries.get());
+        Files.delete(delivered.get());
+        Files.delete(fixedAudio(client(), "同一条。"));
+        assertEquals(1, calls.get());
+        try (var files = Files.list(directory)) { assertTrue(files.noneMatch(Files::isRegularFile)); }
+    }
+
+    @Test
+    void fixedFailuresAndInvalidAudioAreNotCachedAndAreNotAutomaticallyRetried() throws Exception {
+        AtomicInteger status = new AtomicInteger(500);
+        AtomicReference<byte[]> response = new AtomicReference<>(wav());
+        start(exchange -> respond(exchange, status.get(), response.get()));
+        FishAudioClient client = client();
+        assertThrows(ExecutionException.class, () -> fixedAudio(client, "固定台词。"));
+        assertEquals(1, calls.get());
+        status.set(200);
+        response.set(new byte[]{1, 2, 3});
+        assertThrows(ExecutionException.class, () -> fixedAudio(client, "固定台词。"));
+        assertEquals(2, calls.get());
+        response.set(wav());
+        Files.delete(fixedAudio(client, "固定台词。"));
+        Files.delete(fixedAudio(client(), "固定台词。"));
+        assertEquals(3, calls.get());
+    }
+
+    @Test
+    void corruptFixedCacheRegeneratesInsteadOfPlayingInvalidAudio() throws Exception {
+        start(exchange -> respond(exchange, 200, wav()));
+        Files.delete(fixedAudio(client(), "固定台词。"));
+        Path canonical;
+        try (var files = Files.list(directory.resolve("fixed-lines"))) { canonical = files.findFirst().orElseThrow(); }
+        Files.write(canonical, new byte[]{1, 2, 3});
+        Path repaired = fixedAudio(client(), "固定台词。");
+        assertArrayEquals(wav(), Files.readAllBytes(repaired));
+        Files.delete(repaired);
+        assertArrayEquals(wav(), Files.readAllBytes(canonical));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void unavailablePersistentStorageStillReusesSuccessfulClipForThisSession() throws Exception {
+        start(exchange -> respond(exchange, 200, wav()));
+        Path unavailable = directory.resolve("not-a-directory");
+        Files.writeString(unavailable, "synthetic fixture");
+        FishAudioClient client = new FishAudioClient(FishAudioConfig.fromProperties(properties()), directory, unavailable);
+        Path first = fixedAudio(client, "固定台词。");
+        byte[] audio = Files.readAllBytes(first);
+        Files.delete(first);
+        Path second = fixedAudio(client, "固定台词。");
+        assertArrayEquals(audio, Files.readAllBytes(second));
+        Files.delete(second);
+        assertEquals(1, calls.get());
+        assertEquals("synthetic fixture", Files.readString(unavailable));
+    }
+
+    private Path fixedAudio(FishAudioClient client, String text) throws Exception {
+        AtomicReference<Path> result = new AtomicReference<>();
+        client.synthesizeFixedPhraseStream(request(text),
+                audio -> result.set(((FileTtsAudioResult) audio).getAudioFile())).get(3, TimeUnit.SECONDS);
+        return result.get();
     }
 
     private FishAudioClient client() { return new FishAudioClient(FishAudioConfig.fromProperties(properties()), directory); }

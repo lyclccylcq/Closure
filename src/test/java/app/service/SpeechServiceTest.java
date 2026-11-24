@@ -30,6 +30,26 @@ class SpeechServiceTest {
     Path tempDir;
 
     @Test
+    void fixedPhraseRoutePreservesPlaybackLifecycleAndOrdinarySpeechUsesNormalSynthesis() throws Exception {
+        FakeTtsClient client = new FakeTtsClient();
+        FakeAudioPlayer player = new FakeAudioPlayer();
+        SpeechService service = SpeechService.forHostedVoice(client, player);
+        VoiceProfile hosted = new VoiceProfile("fish-closure", tempDir.resolve("no-local-reference"), "Hosted", "zh");
+        CompletableFuture<Void> fixed = service.speakFixedPhrase("别戳啦，我在呢。", hosted);
+        assertEquals(1, client.fixedRequests.size());
+        Path copy = outputAudio("fixed-copy.wav");
+        client.synthesisFutures.getFirst().complete(new FileTtsAudioResult(copy));
+        assertEquals(List.of(copy), player.playedFiles);
+        player.playbackFutures.getFirst().complete(null);
+        fixed.join();
+        assertFalse(Files.exists(copy));
+        service.speak("别戳啦，我在呢。", hosted);
+        assertEquals(2, client.requests.size());
+        assertEquals(1, client.fixedRequests.size());
+        service.stop();
+    }
+
+    @Test
     void hostedReadinessDoesNotSynthesizeAndForegroundSpeechNeedsNoLocalReference() throws Exception {
         FakeTtsClient client = new FakeTtsClient();
         FakeAudioPlayer player = new FakeAudioPlayer();
@@ -456,6 +476,7 @@ class SpeechServiceTest {
 
     private static final class FakeTtsClient implements VoiceSynthesisClient {
         private final List<TtsRequest> requests = new ArrayList<>();
+        private final List<TtsRequest> fixedRequests = new ArrayList<>();
         private final List<CompletableFuture<TtsAudioResult>> synthesisFutures = new ArrayList<>();
         private int checkCount;
         private int initializeCount;
@@ -484,6 +505,12 @@ class SpeechServiceTest {
             CompletableFuture<TtsAudioResult> future = new CompletableFuture<>();
             synthesisFutures.add(future);
             return future;
+        }
+
+        @Override
+        public CompletableFuture<Void> synthesizeFixedPhraseStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
+            fixedRequests.add(request);
+            return VoiceSynthesisClient.super.synthesizeFixedPhraseStream(request, consumer);
         }
     }
 

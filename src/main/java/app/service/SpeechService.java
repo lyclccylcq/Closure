@@ -153,6 +153,15 @@ public final class SpeechService implements AssistantSpeechService {
 
     @Override
     public CompletableFuture<Void> speak(String text, VoiceProfile profile) {
+        return speak(text, profile, false);
+    }
+
+    @Override
+    public CompletableFuture<Void> speakFixedPhrase(String text, VoiceProfile profile) {
+        return speak(text, profile, true);
+    }
+
+    private CompletableFuture<Void> speak(String text, VoiceProfile profile, boolean fixedPhrase) {
         String speechText = SpeechTextSanitizer.sanitizeFull(text);
         if (speechText.isBlank()) {
             return CompletableFuture.completedFuture(null);
@@ -185,7 +194,9 @@ public final class SpeechService implements AssistantSpeechService {
                                 .thenCompose(done -> playback.finished())
                                 .thenRun(() -> completeFirstPlayback(generation));
                     }
-                    CompletableFuture<Void> synthesis = ttsClient.synthesizeStream(request, playback::accept);
+                    CompletableFuture<Void> synthesis = fixedPhrase
+                            ? ttsClient.synthesizeFixedPhraseStream(request, playback::accept)
+                            : ttsClient.synthesizeStream(request, playback::accept);
                     if (ttsClient.supportsStreaming() || hostedVoice) rememberSynthesis(generation, synthesis);
                     return synthesis.whenComplete((done, error) -> {
                         if (error != null) stopPlaybackIfCurrent(generation);

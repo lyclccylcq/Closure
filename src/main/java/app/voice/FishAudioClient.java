@@ -27,14 +27,20 @@ public final class FishAudioClient implements VoiceSynthesisClient {
     private final FishAudioConfig config;
     private final HttpClient httpClient;
     private final Path temporaryDirectory;
+    private final FixedPhraseAudioCache fixedPhraseCache;
 
     public FishAudioClient(FishAudioConfig config) {
-        this(config, null);
+        this(config, null, Path.of(".runtime", "fish-voice", "fixed-lines"));
     }
 
     FishAudioClient(FishAudioConfig config, Path temporaryDirectory) {
+        this(config, temporaryDirectory, temporaryDirectory.resolve("fixed-lines"));
+    }
+
+    FishAudioClient(FishAudioConfig config, Path temporaryDirectory, Path fixedPhraseDirectory) {
         this.config = Objects.requireNonNull(config, "config");
         this.temporaryDirectory = temporaryDirectory;
+        fixedPhraseCache = new FixedPhraseAudioCache(fixedPhraseDirectory, temporaryDirectory);
         httpClient = HttpClient.newBuilder()
                 .connectTimeout(config.getConnectTimeout())
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -133,7 +139,33 @@ public final class FishAudioClient implements VoiceSynthesisClient {
     @Override
     public CompletableFuture<Void> synthesizeStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
         Objects.requireNonNull(consumer, "consumer");
-        CompletableFuture<TtsAudioResult> rendered = synthesize(request);
+        return deliverAudio(synthesize(request), consumer);
+    }
+
+    @Override
+    public CompletableFuture<Void> synthesizeFixedPhraseStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
+        return fixedPhraseStream(request, consumer, true);
+    }
+
+    /** Manual cache verification must fail on a miss rather than silently make another cloud request. */
+    CompletableFuture<Void> replayFixedPhraseStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
+        return fixedPhraseStream(request, consumer, false);
+    }
+
+    private CompletableFuture<Void> fixedPhraseStream(TtsRequest request, Consumer<TtsAudioResult> consumer,
+                                                       boolean allowSynthesis) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(consumer, "consumer");
+        if (request.getText().codePointCount(0, request.getText().length()) > 2000) {
+            return CompletableFuture.failedFuture(new VoiceSynthesisException("Fish 单次朗读不能超过 2000 字。"));
+        }
+        String identity = config.getBaseUri() + "\n" + config.getModel() + "\n" + requestJson(request.getText());
+        return deliverAudio(fixedPhraseCache.synthesize(identity, () -> allowSynthesis ? synthesize(request)
+                : CompletableFuture.failedFuture(new VoiceSynthesisException("固定台词缓存未命中，未请求云端。"))), consumer);
+    }
+
+    private CompletableFuture<Void> deliverAudio(CompletableFuture<TtsAudioResult> rendered,
+                                                Consumer<TtsAudioResult> consumer) {
         Object deliveryLock = new Object();
         CompletableFuture<Void> delivered = new CompletableFuture<>() {
             @Override
@@ -167,17 +199,9 @@ public final class FishAudioClient implements VoiceSynthesisClient {
     }
 
     private String requestJson(String text) {
-        boolean steadyS2 = FishAudioConfig.FREE_MODEL.equals(config.getModel());
-        // One cue for the whole reply, without switching speaker references or per-sentence emotions.
-        // These documented controls reduce variation; they do not lock the generated voice/prosody.
-        String spokenText = steadyS2 ? "[natural conversational delivery, steady tone] " + text : text;
-        String continuity = steadyS2
-                ? "\"chunk_length\":300,\"min_chunk_length\":100,\"condition_on_previous_chunks\":true,"
-                : "";
-        return "{\"text\":\"" + escapeJson(spokenText) + "\",\"reference_id\":\"" + config.getReferenceId()
+        return "{\"text\":\"" + escapeJson(text) + "\",\"reference_id\":\"" + config.getReferenceId()
                 + "\",\"format\":\"wav\",\"sample_rate\":44100,\"latency\":\"normal\","
-                + "\"temperature\":" + (steadyS2 ? "0.5" : "0.7") + ",\"top_p\":0.7,"
-                + continuity + "\"prosody\":{\"speed\":1.0}}";
+                + "\"temperature\":0.7,\"top_p\":0.7,\"prosody\":{\"speed\":1.0}}";
     }
 
     private static byte[] readBounded(InputStream stream, CompletableFuture<?> completion) throws IOException {

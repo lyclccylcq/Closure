@@ -76,6 +76,23 @@ class ChatSpeechControllerTest {
     }
 
     @Test
+    void fixedTouchUsesExplicitReuseRouteWhileOrdinaryChatAndTextStayUncached() throws Exception {
+        FakeSpeechService service = new FakeSpeechService();
+        VoiceProfile neutral = profile("neutral", "neutral.wav");
+        var profiles = new VoiceProfileRegistry(Map.of(SpeechEmotion.NEUTRAL, neutral), message -> { });
+        var controller = new ChatSpeechController(service, profiles, true, message -> { }, false, true);
+        controller.speakFixedPhraseAsync("**别戳啦**，我在呢。");
+        controller.speakAssistantReplyAsync(new AssistantReply("别戳啦，我在呢。", "别戳啦，我在呢。", SpeechEmotion.NEUTRAL));
+        controller.speakFullTextAsync("别戳啦，我在呢。");
+        controller.speakBackgroundText("后台闲聊。");
+        assertEquals(List.of("别戳啦，我在呢。"), service.fixedTexts);
+        assertEquals(List.of("别戳啦，我在呢。", "别戳啦，我在呢。"), service.spokenTexts);
+        controller.setAutoSpeakEnabled(false);
+        controller.speakFixedPhraseAsync("静音。").join();
+        assertEquals(1, service.fixedTexts.size());
+    }
+
+    @Test
     void hostedPreviewKeepsFixedVoiceAndSkipsAutomaticBackgroundSpeech() {
         FakeSpeechService service = new FakeSpeechService();
         VoiceProfile hosted = new VoiceProfile("fish-closure", tempDir.resolve("hosted-reference"),
@@ -382,6 +399,7 @@ class ChatSpeechControllerTest {
 
     private static final class FakeSpeechService implements AssistantSpeechService {
         private final List<String> spokenTexts = new ArrayList<>();
+        private final List<String> fixedTexts = new ArrayList<>();
         private final List<VoiceProfile> spokenProfiles = new ArrayList<>();
         private final List<CompletableFuture<Void>> futures = new ArrayList<>();
         private CompletableFuture<Void> warmUpFuture = CompletableFuture.completedFuture(null);
@@ -399,6 +417,12 @@ class ChatSpeechControllerTest {
         public CompletableFuture<Void> speak(String text, VoiceProfile profile) {
             spokenTexts.add(text);
             spokenProfiles.add(profile);
+            return nextFuture();
+        }
+
+        @Override
+        public CompletableFuture<Void> speakFixedPhrase(String text, VoiceProfile profile) {
+            fixedTexts.add(text);
             return nextFuture();
         }
 

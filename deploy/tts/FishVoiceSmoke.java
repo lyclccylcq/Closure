@@ -29,10 +29,12 @@ public final class FishVoiceSmoke {
                         + "\",\"scope\":\"local format only; authentication unverified\",\"cloud_requests\":0}");
             } else if (args.length == 2 && args[0].equals("--render")) {
                 render(Path.of(args[1]).toAbsolutePath());
+            } else if (args.length == 2 && args[0].equals("--fixed-replay")) {
+                fixedReplay(Path.of(args[1]).toAbsolutePath());
             } else if (args.length == 2 && args[0].equals("--playback")) {
                 playback(Path.of(args[1]).toAbsolutePath());
             } else {
-                throw new IllegalArgumentException("Use --check, --render output.wav, or --playback generated.wav");
+                throw new IllegalArgumentException("Use --check, --render output.wav, --fixed-replay output.wav, or --playback generated.wav");
             }
         } catch (Exception failure) {
             Throwable cause = failure;
@@ -111,6 +113,51 @@ public final class FishVoiceSmoke {
                     + "\"cloud_requests\":0,\"stop_verified\":true,\"full_playback_completed\":true,\"user_listening_acceptance\":false}");
         } finally {
             player.stop();
+        }
+    }
+
+    private static void fixedReplay(Path output) throws Exception {
+        if (Files.exists(output) || !output.getFileName().toString().endsWith(".wav")) {
+            throw new IllegalArgumentException("Use a new WAV output path");
+        }
+        FishAudioConfig config = checkedConfig();
+        if (!FishAudioConfig.FREE_MODEL.equals(config.getModel())) {
+            throw new VoiceSynthesisException("Fixed-phrase verification accepts s2.1-pro-free only");
+        }
+        String text = "别戳啦，我在呢。"; // One of PetWindow's public fixed touch lines, never chat history.
+        TtsRequest request = new TtsRequest(text, "zh", config.getVoiceProfile());
+        FishAudioClient firstClient = new FishAudioClient(config);
+        byte[] first = fixedBytes(firstClient, request, true, config.getRequestTimeout().toSeconds() + 10);
+        byte[] second = fixedBytes(firstClient, request, false, 10);
+        byte[] afterReopen = fixedBytes(new FishAudioClient(config), request, false, 10);
+        if (!MessageDigest.isEqual(first, second) || !MessageDigest.isEqual(first, afterReopen)) {
+            throw new IllegalStateException("Fixed replay bytes differ");
+        }
+        Files.createDirectories(output.getParent());
+        Files.write(output, first);
+        Files.setPosixFilePermissions(output, PosixFilePermissions.fromString("rw-------"));
+        System.out.println("{\"status\":\"FIXED_REPLAY_PASS\",\"model_requested\":\"" + config.getModel()
+                + "\",\"synthetic_text\":\"" + text + "\",\"same_client_replay_equal\":true,"
+                + "\"new_client_replay_equal\":true,\"replay_copies_deleted\":true,\"max_cloud_requests\":1,"
+                + "\"bytes\":" + first.length + ",\"sha256\":\""
+                + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(first))
+                + "\",\"user_listening_acceptance\":false}");
+    }
+
+    private static byte[] fixedBytes(FishAudioClient client, TtsRequest request, boolean allowSynthesis,
+                                     long timeoutSeconds) throws Exception {
+        var delivered = new java.util.concurrent.atomic.AtomicReference<FileTtsAudioResult>();
+        java.util.function.Consumer<app.voice.model.TtsAudioResult> sink = audio -> delivered.set((FileTtsAudioResult) audio);
+        var done = allowSynthesis ? client.synthesizeFixedPhraseStream(request, sink)
+                : client.replayFixedPhraseStream(request, sink);
+        done.get(timeoutSeconds, TimeUnit.SECONDS);
+        Path copy = delivered.get().getAudioFile();
+        try {
+            byte[] wav = Files.readAllBytes(copy);
+            FishAudioClient.validateWav(wav);
+            return wav;
+        } finally {
+            Files.deleteIfExists(copy);
         }
     }
 
