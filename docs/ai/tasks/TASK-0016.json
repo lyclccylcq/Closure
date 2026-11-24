@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0016",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "Activate the selected Drama3 voice in the daily local runtime",
+  "objective": "After user confirms their API key is ready, install the reviewed Fish integration in the daily runtime, obtain local-only credential entry without exposing secrets, validate one fixed synthetic speech request and native playback, then enable the normal entry with an exact local rollback. No push.",
+  "architecture": [
+    "User replied 已准备好 to the prior explicit request to create the API key, then continue local configuration, normal-runtime switch and real listening. This authorizes the bounded fixed-text Drama3 preview necessary for this integration, not purchases, account changes, training, cloud infrastructure or arbitrary inference. Continue Codex direct implementation, no Claude or other agents, on an isolated local branch based on 480794a44c520c81b0703047f2e4dc5a1c8d8456.",
+    "Reuse exact TASK-0015 FishAudioClient and config: exact model header drama-3, selected reference4632f51d7f524e6da1952135e498a6a3, no automatic provider retry/fallback, no paid warmup/background speech. Add a narrow standalone diagnostic that loads credentials only through the normal application config, performs one fixed synthetic request, saves generated WAV and reports non-secret metadata. Native stop/replay tests reuse the downloaded WAV without extra synthesis.",
+    "Agent checks private configuration existence/stat only, never reads or prints contents or key values. Prepare an ignored blank config and open the user local editor for private credential entry; application code uses its normal config reader. Keep populated files out of Git, packets and logs. No copied original recordings or weights.",
+    "Install the reviewed TASK-0015 changed public sources/tests/example/guide/helper plus the new diagnostic into the existing daily runtime using exact per-file before/after hashes, backups and private/protected metadata guards. Never blanket-copy, reset or clean the divergent original checkout. Existing AI/model/memory/motion settings remain.",
+    "After source checks pass, install the reviewed public integration and normally restart only the identified daily app. If the fixed-text live request and native playback pass, activate Fish in the normal runtime launcher and preserve a local fallback. If API credit/permissions block synthesis, complete actual-runtime installation/tests and resume the unchanged local-Qwen entry; keep Fish inactive. Preserve unrelated listeners and original top-level shortcut/private voice settings. Restart clears process-local conversation.",
+    "Run required fake/offline tests and actual-runtime build/startup separately from the real manual diagnostic. CI never performs real model calls. Receipt distinguishes local engineering PASS, actual live response, output-device playback and subjective user hearing acceptance. If credentials/quota/permissions fail, finish unaffected installation checks, keep the former normal entry active and report the real blocker; do not fake active readiness.",
+    "Add only non-secret runtime markers after Fish config succeeds and immediately before an HTTP synthesis is sent. These report no text, key or private metadata; the normal-start receipt checks the configured marker and zero synthesis markers without reading arbitrary app logs.",
+    "The first single live request returned HTTP402 (API credit insufficient) with no generated audio. Do not retry or activate Fish automatically. Revision2 permits completing installation/offline checks and restarting the original local backend while waiting for an external API-credit update. Existing Java/Python code checks may be retained with identical source hashes; rerun spec validation and actual-runtime checks, and report live criteria BLOCKED rather than PASS."
+  ],
+  "non_goals": [
+    "No remote publication, PR, CI, merge, cloud provisioning, purchases, quota top-up, model training/downloads, or live text-model evaluation.",
+    "No private configuration/audio/weights opened by agent; no API key pasted to chat, logs or public code.",
+    "No changes to accepted text, motion, chat memory, existing model weights or private local-voice settings; no automatic alternate voices or repeated paid attempts."
+  ],
+  "allowed_paths": [
+    "deploy/tts/FishVoiceSmoke.java",
+    "deploy/tts/FISH.md",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/voice/FishAudioClient.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The actual daily runtime contains the reviewed Fish integration and preserves unrelated public sources/private settings, with exact scoped backups.",
+      "verification": "Head-bound install plan, public source hashes, private metadata guards and actual-runtime tests/package/offline startup."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "One fixed synthetic Drama3 request uses the selected reference and produces a valid nonempty WAV without disclosing credentials; native playback and stop are checked without another cloud request.",
+      "verification": "Standalone normal-client diagnostic receipt, PCM metadata, generated sample and native player lifecycle result; subjective listening remains pending user."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "Normal daily entry starts the Fish backend without local model autostart or automatic synthesis, and prior local voice remains recoverable.",
+      "verification": "Exact launcher backup/change and local rollback entry, identified-process restart/start evidence, no startup synthesis record, preserved original top shortcut/private voice config."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "No push or fabricated user/audio acceptance; concise setup, status and necessary limits are recorded.",
+      "verification": "Clean local commit, offline evidence/review, local activation receipt and user_acceptance=false."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    }
+  ],
+  "risks": [
+    "API key may have been created but not saved locally; user must enter it privately in the prepared local file. Account balance and community-reference access remain unverified until the one live request.",
+    "The fixed test uses API credit and sends only synthetic text. Cancellation/replay cannot undo provider charges; no automatic repeat is allowed.",
+    "Audio device completion is not subjective voice acceptance. Provider-side model identity cannot be independently authenticated if no response header reports it.",
+    "Normal restart clears process-only history. Launcher rollback and guarded file backups preserve the previous local backend.",
+    "Verified blocker: official Fish endpoint returned HTTP402 for the fixed request. API key creation alone does not provide Drama3 API credit; no purchase or account top-up is authorized to the agent."
+  ],
+  "rollback": "Restore the exact saved runtime launcher or use the preserved local-Qwen entry; unset Fish backend variables and restart only the identified daily app. Restore scoped public source backups only if installed hashes still match, rebuild and preserve all private files/weights.",
+  "review_budget": {
+    "max_diff_bytes": 80000
+  }
+}

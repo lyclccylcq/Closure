@@ -67,6 +67,7 @@ public final class FishAudioClient implements VoiceSynthesisClient {
                 .build();
         CompletableFuture<TtsAudioResult> completion = new CompletableFuture<>();
         AtomicReference<InputStream> body = new AtomicReference<>();
+        System.out.println("CLOSURE_FISH_SYNTHESIS_REQUEST");
         CompletableFuture<HttpResponse<InputStream>> headers = httpClient.sendAsync(httpRequest,
                 HttpResponse.BodyHandlers.ofInputStream());
         completion.whenComplete((audio, error) -> {
