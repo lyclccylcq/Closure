@@ -5,6 +5,7 @@ import com.esotericsoftware.spine.AnimationState;
 import com.esotericsoftware.spine.AnimationStateData;
 import com.esotericsoftware.spine.Bone;
 import com.esotericsoftware.spine.Skeleton;
+import com.badlogic.gdx.math.Vector2;
 
 import java.util.Arrays;
 
@@ -90,22 +91,25 @@ final class SpinePoseAnimator {
     private static void applyModifiers(Skeleton skeleton, float seconds, float landingTime,
                                        float[] weights, float lean) {
         float drag = weights[DRAG];
-        float swing = (float) Math.sin(seconds * 3.2) * 4 - lean * 10;
+        float swing = (float) Math.sin(seconds * 3.2) * 2 - lean * 5;
         float landing = (float) Math.sin(Math.PI * Math.min(1, landingTime / LANDING_SECONDS));
         Bone waist = skeleton.findBone("F_Waist_I");
         if (waist != null) {
-            waist.setY(waist.getY() - 6 * weights[PRESS] + 80 * drag - 18 * landing * landing * weights[LAND]);
-            waist.setRotation(waist.getRotation() + swing * drag);
+            waist.setY(waist.getY() - 6 * weights[PRESS] - 18 * landing * landing * weights[LAND]);
         }
         if (drag > 0) {
-            // Standing foot/hand targets must release while both halves dangle from the waist.
+            // Keep the nape as the support while the body and relaxed limbs hang beneath it.
             for (var constraint : skeleton.getIkConstraints()) {
                 if (constraint.getData().getName().startsWith("F_IK_")) {
                     constraint.setMix(constraint.getMix() * (1 - drag));
                 }
             }
-            rotate(skeleton, "F_Waist_I2", -95 * drag);
-            rotate(skeleton, "F_Chest_I", -12 * drag);
+            skeleton.updateWorldTransform();
+            Bone nape = skeleton.findBone("F_Head_I");
+            float supportX = nape == null ? 0 : nape.getWorldX();
+            float supportY = nape == null ? 0 : nape.getWorldY();
+            if (waist != null) waist.setRotation(waist.getRotation() + swing * drag);
+            rotate(skeleton, "F_Waist_I2", -8 * drag);
             float legs = (float) Math.sin(seconds * 3.2 + .6) * 4;
             hang(skeleton, "F_R_Leg_I", 5 + legs, drag);
             hang(skeleton, "F_L_Leg_I", -3 - legs, drag);
@@ -115,6 +119,13 @@ final class SpinePoseAnimator {
             hang(skeleton, "F_L_Foot_I", -25, drag);
             // Refresh parents before choosing gravity-relative arm angles. No image rotation is used.
             skeleton.updateWorldTransform();
+            if (nape != null && waist != null && waist.getParent() != null) {
+                float dx = supportX - nape.getWorldX();
+                float dy = supportY + 40 * drag - nape.getWorldY();
+                Vector2 translated = waist.getParent().worldToLocal(
+                        new Vector2(waist.getWorldX() + dx, waist.getWorldY() + dy));
+                waist.setPosition(translated.x, translated.y);
+            }
             hangingArm(skeleton, "F_L_Arm_II", 4, drag);
             hangingArm(skeleton, "F_R_Arm_II", -4, drag);
             hang(skeleton, "F_L_Forearm_I", 14, drag);
@@ -129,7 +140,7 @@ final class SpinePoseAnimator {
         if (head != null) head.setRotation(head.getRotation()
                 + weights[TALK] * 1.5f * (float) Math.sin(seconds * 7)
                 + weights[THINK] * (5 + (float) Math.sin(seconds * 2))
-                - 2 * weights[PRESS] - (18 + .4f * swing) * drag);
+                - 2 * weights[PRESS] + (2 - swing) * drag);
     }
 
     private static void rotate(Skeleton skeleton, String name, float angle) {
