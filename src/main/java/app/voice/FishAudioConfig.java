@@ -16,25 +16,36 @@ import java.util.Properties;
 
 /** Opt-in hosted voice settings, separate from the existing local voice configuration. */
 public final class FishAudioConfig {
-    public static final String BACKEND = "fish-drama3";
-    public static final String MODEL = "drama-3";
+    public static final String BACKEND = "fish";
+    public static final String LEGACY_DRAMA_BACKEND = "fish-drama3";
+    public static final String FREE_MODEL = "s2.1-pro-free";
+    public static final String DRAMA_MODEL = "drama-3";
     public static final String DEFAULT_REFERENCE_ID = "4632f51d7f524e6da1952135e498a6a3";
     public static final String ENV_API_KEY = "CLOSURE_FISH_API_KEY";
     public static final String ENV_REFERENCE_ID = "CLOSURE_FISH_REFERENCE_ID";
     public static final String ENV_BASE_URL = "CLOSURE_FISH_BASE_URL";
+    public static final String ENV_MODEL = "CLOSURE_FISH_MODEL";
     public static final String PROPERTY_API_KEY = "fish.apiKey";
     public static final String PROPERTY_REFERENCE_ID = "fish.referenceId";
     public static final String PROPERTY_BASE_URL = "fish.baseUrl";
+    public static final String PROPERTY_MODEL = "fish.model";
     private static final Path LOCAL_CONFIG = Path.of("config", "local-fish-voice.properties");
 
     private final String apiKey;
     private final String referenceId;
+    private final String model;
     private final URI baseUri;
     private final Duration connectTimeout;
     private final Duration requestTimeout;
     private final boolean autoSpeakEnabled;
 
     private FishAudioConfig(Map<String, String> environment, Properties properties) {
+        String defaultModel = LEGACY_DRAMA_BACKEND.equals(environment.get(GptSovitsConfig.ENV_BACKEND))
+                ? DRAMA_MODEL : FREE_MODEL;
+        model = value(environment, properties, ENV_MODEL, PROPERTY_MODEL, defaultModel);
+        if (!FREE_MODEL.equals(model) && !DRAMA_MODEL.equals(model)) {
+            throw new VoiceSynthesisException("fish.model 只接受 s2.1-pro-free 或 drama-3，请明确选择；不会自动切换模型。");
+        }
         apiKey = value(environment, properties, ENV_API_KEY, PROPERTY_API_KEY, "");
         if (apiKey.isEmpty()) {
             throw new VoiceSynthesisException("缺少 Fish API 凭据：请在本机配置 CLOSURE_FISH_API_KEY 或 fish.apiKey。");
@@ -66,7 +77,11 @@ public final class FishAudioConfig {
     }
 
     static boolean isSelected(Map<String, String> environment) {
-        return BACKEND.equals(environment.get(GptSovitsConfig.ENV_BACKEND));
+        return isHostedBackend(environment.get(GptSovitsConfig.ENV_BACKEND));
+    }
+
+    public static boolean isHostedBackend(String backend) {
+        return BACKEND.equals(backend) || LEGACY_DRAMA_BACKEND.equals(backend);
     }
 
     public static FishAudioConfig fromEnvironment() {
@@ -94,6 +109,7 @@ public final class FishAudioConfig {
     public URI getBaseUri() { return baseUri; }
     public String getApiKey() { return apiKey; }
     public String getReferenceId() { return referenceId; }
+    public String getModel() { return model; }
     public Duration getConnectTimeout() { return connectTimeout; }
     public Duration getRequestTimeout() { return requestTimeout; }
     public boolean isAutoSpeakEnabled() { return autoSpeakEnabled; }

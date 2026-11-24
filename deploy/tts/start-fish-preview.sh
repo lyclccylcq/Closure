@@ -38,8 +38,13 @@ else
   fi
 fi
 
-export CLOSURE_VOICE_BACKEND=fish-drama3
+export CLOSURE_VOICE_BACKEND=fish
+export CLOSURE_FISH_MODEL="${CLOSURE_FISH_MODEL:-s2.1-pro-free}"
+case "$CLOSURE_FISH_MODEL" in
+  s2.1-pro-free|drama-3) ;;
+  *) printf '%s\n' 'CLOSURE_FISH_MODEL 只接受 s2.1-pro-free 或 drama-3。' >&2; exit 1 ;;
+esac
 export CLOSURE_GPT_SOVITS_SERVER_AUTO_START=false
 cd -- "$FISH_PROJECT_ROOT"
-printf '%s\n' 'Drama3 预览：主动聊天和点击桌宠发声会调用 Fish 云端 API，消耗 API 额度。'
+printf 'Fish 语音预览（%s）：主动发声会调用云端；s2.1-pro-free 当前免费，drama-3 按 API 计费。\n' "$CLOSURE_FISH_MODEL"
 exec ./mvnw javafx:run

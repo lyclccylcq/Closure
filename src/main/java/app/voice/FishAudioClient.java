@@ -62,7 +62,7 @@ public final class FishAudioClient implements VoiceSynthesisClient {
         HttpRequest httpRequest = HttpRequest.newBuilder(config.getBaseUri().resolve("/v1/tts"))
                 .timeout(config.getRequestTimeout())
                 .header("Authorization", "Bearer " + config.getApiKey())
-                .header("model", FishAudioConfig.MODEL)
+                .header("model", config.getModel())
                 .header("Content-Type", "application/json; charset=utf-8")
                 .header("Accept", "audio/wav")
                 .POST(HttpRequest.BodyPublishers.ofString(requestJson(request.getText()), StandardCharsets.UTF_8))

@@ -15,6 +15,7 @@ class FishAudioConfigTest {
         assertFalse(FishAudioConfig.isSelected(Map.of("CLOSURE_VOICE_BACKEND", "qwen3-tts")));
         assertFalse(FishAudioConfig.isSelected(Map.of("CLOSURE_VOICE_BACKEND", "fish-drama")));
         assertFalse(FishAudioConfig.isSelected(Map.of("CLOSURE_VOICE_BACKEND", "FISH-DRAMA3")));
+        assertTrue(FishAudioConfig.isSelected(Map.of("CLOSURE_VOICE_BACKEND", "fish")));
         assertTrue(FishAudioConfig.isSelected(Map.of("CLOSURE_VOICE_BACKEND", "fish-drama3")));
     }
 
@@ -22,12 +23,43 @@ class FishAudioConfigTest {
     void defaultsUseTheUserReferenceAndHostedProfileWithoutLocalFileRequirements() {
         FishAudioConfig config = FishAudioConfig.fromProperties(required());
         assertEquals("https://api.fish.audio", config.getBaseUri().toString());
-        assertEquals("drama-3", FishAudioConfig.MODEL);
+        assertEquals("s2.1-pro-free", config.getModel());
         assertEquals("4632f51d7f524e6da1952135e498a6a3", config.getReferenceId());
         assertEquals(Duration.ofSeconds(10), config.getConnectTimeout());
         assertEquals(Duration.ofSeconds(60), config.getRequestTimeout());
         assertEquals(1.0, config.getVoiceProfile().getSpeedFactor());
         assertTrue(config.isAutoSpeakEnabled());
+    }
+
+    @Test
+    void genericBackendDefaultsFreeAndLegacyDramaAliasStaysExplicitlyPaid() {
+        assertEquals("s2.1-pro-free", FishAudioConfig.from(
+                Map.of("CLOSURE_VOICE_BACKEND", "fish"), required()).getModel());
+        assertEquals("drama-3", FishAudioConfig.from(
+                Map.of("CLOSURE_VOICE_BACKEND", "fish-drama3"), required()).getModel());
+    }
+
+    @Test
+    void modelSelectionUsesScopedEnvironmentBeforePropertyAndBackendDefault() {
+        Properties properties = required();
+        properties.setProperty("fish.model", "drama-3");
+        assertEquals("drama-3", FishAudioConfig.fromProperties(properties).getModel());
+        assertEquals("s2.1-pro-free", FishAudioConfig.from(
+                Map.of("CLOSURE_FISH_MODEL", "s2.1-pro-free"), properties).getModel());
+        properties.setProperty("fish.model", "s2.1-pro-free");
+        assertEquals("s2.1-pro-free", FishAudioConfig.from(
+                Map.of("CLOSURE_VOICE_BACKEND", "fish-drama3"), properties).getModel());
+    }
+
+    @Test
+    void paidS21AndUnrecognizedModelNamesFailLocallyInsteadOfProviderFallback() {
+        for (String model : new String[]{"s2.1-pro", "s2.1", "s2.1-pro-fre", "Drama-3", "unknown-model"}) {
+            Properties properties = required();
+            properties.setProperty("fish.model", model);
+            VoiceSynthesisException error = assertThrows(VoiceSynthesisException.class,
+                    () -> FishAudioConfig.fromProperties(properties));
+            assertTrue(error.getMessage().contains("fish.model"));
+        }
     }
 
     @Test

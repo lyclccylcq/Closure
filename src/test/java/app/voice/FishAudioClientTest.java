@@ -52,7 +52,7 @@ class FishAudioClientTest {
     }
 
     @Test
-    void wholeReplyUsesExplicitDrama3AndOneFixedReferenceWithoutLocalProfileControls() throws Exception {
+    void wholeReplyUsesExplicitFreeModelAndOneFixedReferenceWithoutLocalProfileControls() throws Exception {
         AtomicReference<String> body = new AtomicReference<>();
         AtomicReference<String> method = new AtomicReference<>();
         AtomicReference<String> model = new AtomicReference<>();
@@ -68,7 +68,7 @@ class FishAudioClientTest {
                 .get(3, TimeUnit.SECONDS)).getAudioFile();
         assertArrayEquals(wav(), Files.readAllBytes(file));
         assertEquals("POST", method.get());
-        assertEquals("drama-3", model.get());
+        assertEquals("s2.1-pro-free", model.get());
         assertEquals("Bearer synthetic-test-token", auth.get());
         assertEquals("{\"text\":\"博士，\\\"找到了\\\"？\\n杯垫\\\\下面。\","
                 + "\"reference_id\":\"4632f51d7f524e6da1952135e498a6a3\",\"format\":\"wav\","
@@ -81,9 +81,31 @@ class FishAudioClientTest {
     }
 
     @Test
+    void explicitDramaChoiceUsesDramaHeaderAndTheSameVoice() throws Exception {
+        AtomicReference<String> selected = new AtomicReference<>();
+        AtomicReference<String> body = new AtomicReference<>();
+        start(exchange -> {
+            selected.set(exchange.getRequestHeaders().getFirst("model"));
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, wav());
+        });
+        Properties settings = properties();
+        settings.setProperty("fish.model", "drama-3");
+        FishAudioConfig config = FishAudioConfig.fromProperties(settings);
+        Path file = ((FileTtsAudioResult) new FishAudioClient(config, directory).synthesize(
+                new TtsRequest("同一个音源。", "zh", config.getVoiceProfile()))
+                .get(3, TimeUnit.SECONDS)).getAudioFile();
+        assertEquals("drama-3", selected.get());
+        assertTrue(body.get().contains("\"reference_id\":\"4632f51d7f524e6da1952135e498a6a3\""));
+        assertEquals(1, calls.get());
+        Files.delete(file);
+    }
+
+    @Test
     void failuresAreRedactedAndNeverRetriedOrRedirected() throws Exception {
         AtomicInteger status = new AtomicInteger(401);
         start(exchange -> {
+            assertEquals("s2.1-pro-free", exchange.getRequestHeaders().getFirst("model"));
             exchange.getResponseHeaders().set("Location", "/v1/tts");
             respond(exchange, status.get(), "synthetic-test-token private-test-text".getBytes(StandardCharsets.UTF_8));
         });

@@ -13,7 +13,9 @@ class GptSovitsServerProcessTest {
     @Test
     void hostedBackendSkipsLocalProcessAndLegacyConfiguration() {
         List<String> warnings = new ArrayList<>();
-        assertTrue(GptSovitsServerProcess.startConfigured(warnings::add, "fish-drama3").isEmpty());
+        for (String backend : List.of("fish", "fish-drama3")) {
+            assertTrue(GptSovitsServerProcess.startConfigured(warnings::add, backend).isEmpty());
+        }
         assertTrue(warnings.isEmpty());
     }
 

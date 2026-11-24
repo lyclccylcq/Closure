@@ -74,7 +74,7 @@ public final class GptSovitsServerProcess implements AutoCloseable {
     }
 
     static Optional<GptSovitsServerProcess> startConfigured(Consumer<String> warningSink, String backend) {
-        if (FishAudioConfig.BACKEND.equals(backend)) return Optional.empty();
+        if (FishAudioConfig.isHostedBackend(backend)) return Optional.empty();
         ServerStartupConfig config;
         try {
             config = ServerStartupConfig.fromEnvironment();

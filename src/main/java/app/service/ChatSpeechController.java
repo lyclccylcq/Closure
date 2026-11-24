@@ -106,7 +106,7 @@ public final class ChatSpeechController implements AutoCloseable {
                 FishAudioConfig config = FishAudioConfig.fromEnvironment();
                 ChatSpeechController controller = fromFishConfig(
                         config, new FishAudioClient(config), new AudioPlayerService(), warningSink);
-                System.out.println("CLOSURE_VOICE_CONFIGURED fish-drama3 model=drama-3");
+                System.out.println("CLOSURE_VOICE_CONFIGURED fish model=" + config.getModel());
                 return controller;
             } catch (RuntimeException exception) {
                 return new ChatSpeechController(true, warningSink, exception, true);

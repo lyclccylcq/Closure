@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-/** Manual local diagnostic only. --render makes exactly one billable fixed-text request. */
+/** Manual local diagnostic only. --render makes one request with the explicitly selected model. */
 public final class FishVoiceSmoke {
     private static final String TEXT = "你找到最后那一块拼图啦？居然藏在杯垫下面。行，这回算它输给你了。";
 
@@ -24,8 +24,9 @@ public final class FishVoiceSmoke {
         int exit = 0;
         try {
             if (args.length == 1 && args[0].equals("--check")) {
-                checkedConfig();
-                System.out.println("{\"status\":\"CONFIGURED\",\"scope\":\"local format only; authentication unverified\",\"cloud_requests\":0}");
+                FishAudioConfig config = checkedConfig();
+                System.out.println("{\"status\":\"CONFIGURED\",\"model_requested\":\"" + config.getModel()
+                        + "\",\"scope\":\"local format only; authentication unverified\",\"cloud_requests\":0}");
             } else if (args.length == 2 && args[0].equals("--render")) {
                 render(Path.of(args[1]).toAbsolutePath());
             } else if (args.length == 2 && args[0].equals("--playback")) {
@@ -81,7 +82,7 @@ public final class FishVoiceSmoke {
         try (var input = AudioSystem.getAudioInputStream(output.toFile())) {
             seconds = input.getFrameLength() / input.getFormat().getFrameRate();
         }
-        System.out.println("{\"status\":\"GENERATED\",\"model_requested\":\"drama-3\",\"reference_id\":\""
+        System.out.println("{\"status\":\"GENERATED\",\"model_requested\":\"" + config.getModel() + "\",\"reference_id\":\""
                 + config.getReferenceId() + "\",\"synthetic_text\":\"" + TEXT + "\",\"cloud_requests\":1,\"bytes\":"
                 + wav.length + ",\"audio_seconds\":" + seconds + ",\"elapsed_seconds\":"
                 + (System.nanoTime() - started) / 1_000_000_000.0 + ",\"sha256\":\""

@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0017",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Use Fish S2.1 free for the daily character voice",
+  "objective": "Switch the daily voice to exact s2.1-pro-free with the same selected community reference, preserving explicit Drama3 and local-voice entries and private credentials. Validate one free fixed-text sample and native playback. No push.",
+  "architecture": [
+    "User prefers sufficient S2.1 quality at no API synthesis charge. Official current docs distinguish s2.1-pro-free ($0) from paid s2.1-pro and describe fair-use limits without TTFA/DPA guarantees. Continue Codex direct implementation without Claude/delegation on a clean local branch based on f429ae0641a63841b73086bfa41ad9bd09c3bdc3.",
+    "Add explicit allowlisted Fish model selection: generic backend fish defaults to s2.1-pro-free; existing fish-drama3 selector remains a legacy explicit Drama3 alias. CLOSURE_FISH_MODEL / fish.model can select only s2.1-pro-free or drama-3. Reject paid S2.1, misspellings and unknown values before HTTP; never silently fall back to another model.",
+    "The client sends config.getModel() as the exact model header. Keep the same community reference4632f51d7f524e6da1952135e498a6a3, key/endpoint, neutral identity, one whole reply, proven WAV normalization, cancellation and no HTTP retry/provider fallback. Hosted warmup/background speech remain disabled. Local process-autostart guard must cover both generic and legacy Fish selectors.",
+    "Make model marker and standalone fixed-text diagnostic report actual selected model. Default preview helper and daily runtime launcher explicitly select fish + s2.1-pro-free, overriding any older model property without editing the credential file. Preserve the former Drama3 launcher as a clearly labeled manual paid entry; keep the existing local-voice entry available.",
+    "Run offline Java/Python/native/package checks, inspect exact local head, then use normal application credentials to make one controlled free-model request with fixed synthetic text. Reuse saved WAV for native stop/replay, with no paid Drama3 synthesis. Match actual loopback captures for both supported models; account-side price cannot be independently audited from model output.",
+    "Install only changed reviewed public files in the daily runtime with per-file backups/hashes, preserve unrelated files/private metadata and actual model/memory/motion settings. Normally restart only the identified daily app after checks/live playback pass; original top-level shortcut unchanged. No credential inspection, account top-up, purchases, downloads, cloud infrastructure or paid verification."
+  ],
+  "non_goals": [
+    "No push/PR/remote CI/merge or text-model inference.",
+    "No paid TTS requests, automatic paid fallback, private config contents/audio/weights opened by agent, copying keys or retraining.",
+    "No text prompt, animation, memory or local voice model changes."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/voice/FishAudioConfig.java",
+    "src/main/java/app/voice/FishAudioClient.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/voice/GptSovitsServerProcess.java",
+    "src/test/java/app/voice/FishAudioConfigTest.java",
+    "src/test/java/app/voice/FishAudioClientTest.java",
+    "src/test/java/app/voice/GptSovitsServerProcessTest.java",
+    "deploy/tts/FishVoiceSmoke.java",
+    "deploy/tts/start-fish-preview.sh",
+    "config/fish-voice.example.properties",
+    "deploy/tts/FISH.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "Default generic Fish selection sends exact s2.1-pro-free, legacy Drama3 stays explicit, and invalid/paid S2.1 names cannot silently reach HTTP.",
+      "verification": "Pure config and captured loopback tests for default, aliases, precedence, allowlist and no fallback."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "The same community reference produces a valid non-silent free-model sample, with native stop/replay checked from saved audio and no paid synthesis.",
+      "verification": "Head-bound fixed-text diagnostic, PCM metadata and native playback receipt. Subjective quality remains pending user."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "Daily original entry starts the free model without automatic synthesis/local model startup; explicit paid and local rollback entries are available.",
+      "verification": "Guarded actual-runtime installation/tests, exact launcher hashes and safe startup markers. Preserve private files and unrelated services."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Local-only verified delivery accurately documents current free-tier limits and user acceptance remains separate.",
+      "verification": "Source/check/live/activation evidence, clean local commit and explicit no remote publication/user_acceptance=false."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    }
+  ],
+  "risks": [
+    "The free tier is current provider policy with fair-use limits and no latency guarantees; one sample is not a quality/availability guarantee.",
+    "Provider-internal model choice/billing cannot be independently authenticated solely from returned audio; the exact supported free header is enforced and no fallback occurs.",
+    "Normal restart clears process-local conversation; original local model/private settings remain."
+  ],
+  "rollback": "After exiting the current app, use the preserved explicitly paid Drama3 entry or existing local-voice entry. Restore exact public launcher/source backups only if installed hashes match; rebuild and leave credentials/private settings untouched.",
+  "review_budget": {
+    "max_diff_bytes": 100000
+  }
+}
