@@ -517,7 +517,7 @@ public class PetWindow extends JFrame {
 
     private void showStartupSpeechBubble() {
         showSpeechBubble(STARTUP_BUBBLE_TEXT);
-        if (speechController != null && speechController.usesLocalQwen()) {
+        if (speechController != null && (speechController.usesLocalQwen() || speechController.usesHostedVoice())) {
             speechController.speakStartupGreetingIfIdle(STARTUP_BUBBLE_TEXT);
         } else {
             speakSpeechBubble(STARTUP_BUBBLE_TEXT);
@@ -559,6 +559,10 @@ public class PetWindow extends JFrame {
         if (speechController != null) {
             speechController.speakFullText(text);
         }
+    }
+
+    private void speakBackgroundSpeechBubble(String text) {
+        if (speechController != null) speechController.speakBackgroundText(text);
     }
 
     private void initWorkBreakReminder() {
@@ -683,7 +687,7 @@ public class PetWindow extends JFrame {
             if (isDesktopIdleForChatter()) {
                 String idleChatterLine = randomIdleChatterLine();
                 showSpeechBubble(idleChatterLine);
-                speakSpeechBubble(idleChatterLine);
+                speakBackgroundSpeechBubble(idleChatterLine);
             }
         } finally {
             scheduleNextIdleChatter();
@@ -778,12 +782,12 @@ public class PetWindow extends JFrame {
 
     private void showWorkBreakReminder(String reminderText) {
         showSpeechBubble(reminderText);
-        speakSpeechBubble(reminderText);
+        speakBackgroundSpeechBubble(reminderText);
     }
 
     private void showCourseScheduleReminder(String reminderText) {
         showSpeechBubble(reminderText);
-        speakSpeechBubble(reminderText);
+        speakBackgroundSpeechBubble(reminderText);
     }
 
     private void showEventReminder(EventReminderEntry entry) {
@@ -793,7 +797,7 @@ public class PetWindow extends JFrame {
         }
 
         showSpeechBubble(entry.reminderText());
-        speakSpeechBubble(entry.reminderText());
+        speakBackgroundSpeechBubble(entry.reminderText());
         CompletableFuture.runAsync(() -> removeSavedEventReminder(entry));
     }
 
@@ -1002,7 +1006,7 @@ public class PetWindow extends JFrame {
     }
 
     private void speakStartupGreeting(String greeting, int attempt) {
-        if (speechController == null) {
+        if (speechController == null || speechController.usesHostedVoice()) {
             return;
         }
 

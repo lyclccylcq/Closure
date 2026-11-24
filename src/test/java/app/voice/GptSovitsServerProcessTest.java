@@ -3,12 +3,20 @@ package app.voice;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GptSovitsServerProcessTest {
+    @Test
+    void hostedBackendSkipsLocalProcessAndLegacyConfiguration() {
+        List<String> warnings = new ArrayList<>();
+        assertTrue(GptSovitsServerProcess.startConfigured(warnings::add, "fish-drama3").isEmpty());
+        assertTrue(warnings.isEmpty());
+    }
+
     @Test
     void parsesQuotedCommandArguments() {
         List<String> arguments = GptSovitsServerProcess.parseCommandLine(

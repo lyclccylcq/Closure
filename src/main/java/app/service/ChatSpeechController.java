@@ -3,8 +3,11 @@ package app.service;
 import app.chat.model.AssistantReply;
 import app.voice.GptSovitsClient;
 import app.voice.GptSovitsConfig;
+import app.voice.FishAudioClient;
+import app.voice.FishAudioConfig;
 import app.voice.VoiceProfileRegistry;
 import app.voice.VoiceSynthesisException;
+import app.voice.VoiceSynthesisClient;
 import app.voice.model.SpeechEmotion;
 import app.voice.model.VoiceProfile;
 
@@ -12,6 +15,7 @@ import java.net.ConnectException;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.Objects;
+import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -28,6 +32,7 @@ public final class ChatSpeechController implements AutoCloseable {
     private final Consumer<String> warningSink;
     private final Throwable unavailableCause;
     private final boolean localQwen;
+    private final boolean hostedVoice;
     private final Object requestLock = new Object();
 
     private CompletableFuture<Void> activeSpeechFuture;
@@ -54,22 +59,40 @@ public final class ChatSpeechController implements AutoCloseable {
             Consumer<String> warningSink,
             boolean localQwen
     ) {
+        this(speechService, voiceProfileRegistry, autoSpeakEnabled, warningSink, localQwen, false);
+    }
+
+    ChatSpeechController(
+            AssistantSpeechService speechService,
+            VoiceProfileRegistry voiceProfileRegistry,
+            boolean autoSpeakEnabled,
+            Consumer<String> warningSink,
+            boolean localQwen,
+            boolean hostedVoice
+    ) {
         this.speechService = Objects.requireNonNull(speechService, "speechService");
         this.voiceProfileRegistry = Objects.requireNonNull(voiceProfileRegistry, "voiceProfileRegistry");
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         this.localQwen = localQwen;
+        this.hostedVoice = hostedVoice;
         unavailableCause = null;
         readyForSpeechFuture = startWarmUp();
     }
 
     private ChatSpeechController(boolean autoSpeakEnabled, Consumer<String> warningSink, Throwable unavailableCause) {
+        this(autoSpeakEnabled, warningSink, unavailableCause, false);
+    }
+
+    private ChatSpeechController(boolean autoSpeakEnabled, Consumer<String> warningSink,
+                                 Throwable unavailableCause, boolean hostedVoice) {
         speechService = null;
         voiceProfileRegistry = null;
         this.autoSpeakEnabled = autoSpeakEnabled;
         this.warningSink = Objects.requireNonNull(warningSink, "warningSink");
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
         localQwen = false;
+        this.hostedVoice = hostedVoice;
         readyForSpeechFuture = CompletableFuture.failedFuture(unavailableCause);
     }
 
@@ -78,6 +101,14 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     public static ChatSpeechController fromEnvironment(Consumer<String> warningSink) {
+        if (FishAudioConfig.isSelected()) {
+            try {
+                FishAudioConfig config = FishAudioConfig.fromEnvironment();
+                return fromFishConfig(config, new FishAudioClient(config), new AudioPlayerService(), warningSink);
+            } catch (RuntimeException exception) {
+                return new ChatSpeechController(true, warningSink, exception, true);
+            }
+        }
         boolean autoSpeakEnabled = autoSpeakEnabledFromConfig(warningSink);
         if (!GptSovitsConfig.hasLocalConfigFile() && !GptSovitsConfig.hasRequiredEnvironmentConfig()) {
             return unavailable(
@@ -105,6 +136,14 @@ public final class ChatSpeechController implements AutoCloseable {
         } catch (RuntimeException exception) {
             return unavailable(autoSpeakEnabled, warningSink, exception);
         }
+    }
+
+    static ChatSpeechController fromFishConfig(FishAudioConfig config, VoiceSynthesisClient client,
+                                               VoiceAudioPlayer player, Consumer<String> warningSink) {
+        var profiles = new VoiceProfileRegistry(
+                Map.of(SpeechEmotion.NEUTRAL, config.getVoiceProfile()), warningSink, true);
+        return new ChatSpeechController(SpeechService.forHostedVoice(client, player),
+                profiles, config.isAutoSpeakEnabled(), warningSink, false, true);
     }
 
     private static ChatSpeechController unavailable(
@@ -148,6 +187,10 @@ public final class ChatSpeechController implements AutoCloseable {
         return localQwen;
     }
 
+    public boolean usesHostedVoice() {
+        return hostedVoice;
+    }
+
     public synchronized void setSpeechLifecycleListener(SpeechLifecycleListener speechLifecycleListener) {
         this.speechLifecycleListener = speechLifecycleListener == null
                 ? SpeechLifecycleListener.NO_OP
@@ -187,6 +230,11 @@ public final class ChatSpeechController implements AutoCloseable {
         speakFullTextAsync(text);
     }
 
+    /** Automatic reminders and idle chatter remain text-only in the hosted preview. */
+    public void speakBackgroundText(String text) {
+        if (!hostedVoice) speakFullText(text);
+    }
+
     public CompletableFuture<Void> speakFullTextAsync(String text) {
         String speechText = SpeechTextSanitizer.sanitizeFull(text);
         if (!speechText.isBlank()) {
@@ -199,6 +247,7 @@ public final class ChatSpeechController implements AutoCloseable {
     /** A late background greeting must never cancel a foreground speech request. */
     public CompletableFuture<Void> speakStartupGreetingIfIdle(String text) {
         synchronized (requestLock) {
+            if (hostedVoice) return CompletableFuture.completedFuture(null);
             if (requestGeneration != 0) return CompletableFuture.completedFuture(null);
             return speakFullTextAsync(text);
         }
@@ -233,7 +282,8 @@ public final class ChatSpeechController implements AutoCloseable {
 
         // Independent Qwen reference clips can change speaker identity as well as prosody.
         // Keep its speaker anchor stable; the original SoVITS path retains emotion profiles.
-        SpeechEmotion profileEmotion = localQwen ? SpeechEmotion.NEUTRAL : SpeechProsody.emotionFor(speechText,emotion);
+        SpeechEmotion profileEmotion = localQwen || hostedVoice
+                ? SpeechEmotion.NEUTRAL : SpeechProsody.emotionFor(speechText, emotion);
         VoiceProfile profile = voiceProfileRegistry.get(profileEmotion);
         if (profile == null) {
             return CompletableFuture.completedFuture(null);
@@ -386,6 +436,7 @@ public final class ChatSpeechController implements AutoCloseable {
 
     private String errorKey(Throwable error) {
         String message = safeMessage(error);
+        if (hostedVoice) return "fish:" + message;
         if (message.contains("本地语音配置不存在") || message.contains("缺少 GPT-SoVITS 配置")) {
             return "config";
         }
@@ -410,6 +461,9 @@ public final class ChatSpeechController implements AutoCloseable {
 
     private String warningMessage(Throwable error) {
         String message = safeMessage(error);
+        if (hostedVoice) {
+            return "自动朗读失败：" + message + "。文字聊天不受影响。";
+        }
         if (message.contains("本地语音配置不存在") || message.contains("缺少 GPT-SoVITS 配置")) {
             return "自动朗读不可用：本地语音配置不存在或不完整。文字聊天不受影响。";
         }

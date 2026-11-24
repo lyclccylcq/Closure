@@ -2,6 +2,8 @@ package app.service;
 
 import app.voice.GptSovitsClient;
 import app.voice.GptSovitsConfig;
+import app.voice.FishAudioClient;
+import app.voice.FishAudioConfig;
 import app.voice.VoiceProfileRegistry;
 import app.voice.VoiceSynthesisClient;
 import app.voice.VoiceSynthesisException;
@@ -36,6 +38,7 @@ public final class SpeechService implements AssistantSpeechService {
     private final Throwable unavailableCause;
     private final Predicate<VoiceProfile> referenceAudioUsable;
     private final boolean serverWarmsProfiles;
+    private final boolean hostedVoice;
     private CompletableFuture<Void> initializationFuture;
     private CompletableFuture<Void> serverWarmupFuture;
     private CompletableFuture<Void> activeSpeechFuture;
@@ -59,10 +62,21 @@ public final class SpeechService implements AssistantSpeechService {
             Predicate<VoiceProfile> referenceAudioUsable,
             boolean serverWarmsProfiles
     ) {
+        this(ttsClient, audioPlayerService, referenceAudioUsable, serverWarmsProfiles, false);
+    }
+
+    private SpeechService(
+            VoiceSynthesisClient ttsClient,
+            VoiceAudioPlayer audioPlayerService,
+            Predicate<VoiceProfile> referenceAudioUsable,
+            boolean serverWarmsProfiles,
+            boolean hostedVoice
+    ) {
         this.ttsClient = Objects.requireNonNull(ttsClient, "ttsClient");
         this.audioPlayerService = Objects.requireNonNull(audioPlayerService, "audioPlayerService");
         this.referenceAudioUsable = Objects.requireNonNull(referenceAudioUsable, "referenceAudioUsable");
         this.serverWarmsProfiles = serverWarmsProfiles;
+        this.hostedVoice = hostedVoice;
         unavailableCause = null;
     }
 
@@ -91,10 +105,20 @@ public final class SpeechService implements AssistantSpeechService {
         this.unavailableCause = Objects.requireNonNull(unavailableCause, "unavailableCause");
         referenceAudioUsable = profile -> false;
         serverWarmsProfiles = false;
+        hostedVoice = false;
+    }
+
+    /** Hosted references need no local WAV or billable synthesis during readiness. */
+    static SpeechService forHostedVoice(VoiceSynthesisClient client, VoiceAudioPlayer player) {
+        return new SpeechService(client, player, profile -> profile != null, false, true);
     }
 
     public static SpeechService fromEnvironment() {
         try {
+            if (FishAudioConfig.isSelected()) {
+                return forHostedVoice(new FishAudioClient(FishAudioConfig.fromEnvironment()),
+                        new AudioPlayerService());
+            }
             GptSovitsConfig config = GptSovitsConfig.fromEnvironment();
             return new SpeechService(
                     new GptSovitsClient(config),
@@ -109,6 +133,10 @@ public final class SpeechService implements AssistantSpeechService {
 
     @Override
     public CompletableFuture<Void> warmUp(VoiceProfile profile) {
+        if (hostedVoice) {
+            Objects.requireNonNull(profile, "profile");
+            return initializeOnce().thenRun(() -> ready = true);
+        }
         return serverWarmsProfiles ? awaitServerWarmup(profile) : warmUp(profile, 1);
     }
 
@@ -158,7 +186,7 @@ public final class SpeechService implements AssistantSpeechService {
                                 .thenRun(() -> completeFirstPlayback(generation));
                     }
                     CompletableFuture<Void> synthesis = ttsClient.synthesizeStream(request, playback::accept);
-                    if (ttsClient.supportsStreaming()) rememberSynthesis(generation, synthesis);
+                    if (ttsClient.supportsStreaming() || hostedVoice) rememberSynthesis(generation, synthesis);
                     return synthesis.whenComplete((done, error) -> {
                         if (error != null) stopPlaybackIfCurrent(generation);
                     }).thenCompose(done -> playback.finished());
@@ -217,10 +245,13 @@ public final class SpeechService implements AssistantSpeechService {
     }
 
     private void rememberSynthesis(long generation, CompletableFuture<Void> synthesis) {
+        boolean superseded;
         synchronized (this) {
-            if (speechGeneration == generation) activeSynthesisFuture = synthesis;
-            else synthesis.cancel(true);
+            superseded = speechGeneration != generation;
+            if (!superseded) activeSynthesisFuture = synthesis;
         }
+        // Cancellation can invoke provider/playback callbacks; never call them under this monitor.
+        if (superseded) synthesis.cancel(true);
         synthesis.whenComplete((unused, error) -> {
             synchronized (this) {
                 if (activeSynthesisFuture == synthesis) activeSynthesisFuture = null;

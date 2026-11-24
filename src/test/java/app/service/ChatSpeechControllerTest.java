@@ -2,6 +2,10 @@ package app.service;
 
 import app.chat.model.AssistantReply;
 import app.voice.VoiceProfileRegistry;
+import app.voice.FishAudioConfig;
+import app.voice.VoiceSynthesisClient;
+import app.voice.model.TtsRequest;
+import app.voice.model.TtsAudioResult;
 import app.voice.model.SpeechEmotion;
 import app.voice.model.VoiceProfile;
 import org.junit.jupiter.api.Test;
@@ -14,6 +18,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.function.Consumer;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -24,6 +30,88 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ChatSpeechControllerTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void fishFactoryPreparesWithoutSynthesisAndCancelsTheFirstWholeReply() {
+        Properties settings = new Properties();
+        settings.setProperty("fish.apiKey", "synthetic-test-key");
+        FishAudioConfig config = FishAudioConfig.fromProperties(settings);
+        List<TtsRequest> requests = new ArrayList<>();
+        CompletableFuture<Void> download = new CompletableFuture<>();
+        VoiceSynthesisClient client = new VoiceSynthesisClient() {
+            public CompletableFuture<Void> checkAvailable() {
+                throw new AssertionError("Hosted readiness must not call the provider");
+            }
+            public CompletableFuture<Void> initializeModels() { return CompletableFuture.completedFuture(null); }
+            public CompletableFuture<TtsAudioResult> synthesize(TtsRequest request) {
+                throw new AssertionError("Expected cancellable whole-WAV delivery");
+            }
+            public CompletableFuture<Void> synthesizeStream(TtsRequest request, Consumer<TtsAudioResult> sink) {
+                requests.add(request);
+                return download;
+            }
+        };
+        VoiceAudioPlayer silentPlayer = new VoiceAudioPlayer() {
+            public void play(Path path) { throw new AssertionError("No audio delivered"); }
+            public CompletableFuture<Void> playAndWait(Path path) {
+                throw new AssertionError("No audio delivered");
+            }
+            public void stop() { }
+        };
+        var controller = ChatSpeechController.fromFishConfig(config, client, silentPlayer, message -> { });
+        controller.readyForSpeechFuture().join();
+        assertTrue(requests.isEmpty());
+        controller.speakStartupGreetingIfIdle("自动问候。").join();
+        controller.speakBackgroundText("自动闲聊。");
+        assertTrue(requests.isEmpty());
+
+        controller.speakAssistantReply(new AssistantReply("找到了？这回算它输啦。",
+                "找到了？这回算它输啦。", SpeechEmotion.TEASING));
+        assertEquals(1, requests.size());
+        assertEquals("找到了？这回算它输啦。", requests.getFirst().getText());
+        assertEquals(config.getVoiceProfile().getReferenceAudioPath(),
+                requests.getFirst().getVoiceProfile().getReferenceAudioPath());
+        controller.stop();
+        assertTrue(download.isCancelled());
+    }
+
+    @Test
+    void hostedPreviewKeepsFixedVoiceAndSkipsAutomaticBackgroundSpeech() {
+        FakeSpeechService service = new FakeSpeechService();
+        VoiceProfile hosted = new VoiceProfile("fish-closure", tempDir.resolve("hosted-reference"),
+                "Hosted reference", "zh");
+        VoiceProfile question = new VoiceProfile("other-voice", tempDir.resolve("other-reference"),
+                "Other reference", "zh");
+        var profiles = new VoiceProfileRegistry(Map.of(SpeechEmotion.NEUTRAL, hosted,
+                SpeechEmotion.QUESTION, question), message -> { }, true);
+        var controller = new ChatSpeechController(service, profiles, true, message -> { }, false, true);
+
+        assertTrue(controller.usesHostedVoice());
+        assertFalse(controller.usesLocalQwen());
+        controller.speakStartupGreetingIfIdle("自动启动问候。").join();
+        controller.speakBackgroundText("自动闲聊或提醒。");
+        assertTrue(service.spokenTexts.isEmpty());
+
+        controller.speakAssistantReply(new AssistantReply("找到啦？", "找到啦？", SpeechEmotion.QUESTION));
+        controller.speakFullText("再看一眼。");
+        assertEquals(List.of("找到啦？", "再看一眼。"), service.spokenTexts);
+        assertEquals(List.of(hosted, hosted), service.spokenProfiles);
+    }
+
+    @Test
+    void hostedQuotaFailureKeepsUsefulProviderMessageWithoutLegacyBackendLabel() {
+        FakeSpeechService service = new FakeSpeechService();
+        service.failureMessage = "Fish API 额度不足（HTTP 402）";
+        VoiceProfile hosted = new VoiceProfile("fish-closure", tempDir.resolve("hosted-reference"),
+                "Hosted reference", "zh");
+        var profiles = new VoiceProfileRegistry(Map.of(SpeechEmotion.NEUTRAL, hosted), message -> { }, true);
+        List<String> warnings = new ArrayList<>();
+        var controller = new ChatSpeechController(service, profiles, true, warnings::add, false, true);
+        controller.speakFullText("测试。");
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.getFirst().contains("额度不足"));
+        assertFalse(warnings.getFirst().contains("GPT-SoVITS"));
+    }
 
     @Test
     void localQwenKeepsOneSpeakerAnchorAcrossQuestionAndTeasingReplies() throws Exception {
