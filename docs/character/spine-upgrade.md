@@ -32,7 +32,8 @@ For a scoped activation, require each affected existing file to match the review
 | Application action | Exported action | Playback |
 | --- | --- | --- |
 | IDLE | Relax | awake standby loop |
-| WALK | Move | native 8-second loop at the current window location |
+| WALK | Move | native 8-second loop with movement and facing applied by the desktop window |
+| PRESSED / DRAGGING / LANDING | Relax | procedural brace, nape-supported hold and release recovery |
 | TAP / GREETING / HAPPY | Interact | one shot, then recover current requested state |
 | TALK | Relax | speech outside the visible chat window; procedural mouth/head movement |
 | THINKING | Sit | persistent while chat is visible, or while a request is pending |
@@ -43,7 +44,7 @@ The zero-duration Default pose is also included in the all-action exports. Move 
 
 `ChatWindow` holds an idempotent conversation-visible lease from show until hide/dispose. This seated base survives request completion, errors, cancellation, speech and emotion feedback. Opening chat preempts an old one-shot and invalidates its callback; interactions cannot replace the body while chat remains visible. Outside chat, TAP retains priority over GREETING and HAPPY, and pending requests remain individually paired. Explicit Idle/Walk/Sleep commands preempt an older one-shot; late startup-audio completion cannot replace the newer mode. Closing the last visible chat starts a fresh inactivity interval.
 
-`CharacterController` uses a monotonic clock for the two-minute long-idle policy. The normal pet window checks it once per second. Clicking/dragging the pet, choosing an explicit action or using chat wakes it; automatic speech bubbles do not reset user inactivity. Sleeping suppresses spontaneous idle chatter. Necessary background speech may temporarily use TALK, then returns to sleep if no interaction occurred. The Actions menu exposes Idle, Walk and Sleep. Walk is disabled while chat is visible, and does not move the desktop window automatically. The PNG fallback continues to use its existing frames.
+`CharacterController` uses a monotonic clock for the two-minute long-idle policy. The normal pet window checks it once per second. Clicking or dragging the pet, choosing an explicit action or using chat wakes it. Sleeping suppresses spontaneous idle chatter. Necessary background speech may temporarily use TALK, then returns to sleep if no interaction occurred. The Actions menu exposes Idle, Walk, Sleep and Autonomous Walk. Desktop walking uses the current screen's usable area and pauses while chat is visible or the pet is held. Automatic walking leaves the inactivity clock running. The standalone preview plays Move in place. See [daily character behavior](../character-behavior.md) for the desk movement and drag controls.
 
 The renderer uses the pinned 3.8 runtime for bones, IK/transform constraints and weighted mesh deformations, with a CPU triangle rasterizer for the existing Swing window. It supports this model's normal and additive slots, rotated/trimmed atlas regions, PMA input and draw order. A top-left fill rule prevents shared triangle edges being blended twice. It renders at twice the display resolution before downsampling. A sampled visible-pixel envelope is fixed across all actions, avoiding per-frame zoom or recentering. Rendering runs on one daemon worker with a bounded cadence and at most one pending Swing publication; stop/dispose invalidate pending frames and callbacks.
 

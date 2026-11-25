@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0027",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "Integrate Closure dialogue, voice and desktop interaction progress",
+  "objective": "Merge the published development branch into main through one reviewed GitHub pull request, preserve the development commit history and the latest main documentation, and verify the actual merged project.",
+  "architecture": [
+    "The user explicitly authorized merging codex/drag-facing-local into main via a PR. The reviewed published source starts at e1b494d957690b6968a7ceca691dc163a348df26 and the target starts at 502e068f9409ce3f82ddfe32c2ce6cc178f95745.",
+    "Use a separate clone and merge the latest main into the development branch without rewriting either history. Preserve every functional file from the published development head byte for byte. Update README and its Spine behavior reference to describe the integrated version.",
+    "The integrated scope includes process-local dialogue context and cancellation, the role card and evaluation fixtures, Fish S2.1 and explicit Drama3 selection, fixed touch audio reuse, local Qwen utterance handling, and Spine desktop walking, chat, sleep and drag poses.",
+    "Run the frozen host checks, native pointer/roaming/chat tests with fixtures, and repository link validation. Review the combined diff against separately verified source commits and verify all unchanged integration paths by blob identity. Publish with truthful Codex attribution and run the existing finalize gate with current PR CI and merged main verification."
+  ],
+  "non_goals": [
+    "No new product behavior, dependencies, live model generation or development branch history rewrite. No edits to the desktop installation or its private settings."
+  ],
+  "allowed_paths": [
+    ".gitignore",
+    "README.md",
+    "config/fish-voice.example.properties",
+    "deploy/tts/FISH.md",
+    "deploy/tts/FishVoiceSmoke.java",
+    "deploy/tts/qwen_runtime.py",
+    "deploy/tts/serve-qwen.py",
+    "deploy/tts/start-fish-preview.sh",
+    "docs/ai/tasks/TASK-0011.json",
+    "docs/ai/tasks/TASK-0012.json",
+    "docs/ai/tasks/TASK-0013.json",
+    "docs/ai/tasks/TASK-0014.json",
+    "docs/ai/tasks/TASK-0015.json",
+    "docs/ai/tasks/TASK-0016.json",
+    "docs/ai/tasks/TASK-0017.json",
+    "docs/ai/tasks/TASK-0018.json",
+    "docs/ai/tasks/TASK-0019.json",
+    "docs/ai/tasks/TASK-0020.json",
+    "docs/ai/tasks/TASK-0021.json",
+    "docs/ai/tasks/TASK-0022.json",
+    "docs/ai/tasks/TASK-0023.json",
+    "docs/ai/tasks/TASK-0024.json",
+    "docs/ai/tasks/TASK-0026.json",
+    "docs/character-behavior.md",
+    "docs/character/closure-role-card.zh-CN.txt",
+    "docs/character/dialogue-evaluation/README.md",
+    "docs/character/dialogue-evaluation/cases.v1.json",
+    "docs/character/dialogue-evaluation/source-scenes.json",
+    "docs/character/dialogue-local-validation.md",
+    "docs/character/motion-local-validation.md",
+    "docs/character/reply-quality-local.md",
+    "docs/character/spine-upgrade.md",
+    "scripts/tests/test_qwen_startup.py",
+    "scripts/tests/test_qwen_voice_consistency.py",
+    "src/main/java/app/ai/AiChatRequest.java",
+    "src/main/java/app/ai/AiModelClient.java",
+    "src/main/java/app/ai/AiModelConfig.java",
+    "src/main/java/app/ai/AiStreamCall.java",
+    "src/main/java/app/ai/OpenAiCompatibleChatClient.java",
+    "src/main/java/app/character/CharacterActivityListener.java",
+    "src/main/java/app/character/CharacterController.java",
+    "src/main/java/app/character/CharacterState.java",
+    "src/main/java/app/character/DesktopRoamingController.java",
+    "src/main/java/app/character/SpineEvaluation.java",
+    "src/main/java/app/character/animation/AnimationController.java",
+    "src/main/java/app/character/animation/AnimationPlayer.java",
+    "src/main/java/app/character/animation/AnimationType.java",
+    "src/main/java/app/character/animation/FrameAnimationPlayer.java",
+    "src/main/java/app/character/animation/spine/SpineAnimationPlayer.java",
+    "src/main/java/app/character/animation/spine/SpineModel.java",
+    "src/main/java/app/character/animation/spine/SpinePoseAnimator.java",
+    "src/main/java/app/character/animation/spine/SpinePreview.java",
+    "src/main/java/app/character/animation/spine/SpineRenderer.java",
+    "src/main/java/app/service/AssistantReplyParser.java",
+    "src/main/java/app/service/AssistantSpeechService.java",
+    "src/main/java/app/service/ChatReasoningPolicy.java",
+    "src/main/java/app/service/ChatService.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/service/ChatStreamListener.java",
+    "src/main/java/app/service/ConversationHistory.java",
+    "src/main/java/app/service/ReplyJsonObject.java",
+    "src/main/java/app/service/SpeechService.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/chat/ChatInputBar.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/ui/chat/ChatWindow.java",
+    "src/main/java/app/ui/pet/PetAnimationPanel.java",
+    "src/main/java/app/voice/FishAudioClient.java",
+    "src/main/java/app/voice/FishAudioConfig.java",
+    "src/main/java/app/voice/FixedPhraseAudioCache.java",
+    "src/main/java/app/voice/GptSovitsServerProcess.java",
+    "src/main/java/app/voice/VoiceSynthesisClient.java",
+    "src/main/resources/prompts/closure-role-card.zh-CN.txt",
+    "src/main/resources/prompts/closure-system-prompt.txt",
+    "src/test/java/app/ai/OpenAiCompatibleChatClientTest.java",
+    "src/test/java/app/character/CharacterControllerTest.java",
+    "src/test/java/app/character/DesktopRoamingControllerTest.java",
+    "src/test/java/app/character/animation/spine/SpinePlayerTest.java",
+    "src/test/java/app/character/animation/spine/SpinePoseAnimatorTest.java",
+    "src/test/java/app/character/animation/spine/SpineRendererTest.java",
+    "src/test/java/app/service/AssistantReplyParserTest.java",
+    "src/test/java/app/service/ChatReasoningPolicyTest.java",
+    "src/test/java/app/service/ChatServiceReasoningTest.java",
+    "src/test/java/app/service/ChatServiceTest.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/service/ConversationHistoryTest.java",
+    "src/test/java/app/service/SpeechServiceTest.java",
+    "src/test/java/app/ui/chat/ChatWindowLifecycleTest.java",
+    "src/test/java/app/ui/pet/PetAnimationPanelTest.java",
+    "src/test/java/app/ui/pet/PetPointerWindowTest.java",
+    "src/test/java/app/ui/pet/PetRoamingWindowTest.java",
+    "src/test/java/app/voice/FishAudioClientTest.java",
+    "src/test/java/app/voice/FishAudioConfigTest.java",
+    "src/test/java/app/voice/GptSovitsServerProcessTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The proposed merge includes the exact published development features and retains all current main content, with their commit history intact.",
+      "verification": "Check ancestry of both reviewed parents and verify all paths against the original source trees apart from the two documentation updates and the integration Spec."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "The integrated project passes the pre-merge tests, package and real offline desktop startup. Dialogue and drag/roaming transitions work with fixture services.",
+      "verification": "Trusted Java and Python suites, actual window pointer/roaming/chat checks, Maven packaging and offline Spine startup."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "README describes the integrated features from main, including actual Fish and local voice startup, memory boundaries and action controls.",
+      "verification": "Review docs against bundled code and verify repository paths and shell block syntax."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "The candidate has a valid PR task contract owned by this integration and a clean diff limited to that scope.",
+      "verification": "Run the same PR-event scope validator locally against the exact proposed head and base. PR CI, merge and main CI remain required completion steps under the frozen policy."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Fish requires explicit selection and the caller’s own API configuration. Offline checks cover request handling with test fixtures. Product quality and Spine licence requirements are recorded in the existing documentation."
+  ],
+  "rollback": "If a release rollback is needed, create a reviewed revert PR for the integration merge. Preserve the development history and the desktop data.",
+  "review_budget": {
+    "max_diff_bytes": 750000
+  }
+}
