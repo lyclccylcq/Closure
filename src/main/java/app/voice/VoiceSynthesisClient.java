@@ -22,4 +22,9 @@ public interface VoiceSynthesisClient {
     default CompletableFuture<Void> synthesizeStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
         return synthesize(request).thenAccept(consumer);
     }
+
+    /** Only callers with a fixed, public UI phrase opt in to audio reuse. */
+    default CompletableFuture<Void> synthesizeFixedPhraseStream(TtsRequest request, Consumer<TtsAudioResult> consumer) {
+        return synthesizeStream(request, consumer);
+    }
 }

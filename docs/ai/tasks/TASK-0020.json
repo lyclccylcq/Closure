@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0020",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Add autonomous horizontal desktop walking",
+  "objective": "Make the existing Spine Move animation a regular idle behavior with real left/right desktop movement, direction changes and safe screen bounds; preserve conversation poses, fixed touch audio and long-idle sleep. Deliver locally without pushing.",
+  "architecture": [
+    "Codex directly implements on the existing isolated checkout from clean b1ca6969f9be5265c7e2406b56dfb75c67776c2f. No Claude, delegation, push, PR or merge. Relevant daily-runtime public baselines are checked before mutation; unrelated original changes remain.",
+    "Add a small pure roaming controller with injectable monotonic clock/randomness. Default automatic mode rests 20–35 seconds, walks 4–7 seconds at 40 logical pixels/second and repeats while eligible. Use a 33ms Swing timer, elapsed-time motion with a bounded catch-up step, fractional positions and short bouts rather than unbounded drift. The manual Walk action starts one bout immediately when eligible, including with automatic mode disabled.",
+    "Translate the real JFrame horizontally at its current height within its current monitor's usable bounds after menu/Dock/taskbar insets. Support negative monitor coordinates, clamp at edges, reverse direction and mirror the displayed panel when moving left. Do not change Spine resources, CPU renderer, camera, scale or completed-frame painting. The original model faces right; mirroring is a display transform shared with PNG fallback.",
+    "Only IDLE/WALKING states are eligible. Pause on mouse press/drag/hover, visible chat, speech/thinking, interaction, sleep, popup menus, hidden windows or disposal. Resume after a fresh rest interval; movement cannot overwrite a user drag or jump after timer suspension. Move any visible speech bubble with the pet. A checked Autonomous walking menu option controls automatic behavior for this app session; Idle/Sleep/manual interaction stops the current bout.",
+    "Add a character-state entry for autonomous walking that never records user activity, wakes sleep, cancels interactions or overrides chat/speech. The two-minute long-idle sleep clock remains driven by real user/chat activity; automatic movement must not keep the character awake. Explicit user Walk can wake it through the existing activity hook.",
+    "Verify deterministic scheduling, direction/bounds on positive and negative displays, narrow/offscreen bounds, fractional/elapsed motion, stale timer gaps, manual override, disabling, external relocation, blockers and closure. Verify character priority/idle-sleep preservation and pixel-exact horizontal mirroring without modifying renderer output. Add opt-in native offline window validation for real position changes, boundary reversal, menu/drag/chat/sleep preemption and timer/renderer disposal; no external services or real config.",
+    "Run the existing Java/build/Spec/diff/window checks and explicit reviewed native walking/chat checks. Install only reviewed public files into the known daily runtime using frozen per-file hashes/backups, preserve launchers/private metadata/fixed audio cache and unrelated services. Run actual-runtime checks and compiled-class parity, then gracefully restart only the identified app using its unchanged free voice entry. Normal restart clears temporary conversation; no live model/TTS calls are needed."
+  ],
+  "non_goals": [
+    "No remote publication, purchases, cloud calls, model/voice changes, private configuration inspection or changes to stored fixed-phrase audio.",
+    "No vertical falling, obstacle detection, cross-monitor patrol, dragging the user's other windows or persistent preference settings.",
+    "No change to idle-sleep delay, conversation pose rules, existing animation resources or Spine rendering implementation."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/character/CharacterController.java",
+    "src/main/java/app/character/DesktopRoamingController.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/pet/PetAnimationPanel.java",
+    "src/test/java/app/character/CharacterControllerTest.java",
+    "src/test/java/app/character/DesktopRoamingControllerTest.java",
+    "src/test/java/app/ui/pet/PetAnimationPanelTest.java",
+    "src/test/java/app/ui/pet/PetRoamingWindowTest.java",
+    "docs/character-behavior.md"
+  ],
+  "acceptance_criteria": [
+    {"id":"AC-1","requirement":"Idle behavior periodically plays WALK and moves the actual pet horizontally; manual Walk starts a bout and automatic walking can be disabled.","verification":"Deterministic controller scheduling/motion/manual tests plus native real-window position/animation and menu checks."},
+    {"id":"AC-2","requirement":"Walking stays inside the current monitor's usable rectangle, reverses at either edge, faces its movement direction and preserves its height and renderer behavior.","verification":"Geometry tests including negative coordinates/offscreen/narrow bounds, pixel mirror checks, native edge reversal and own-panel captures."},
+    {"id":"AC-3","requirement":"Conversation, speech, sleep, interactions, mouse/menu activity, dragging and disposal stop motion; automatic movement never resets the existing long-idle sleep clock or causes catch-up jumps.","verification":"Character/controller tests, existing native chat pose test and native walking preemption/disposal checks."},
+    {"id":"AC-4","requirement":"The reviewed local daily runtime starts with automatic walking enabled and all launchers, private settings, fixed touch voice and unrelated code preserved; no push or real model calls.","verification":"Scoped installation plan/guards, local and runtime checks, compiled-class parity, safe normal startup marker and local-only technical review/report."}
+  ],
+  "checks": [
+    {"id":"CHECK-1","command":"./mvnw -B -Djava.awt.headless=true test","required":true},
+    {"id":"CHECK-2","command":"./mvnw -B -DskipTests package","required":true},
+    {"id":"CHECK-3","command":"python3 scripts/verify_startup.py","required":true},
+    {"id":"CHECK-4","command":"python3 scripts/ai_workflow.py validate","required":true},
+    {"id":"CHECK-5","command":"git diff --check","required":true}
+  ],
+  "risks": [
+    "Speed/timing and screen placement are product behavior for local user acceptance; automatic mode has an immediate menu off switch.",
+    "The current monitor's work area is used; OS display/Dock changes are rechecked each tick. No cross-monitor wandering is attempted.",
+    "Native validation must omit all AI/voice/weather/reminder services and not read or display other applications. UI evidence is limited to this test window/panel.",
+    "Session-only automatic-walking preference resets to enabled on app restart; long-idle sleep remains two minutes."
+  ],
+  "rollback":"Stop the identified app, restore only backed-up public files with matching installed hashes, remove only newly installed public source/test/docs files if originally absent, rebuild and use the unchanged daily launcher. Preserve all private files, voice cache and unrelated sources.",
+  "review_budget":{"max_diff_bytes":100000}
+}

@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "source_url": "https://prts.wiki/w/%E5%8F%AF%E9%9C%B2%E5%B8%8C%E5%B0%94/%E8%AF%AD%E9%9F%B3%E8%AE%B0%E5%BD%95",
+  "observed_page_revision": 445074,
+  "retrieved_at": "2026-11-23T18:16:56+08:00",
+  "retrieved_html_sha256": "9ac44c4342fe51e3b13520077808c081ee3a19d018a827928766c54be73a7744",
+  "scope": "Scene metadata only; no voice transcripts or audio bundled. The hash identifies the retrieved HTML; page revision alone may not freeze transcluded templates.",
+  "grouping_author": "Codex working classification for desktop dialogue design; not official voice categories",
+  "counts": {
+    "character_interaction": 21,
+    "tactical": 16,
+    "title": 1
+  },
+  "entries": [
+    {
+      "scene": "任命助理",
+      "source_voice_index": "1",
+      "id": "V01",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "交谈1",
+      "source_voice_index": "2",
+      "id": "V02",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "交谈2",
+      "source_voice_index": "3",
+      "id": "V03",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "交谈3",
+      "source_voice_index": "4",
+      "id": "V04",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "晋升后交谈1",
+      "source_voice_index": "5",
+      "id": "V05",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "晋升后交谈2",
+      "source_voice_index": "6",
+      "id": "V06",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "信赖提升后交谈1",
+      "source_voice_index": "7",
+      "id": "V07",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "信赖提升后交谈2",
+      "source_voice_index": "8",
+      "id": "V08",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "信赖提升后交谈3",
+      "source_voice_index": "9",
+      "id": "V09",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "闲置",
+      "source_voice_index": "10",
+      "id": "V10",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "干员报到",
+      "source_voice_index": "11",
+      "id": "V11",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "观看作战记录",
+      "source_voice_index": "12",
+      "id": "V12",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "精英化晋升1",
+      "source_voice_index": "13",
+      "id": "V13",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "精英化晋升2",
+      "source_voice_index": "14",
+      "id": "V14",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "编入队伍",
+      "source_voice_index": "17",
+      "id": "V15",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "任命队长",
+      "source_voice_index": "18",
+      "id": "V16",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "行动出发",
+      "source_voice_index": "19",
+      "id": "V17",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "行动开始",
+      "source_voice_index": "20",
+      "id": "V18",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "选中干员1",
+      "source_voice_index": "21",
+      "id": "V19",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "选中干员2",
+      "source_voice_index": "22",
+      "id": "V20",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "部署1",
+      "source_voice_index": "23",
+      "id": "V21",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "部署2",
+      "source_voice_index": "24",
+      "id": "V22",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "作战中1",
+      "source_voice_index": "25",
+      "id": "V23",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "作战中2",
+      "source_voice_index": "26",
+      "id": "V24",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "作战中3",
+      "source_voice_index": "27",
+      "id": "V25",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "作战中4",
+      "source_voice_index": "28",
+      "id": "V26",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "完成高难行动",
+      "source_voice_index": "29",
+      "id": "V27",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "3星结束行动",
+      "source_voice_index": "30",
+      "id": "V28",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "非3星结束行动",
+      "source_voice_index": "31",
+      "id": "V29",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "行动失败",
+      "source_voice_index": "32",
+      "id": "V30",
+      "use_group": "tactical"
+    },
+    {
+      "scene": "进驻设施",
+      "source_voice_index": "33",
+      "id": "V31",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "戳一下",
+      "source_voice_index": "34",
+      "id": "V32",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "信赖触摸",
+      "source_voice_index": "36",
+      "id": "V33",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "标题",
+      "source_voice_index": "37",
+      "id": "V34",
+      "use_group": "title"
+    },
+    {
+      "scene": "新年祝福",
+      "source_voice_index": "38",
+      "id": "V35",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "问候",
+      "source_voice_index": "42",
+      "id": "V36",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "生日",
+      "source_voice_index": "43",
+      "id": "V37",
+      "use_group": "character_interaction"
+    },
+    {
+      "scene": "周年庆典",
+      "source_voice_index": "44",
+      "id": "V38",
+      "use_group": "character_interaction"
+    }
+  ]
+}

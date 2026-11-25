@@ -2,6 +2,8 @@ package app.ui;
 
 import app.character.animation.AnimationController;
 import app.character.CharacterController;
+import app.character.CharacterState;
+import app.character.DesktopRoamingController;
 import app.character.animation.AnimationType;
 import app.reminder.AiCourseScheduleImportConverter;
 import app.reminder.AiEventReminderTextGenerator;
@@ -15,6 +17,7 @@ import app.reminder.EventReminderTextGenerator;
 import app.reminder.TodayReminderTime;
 import app.reminder.WorkBreakReminder;
 import app.service.ChatSpeechController;
+import app.service.ChatService;
 import app.service.SpeechLifecycleListener;
 import app.ui.chat.ChatWindow;
 import app.ui.pet.PetAction;
@@ -85,6 +88,7 @@ public class PetWindow extends JFrame {
      * 动态模型显示大小。
      */
     private static final int MODEL_SIZE = 220;
+    private static final int DRAG_FACING_THRESHOLD = 4;
 
     /**
      * 模型打开后默认放在屏幕右侧靠上位置。
@@ -155,6 +159,7 @@ public class PetWindow extends JFrame {
      * 这样可以避免程序一启动就创建聊天窗口。
      */
     private ChatWindow chatWindow;
+    private ChatService chatService;
 
     /**
      * 桌宠和聊天窗口共用的自动朗读控制器。
@@ -227,6 +232,15 @@ public class PetWindow extends JFrame {
      * 桌面闲置随机对白计时器。
      */
     private Timer idleChatterTimer;
+    private Timer idleSleepTimer;
+    private Timer roamingTimer;
+    private DesktopRoamingController roamingController;
+    private boolean petMousePressed;
+    private boolean leftPointerDown;
+    private boolean dragOccurred;
+    private int dragFacingAnchorX;
+    private Point lastDragScreenPoint;
+    private long lastDragNanos;
     private long lastDesktopActivityMillis;
 
     /**
@@ -249,6 +263,8 @@ public class PetWindow extends JFrame {
      * 3. 下线
      */
     private JPopupMenu popupMenu;
+    private JMenuItem walkAction;
+    private JCheckBoxMenuItem autonomousWalkAction;
 
     /**
      * 构造方法：创建桌宠窗口。
@@ -302,6 +318,8 @@ public class PetWindow extends JFrame {
 
         // 程序启动后直接显示可露希尔模型。
         openPetModel();
+        startIdleSleepTimer();
+        startRoamingTimer();
         playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
         startWorkBreakReminder();
         startEventReminder();
@@ -366,7 +384,17 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mousePressed(MouseEvent event) {
-                registerDesktopActivity();
+                petMousePressed = true;
+                registerUserActivity();
+                cancelInteractionBubble();
+                boolean left = SwingUtilities.isLeftMouseButton(event) && !event.isPopupTrigger();
+                if (leftPointerDown && !left && characterController != null) characterController.pointerReleased();
+                leftPointerDown = left;
+                if (left) dragOccurred = false;
+                lastDragScreenPoint = event.getLocationOnScreen();
+                dragFacingAnchorX = lastDragScreenPoint.x;
+                lastDragNanos = System.nanoTime();
+                if (leftPointerDown && characterController != null) characterController.pointerPressed();
 
                 /*
                  * 记录鼠标按下时的位置。
@@ -396,25 +424,29 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseDragged(MouseEvent event) {
-                registerDesktopActivity();
-
-                // 获取窗口当前在屏幕上的位置
-                Point currentLocation = getLocation();
-
-                /*
-                 * 计算新的窗口位置。
-                 *
-                 * event.getX() - mousePressedPoint.x：
-                 * 表示鼠标相对于按下时在 X 方向移动了多少。
-                 *
-                 * event.getY() - mousePressedPoint.y：
-                 * 表示鼠标相对于按下时在 Y 方向移动了多少。
-                 */
-                int newX = currentLocation.x + event.getX() - mousePressedPoint.x;
-                int newY = currentLocation.y + event.getY() - mousePressedPoint.y;
-
-                // 移动桌宠窗口
-                setLocation(newX, newY);
+                if (!leftPointerDown || mousePressedPoint == null || mousePressedScreenPoint == null) return;
+                registerUserActivity();
+                Point screen = event.getLocationOnScreen();
+                if (!dragOccurred && Math.abs(screen.x - mousePressedScreenPoint.x) <= 3
+                        && Math.abs(screen.y - mousePressedScreenPoint.y) <= 3) return;
+                dragOccurred = true;
+                long now = System.nanoTime();
+                double seconds = Math.max(.016, (now - lastDragNanos) / 1_000_000_000.0);
+                float motion = (float) ((screen.x - lastDragScreenPoint.x) / (seconds * 600));
+                lastDragScreenPoint = screen;
+                lastDragNanos = now;
+                if (petAnimationPanel != null) {
+                    int horizontal = screen.x - dragFacingAnchorX;
+                    if (Math.abs(horizontal) >= DRAG_FACING_THRESHOLD) {
+                        petAnimationPanel.setFacingLeft(horizontal > 0);
+                        dragFacingAnchorX = screen.x;
+                    }
+                    // Pose sway is model-local; the displayed frame may face against the drag.
+                    if (petAnimationPanel.isFacingLeft()) motion = -motion;
+                }
+                if (characterController != null) characterController.pointerDragged(motion);
+                // Preserve the original grab offset even while the render pose changes underneath it.
+                setLocation(screen.x - mousePressedPoint.x, screen.y - mousePressedPoint.y);
                 moveSpeechBubbleNextToPet();
             }
 
@@ -423,6 +455,9 @@ public class PetWindow extends JFrame {
              */
             @Override
             public void mouseReleased(MouseEvent event) {
+                petMousePressed = false;
+                if (leftPointerDown && characterController != null) characterController.pointerReleased();
+                leftPointerDown = false;
                 // 再判断一次是否触发右键菜单，兼容不同系统
                 if (event.isPopupTrigger()) {
                     showPopupMenu(event);
@@ -463,6 +498,7 @@ public class PetWindow extends JFrame {
     }
 
     private void openPetModel() {
+        if (roamingController != null) roamingController.close();
         if (characterController != null) characterController.close();
         if (petAnimationPanel != null) petAnimationPanel.dispose();
         if (!PetAction.OPEN.hasFrames()) {
@@ -482,6 +518,8 @@ public class PetWindow extends JFrame {
         );
         animationController = new AnimationController(petAnimationPanel.animationPlayer());
         characterController = new CharacterController(animationController);
+        roamingController = new DesktopRoamingController();
+        if (autonomousWalkAction != null) roamingController.setEnabled(autonomousWalkAction.isSelected());
         playAnimation(AnimationType.GREETING);
         addPetMouseListeners(petAnimationPanel);
 
@@ -511,7 +549,7 @@ public class PetWindow extends JFrame {
 
     private void showStartupSpeechBubble() {
         showSpeechBubble(STARTUP_BUBBLE_TEXT);
-        if (speechController != null && speechController.usesLocalQwen()) {
+        if (speechController != null && (speechController.usesLocalQwen() || speechController.usesHostedVoice())) {
             speechController.speakStartupGreetingIfIdle(STARTUP_BUBBLE_TEXT);
         } else {
             speakSpeechBubble(STARTUP_BUBBLE_TEXT);
@@ -522,7 +560,7 @@ public class PetWindow extends JFrame {
         playAnimation(AnimationType.TAP);
         String interactionLine = randomInteractionLine();
         showSpeechBubble(interactionLine);
-        speakSpeechBubble(interactionLine);
+        if (speechController != null) speechController.speakFixedPhrase(interactionLine);
     }
 
     private String randomInteractionLine() {
@@ -555,6 +593,10 @@ public class PetWindow extends JFrame {
         }
     }
 
+    private void speakBackgroundSpeechBubble(String text) {
+        if (speechController != null) speechController.speakBackgroundText(text);
+    }
+
     private void initWorkBreakReminder() {
         workBreakReminder = new WorkBreakReminder(
                 WORK_REMINDER_INTERVAL,
@@ -585,6 +627,65 @@ public class PetWindow extends JFrame {
         lastDesktopActivityMillis = System.currentTimeMillis();
         idleChatterTimer = new Timer(randomIdleChatterDelayMillis(), event -> showIdleChatterIfDesktopIsIdle());
         idleChatterTimer.setRepeats(false);
+    }
+
+    private void startIdleSleepTimer() {
+        idleSleepTimer = new Timer(1000, event -> {
+            if (characterController != null) characterController.checkIdle();
+        });
+        idleSleepTimer.start();
+    }
+
+    private void startRoamingTimer() {
+        if (roamingTimer != null) roamingTimer.stop();
+        roamingTimer = new Timer(33, event -> tickRoaming());
+        roamingTimer.start();
+        System.out.println("CLOSURE_ROAMING_READY auto=" + roamingController.isEnabled());
+    }
+
+    private void tickRoaming() {
+        if (roamingController == null || characterController == null || petAnimationPanel == null) return;
+        CharacterState state = characterController.state();
+        boolean available = isShowing() && !petMousePressed && getMousePosition(true) == null
+                && (popupMenu == null || !popupMenu.isVisible())
+                && (chatWindow == null || !chatWindow.isVisible())
+                && (state == CharacterState.IDLE || state == CharacterState.WALKING);
+        var step = roamingController.tick(getBounds(), usableScreenBounds(), available);
+        if (!characterController.setAutonomousWalking(step.walking())) {
+            if (step.walking()) roamingController.pause();
+            return;
+        }
+        petAnimationPanel.setFacingLeft(step.facingLeft());
+        if (getX() != step.x() || getY() != step.y()) {
+            setLocation(step.x(), step.y());
+            moveSpeechBubbleNextToPet();
+        }
+    }
+
+    private Rectangle usableScreenBounds() {
+        GraphicsConfiguration configuration = getGraphicsConfiguration();
+        if (configuration == null) return new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+        Rectangle screen = configuration.getBounds();
+        Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(configuration);
+        return new Rectangle(screen.x + insets.left, screen.y + insets.top,
+                Math.max(0, screen.width - insets.left - insets.right),
+                Math.max(0, screen.height - insets.top - insets.bottom));
+    }
+
+    private void pauseRoaming() {
+        if (roamingController != null) roamingController.pause();
+        if (characterController != null) characterController.setAutonomousWalking(false);
+    }
+
+    private void startManualWalk() {
+        registerUserActivity();
+        if (characterController != null) characterController.play(AnimationType.IDLE);
+        if (roamingController != null) roamingController.requestWalk();
+    }
+
+    private void closeRoaming() {
+        if (roamingTimer != null) roamingTimer.stop();
+        if (roamingController != null) roamingController.close();
     }
 
     private void initSpeechController() {
@@ -670,7 +771,7 @@ public class PetWindow extends JFrame {
             if (isDesktopIdleForChatter()) {
                 String idleChatterLine = randomIdleChatterLine();
                 showSpeechBubble(idleChatterLine);
-                speakSpeechBubble(idleChatterLine);
+                speakBackgroundSpeechBubble(idleChatterLine);
             }
         } finally {
             scheduleNextIdleChatter();
@@ -682,6 +783,9 @@ public class PetWindow extends JFrame {
             return false;
         }
         if (chatWindow != null && chatWindow.isVisible()) {
+            return false;
+        }
+        if (characterController != null && characterController.state() == CharacterState.SLEEPING) {
             return false;
         }
 
@@ -698,11 +802,18 @@ public class PetWindow extends JFrame {
         lastDesktopActivityMillis = System.currentTimeMillis();
     }
 
+    private void registerUserActivity() {
+        pauseRoaming();
+        registerDesktopActivity();
+        if (characterController != null) characterController.userActivity();
+    }
+
     private void playAnimation(AnimationType animation) {
         if (characterController == null) {
             return;
         }
 
+        pauseRoaming();
         characterController.play(animation);
     }
 
@@ -757,12 +868,12 @@ public class PetWindow extends JFrame {
 
     private void showWorkBreakReminder(String reminderText) {
         showSpeechBubble(reminderText);
-        speakSpeechBubble(reminderText);
+        speakBackgroundSpeechBubble(reminderText);
     }
 
     private void showCourseScheduleReminder(String reminderText) {
         showSpeechBubble(reminderText);
-        speakSpeechBubble(reminderText);
+        speakBackgroundSpeechBubble(reminderText);
     }
 
     private void showEventReminder(EventReminderEntry entry) {
@@ -772,7 +883,7 @@ public class PetWindow extends JFrame {
         }
 
         showSpeechBubble(entry.reminderText());
-        speakSpeechBubble(entry.reminderText());
+        speakBackgroundSpeechBubble(entry.reminderText());
         CompletableFuture.runAsync(() -> removeSavedEventReminder(entry));
     }
 
@@ -931,6 +1042,7 @@ public class PetWindow extends JFrame {
     }
 
     private boolean isClickWithoutDrag(MouseEvent event) {
+        if (dragOccurred) return false;
         if (mousePressedScreenPoint == null) {
             return true;
         }
@@ -975,12 +1087,13 @@ public class PetWindow extends JFrame {
     }
 
     private void finishOpenVoiceAndShowStartupWeatherGreeting() {
-        playAnimation(AnimationType.IDLE);
+        // The greeting one-shot restores the current state itself; a late audio callback
+        // must not replace a newer walk, sleep or visible-conversation request.
         showStartupWeatherGreetingAfterSpeechReady();
     }
 
     private void speakStartupGreeting(String greeting, int attempt) {
-        if (speechController == null) {
+        if (speechController == null || speechController.usesHostedVoice()) {
             return;
         }
 
@@ -1105,13 +1218,24 @@ public class PetWindow extends JFrame {
         JMenu characterActions = new JMenu("动作");
         characterActions.setFont(menuFont);
         JMenuItem idleAction = new JMenuItem("待机");
+        walkAction = new JMenuItem("行走");
         JMenuItem sleepAction = new JMenuItem("休息");
         idleAction.setFont(menuFont);
+        walkAction.setFont(menuFont);
         sleepAction.setFont(menuFont);
         idleAction.addActionListener(event -> playAnimation(AnimationType.IDLE));
+        walkAction.addActionListener(event -> startManualWalk());
         sleepAction.addActionListener(event -> playAnimation(AnimationType.SLEEP));
         characterActions.add(idleAction);
+        characterActions.add(walkAction);
         characterActions.add(sleepAction);
+        autonomousWalkAction = new JCheckBoxMenuItem("自主走动", true);
+        autonomousWalkAction.setFont(menuFont);
+        autonomousWalkAction.addActionListener(event -> {
+            pauseRoaming();
+            if (roamingController != null) roamingController.setEnabled(autonomousWalkAction.isSelected());
+        });
+        characterActions.add(autonomousWalkAction);
         popupMenu.add(characterActions);
 
         // 添加一条分隔线
@@ -1134,6 +1258,8 @@ public class PetWindow extends JFrame {
      * @param event 鼠标事件
      */
     private void showPopupMenu(MouseEvent event) {
+        registerUserActivity();
+        if (walkAction != null) walkAction.setEnabled(chatWindow == null || !chatWindow.isVisible());
         /*
          * 在鼠标点击的位置显示菜单。
          *
@@ -1157,6 +1283,7 @@ public class PetWindow extends JFrame {
      * 2. 右键菜单点击“通讯”
      */
     private void openChatWindow() {
+        pauseRoaming();
         hideSpeechBubble();
 
         /*
@@ -1164,8 +1291,9 @@ public class PetWindow extends JFrame {
          *
          * 这样可以避免程序一启动就 new ChatWindow。
          */
-        if (chatWindow == null) {
-            chatWindow = new ChatWindow(speechController, characterController);
+        if (chatWindow == null || !chatWindow.isDisplayable()) {
+            if (chatService == null) chatService = new ChatService();
+            chatWindow = new ChatWindow(speechController, characterController, chatService);
 
             /*
              * 当聊天窗口被关闭/隐藏时，
@@ -1236,6 +1364,7 @@ public class PetWindow extends JFrame {
     }
 
     private void exitApplication() {
+        closeRoaming();
         cancelInteractionBubble();
         if (characterController != null) characterController.close();
         if (workBreakReminder != null) {
@@ -1244,6 +1373,7 @@ public class PetWindow extends JFrame {
         if (idleChatterTimer != null) {
             idleChatterTimer.stop();
         }
+        if (idleSleepTimer != null) idleSleepTimer.stop();
         if (courseScheduleReminder != null) {
             courseScheduleReminder.dispose();
         }
@@ -1265,6 +1395,7 @@ public class PetWindow extends JFrame {
         if (chatWindow != null) {
             chatWindow.dispose();
         }
+        if (chatService != null) chatService.close();
         if (speechController != null) {
             speechController.close();
         }
@@ -1285,6 +1416,10 @@ public class PetWindow extends JFrame {
 
     @Override
     public void dispose() {
+        closeRoaming();
+        if (idleSleepTimer != null) idleSleepTimer.stop();
+        if (chatWindow != null) chatWindow.dispose();
+        if (chatService != null) chatService.close();
         if (characterController != null) characterController.close();
         if (petAnimationPanel != null) petAnimationPanel.dispose();
         super.dispose();

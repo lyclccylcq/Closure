@@ -33,6 +33,10 @@ public final class AnimationController {
         return player.isPlaying();
     }
 
+    public void setDragMotion(float horizontal) {
+        player.setDragMotion(Float.isFinite(horizontal) ? Math.max(-1, Math.min(1, horizontal)) : 0);
+    }
+
     public synchronized AnimationType currentAnimation() {
         return currentAnimation;
     }

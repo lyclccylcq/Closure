@@ -8,28 +8,25 @@
 
 ## 当前进度
 
-**更新于 2026-11-25。** 最近完成的文本、Fish 语音和桌面交互更新已推送到开发分支 [`codex/drag-facing-local`](https://github.com/lyclccylcq/Closure/tree/codex/drag-facing-local)，并在本地运行副本验证；这些功能尚未合入 `main`。本页同时记录两个分支的进度，试用新功能请使用下方开发分支入口。
+**更新于 2026-11-25。** 主分支已包含多轮对话、Fish 语音、固定触碰台词缓存和新版桌面动作，可从本页的启动入口使用。
 
-| 能力 | 已实现的内容 | 所在版本 |
-| --- | --- | --- |
-| 桌面窗口 | 透明、无边框、置顶、鼠标拖动、双击打开通讯窗口 | `main` |
-| Spine 人物 | 可露希尔原始骨骼与网格播放、六套源动作、PNG 回退；修复透明窗口整个人物闪烁 | `main` |
-| AI 对话 | OpenAI-compatible Chat Completions、流式显示、模型配置、日期与时间环境信息 | `main` |
-| 本地语音 | GPT-SoVITS／本地 Qwen 接口、自动朗读、语音服务启动与错误提示 | `main` |
-| 天气与提醒 | macOS 当前定位天气、工作休息提醒、课程与 Deadline 导入、当天定时事项 | `main` |
-| 角色与上下文 | 独立角色卡、减少固定示例依赖、近期多轮问答、停止生成与新对话 | 开发分支 |
-| Fish 云端语音 | 使用可露希尔社区音源，默认配置 `s2.1-pro-free`，保留显式选择 `drama-3` 的入口 | 开发分支 |
-| 固定触碰语音 | 六条固定台词首次成功生成后缓存，相同台词复用同一份音频，重启后继续使用 | 开发分支 |
-| 日常动作 | 自主左右走动、屏幕边缘转身、对话期间保持思考坐姿、两分钟长待机后睡觉 | 开发分支 |
-| 拖动交互 | 后颈提起、四肢放松与轻摆、落地回弹；右拖朝左、左拖朝右 | 开发分支 |
-
-模型回复质量、音色和语气仍需实际体验与持续调整；工程检查通过不代表主观效果已经定稿。
+| 能力 | 已实现的内容 |
+| --- | --- |
+| 桌面窗口 | 透明、无边框、置顶、鼠标拖动、双击打开通讯窗口 |
+| Spine 人物 | 原始骨骼与网格播放、六套源动作、PNG 回退、透明窗口闪烁修复 |
+| AI 对话 | 兼容 OpenAI Chat Completions、流式显示、独立角色卡、近期多轮问答、停止生成与新对话 |
+| Fish 云端语音 | 使用可露希尔社区音源，启用 Fish 时默认选择 `s2.1-pro-free`，可显式选择 `drama-3` |
+| 固定触碰语音 | 六条固定台词首次成功生成后缓存，相同台词复用同一份音频，重启后继续使用 |
+| 本地语音 | GPT-SoVITS／本地 Qwen 接口、自动朗读、语音服务启动与错误提示 |
+| 日常动作 | 自主左右走动、屏幕边缘转身、对话期间保持思考坐姿、两分钟长待机后睡觉 |
+| 拖动交互 | 后颈提起、四肢放松与轻摆、落地回弹，右拖朝左、左拖朝右 |
+| 天气与提醒 | macOS 当前定位天气、工作休息提醒、课程与 Deadline 导入、当天定时事项 |
 
 ## 快速开始
 
 需要 **JDK 21**。项目使用 Maven Wrapper，无需另外安装 Maven。运行完整桌宠需要图形桌面环境；AI 与语音需分别配置。
 
-### 运行 main
+### 运行桌宠
 
 ```bash
 git clone https://github.com/lyclccylcq/Closure.git
@@ -37,24 +34,7 @@ cd Closure
 ./mvnw javafx:run
 ```
 
-未配置 AI 或语音时，相应功能会提示不可用；模型预览可以独立运行。
-
-### 试用最近的开发进度
-
-在单独目录获取开发分支，避免覆盖已有配置：
-
-```bash
-git clone --branch codex/drag-facing-local --single-branch https://github.com/lyclccylcq/Closure.git Closure-preview
-cd Closure-preview
-```
-
-完成下方 AI 与 Fish 配置后，运行：
-
-```bash
-bash deploy/tts/start-fish-preview.sh
-```
-
-此入口为当前进程选择 Fish，默认使用 `s2.1-pro-free`，并关闭本地语音模型自动启动。直接执行 `./mvnw javafx:run` 则沿用本机环境和本地语音配置，不能据此认为已切到 Fish。更换入口前请先退出正在运行的桌宠。
+普通 Maven 启动读取本机的 AI 和语音配置。使用 Fish 朗读请配置 API key 后运行对应脚本。[Fish 配置与启动](#fish-云端语音)
 
 ### 只看人物和动作
 
@@ -72,14 +52,12 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 ## 人物与桌面交互
 
-以下新增行为位于开发分支，详见 [日常动作与拖放说明](https://github.com/lyclccylcq/Closure/blob/codex/drag-facing-local/docs/character-behavior.md)。
-
 - **自主行走**：清醒且空闲时停留约 20–35 秒，再左右走动 4–7 秒；在当前屏幕可用区域内活动，到边缘转身。右键 `动作 → 行走` 可手动触发，`动作 → 自主走动` 可切换本次运行的自动行为。
 - **对话与睡眠**：打开通讯窗口后保持思考坐姿，朗读时保留坐姿并带基础口型；长时间没有人物交互时默认睡觉。自主走动不重置两分钟睡眠计时。
 - **按住与拖动**：按住后进入受力姿态，拖动时呈现后颈提起效果；身体与四肢轻摆，松手有落地回弹。向右拖时朝左，向左拖时朝右；轻微抖动和上下移动不会反复翻面。
 - **动作协调**：聊天、说话、触碰、拖动、鼠标悬停及右键菜单会暂停走动。恢复空闲后重新等待；拖动不会误触固定台词。
 
-提起、落地和基础口型是基于现有骨骼的程序姿态，不是新绘制的源动画，也尚未实现音频或音素级口型同步。
+提起、落地和基础口型由现有骨骼驱动。音素级口型同步仍在路线图上。[日常动作与拖放说明](docs/character-behavior.md)
 
 ## AI 对话与记忆
 
@@ -97,7 +75,7 @@ CLOSURE_AI_MODEL=your-model-name
 
 支持兼容 OpenAI Chat Completions 的服务，具体模型由配置决定。环境变量优先于本地文件；项目不绑定某个 GPT 型号。
 
-开发分支已把角色卡与输出协议分开，并调整日常接话规则，减少公式化安慰和对固定回答示例的依赖。模型返回的 `displayText` 用于显示，`speechText` 用于简短口语朗读，`dominantEmotion` 用于情绪与动作反馈；技术长文可以完整显示、只朗读摘要。
+角色卡与输出协议独立维护，日常接话按语境组织。模型返回的 `displayText` 用于显示，`speechText` 用于简短口语朗读，`dominantEmotion` 用于情绪与动作反馈。技术长文可以完整显示，同时朗读摘要。
 
 多轮上下文的当前边界：
 
@@ -106,15 +84,15 @@ CLOSURE_AI_MODEL=your-model-name
 - 关窗再打开，当前进程中的对话仍在；点“新对话”或重启应用会清空。尚无跨重启长期记忆、滚动摘要或偏好数据库。
 - “停止”会取消当前及排队回复并停止朗读；“新对话”同时清空本次会话。
 
-角色文本与验证场景见 [角色卡](https://github.com/lyclccylcq/Closure/blob/codex/drag-facing-local/docs/character/closure-role-card.zh-CN.txt)、[对话验证说明](https://github.com/lyclccylcq/Closure/blob/codex/drag-facing-local/docs/character/dialogue-local-validation.md)和[评估场景](https://github.com/lyclccylcq/Closure/blob/codex/drag-facing-local/docs/character/dialogue-evaluation/README.md)。
+角色与对话相关资料包括 [角色卡](docs/character/closure-role-card.zh-CN.txt)、[对话验证说明](docs/character/dialogue-local-validation.md)和[评估场景](docs/character/dialogue-evaluation/README.md)。
 
 ## 语音朗读
 
-### Fish：当前开发分支的试用方案
+### Fish 云端语音
 
 使用[可露希尔社区音源](https://fish.audio/m/4632f51d7f524e6da1952135e498a6a3)，无需下载模型权重或准备本地参考录音。需要自己的 Fish API key；账号权限、限额和计费以服务商为准，应用不会自动更换型号。
 
-在开发分支中执行：
+在项目根目录复制配置模板。
 
 ```bash
 cp -n config/fish-voice.example.properties config/local-fish-voice.properties
@@ -129,7 +107,13 @@ fish.referenceId=4632f51d7f524e6da1952135e498a6a3
 voice.autoSpeak=true
 ```
 
-`s2.1-pro-free` 必须完整填写；代码仅接受它和显式选择的 `drama-3`。使用前面的 Fish 启动脚本即可启用；详细环境变量、错误处理和本地语音回退见 [Fish 接入说明](https://github.com/lyclccylcq/Closure/blob/codex/drag-facing-local/deploy/tts/FISH.md)。
+`s2.1-pro-free` 是完整型号名。配置完成后退出已有桌宠，再用下方脚本启动。这个入口为当前进程选择 Fish，默认使用 `s2.1-pro-free`，并关闭本地语音服务自动启动。
+
+```bash
+bash deploy/tts/start-fish-preview.sh
+```
+
+可通过 `CLOSURE_FISH_MODEL=drama-3` 显式选择 Drama3。型号、环境变量、错误处理和本地语音入口见 [Fish 接入说明](deploy/tts/FISH.md)。
 
 Fish 路径保留内置开场录音，后台闲聊、天气和提醒只显示文字；主动聊天及未缓存的固定触碰台词才触发云端合成。六条固定触碰台词首次成功生成后保存在被 Git 忽略的 `.runtime/fish-voice/fixed-lines/`，之后复用同一份音频。普通聊天仍实时合成，不写入这个缓存；相同文字重新合成时可能有不同读法。
 

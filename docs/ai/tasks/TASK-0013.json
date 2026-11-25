@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0013",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "Keep the conversation pose, expose native walking, and sleep during long idle",
+  "objective": "In the locally running Closure, hold the thinking/sitting pose throughout chat-window visibility, expose the source Move loop as walking, and default to quiet sleep after two minutes without pet interaction. Preserve local dialogue and voice behavior and do not push, publish, run remote CI or merge.",
+  "architecture": [
+    "User requested three motion changes while the existing local-validation/no-push restriction remains in force. Codex implements directly without Claude, reusing the clean isolated checkout on codex/character-motion-local based on eab13fdebf7600f13dd4f130291a4040d3d75b98. No source/config from the dirty original workspace is blindly copied.",
+    "The bundled pinned skeleton was parsed directly: Default=0, Interact=3.3666666, Move=8, Relax=8, Sit=8, Sleep=5.3333335 seconds. Move exists and was omitted from the application action mapping. Reuse it exactly; no asset download, skeleton editing or synthetic walking replacement.",
+    "CharacterActivityListener gains an idempotent chat-visible lease. ChatWindow acquires it on show and releases it on hide/dispose, including HIDE_ON_CLOSE and repeated visibility calls. Multiple windows cannot release one another. CharacterController holds Sit-based THINKING while any lease exists, independent of request success/failure/cancellation.",
+    "During visible chat, THINKING_TALK uses the same Sit source pose with the existing procedural mouth motion. Greeting/tap/happy one-shots and their obsolete completion callbacks cannot replace the persistent chat pose. Closing the last visible chat returns to current speech/request state or normal awake idle, with a fresh inactivity interval.",
+    "Map WALK to the native Move loop and provide an in-place walking item in the existing pet Actions menu. Opening chat or an explicit interaction wakes/stops walking. There is no autonomous desktop roaming or change to drag/window positioning.",
+    "Explicit persistent menu modes preempt an older one-shot and invalidate its completion. The startup audio completion only advances the greeting flow; it cannot reset a newer motion request. This priority clarification was added during local review and all checks will be rerun against Spec v2.",
+    "Use an injected monotonic clock and a two-minute default inactivity interval in CharacterController. A bounded one-second Swing timer asks it to refresh in the normal pet window. Real pet mouse actions, explicit menu commands, chat activity and closing chat reset activity. Automated bubbles do not count as user activity. Visible chat or active speech/request masks automatic sleep; completed background speech returns to the sleeping base. Sleeping suppresses spontaneous idle chatter.",
+    "Keep timers, visibility leases, speech hooks and callbacks safe across disposal/repeated creation. Preserve transparent-window composition, existing model/voice settings, role card and complete-pair conversation behavior. No persistent-memory or speech-model change is in scope.",
+    "Run deterministic fake-clock/lease/priority tests, source-render pixel and mapping checks, the full offline suite, a real silent Swing/JavaFX chat lifecycle probe, package and native pet startup. Produce complete head-bound local report/packet/review, then perform exact-file backed-up activation into the actual daily runtime and verify it there. No cloud inference, training, remote publication or user acceptance is inferred."
+  ],
+  "non_goals": [
+    "No push, PR publication, remote CI, merge, model API benchmark, cloud deployment or fees.",
+    "No Spine binary/atlas/texture changes, licence changes, downloads, new authored animation or autonomous desktop movement.",
+    "No changes to AI prompts, model selection, local voice configuration, adapter/weights, private schedules/audio or persistent memory.",
+    "No broad cleanup/reset or overwrite of unrelated runtime/legacy changes. System mute was diagnosed separately and is not changed by this task."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/character/CharacterController.java",
+    "src/main/java/app/character/CharacterActivityListener.java",
+    "src/main/java/app/character/CharacterState.java",
+    "src/main/java/app/character/animation/AnimationType.java",
+    "src/main/java/app/character/animation/FrameAnimationPlayer.java",
+    "src/main/java/app/character/animation/spine/SpineRenderer.java",
+    "src/main/java/app/character/animation/spine/SpineModel.java",
+    "src/main/java/app/character/SpineEvaluation.java",
+    "src/main/java/app/character/animation/spine/SpinePreview.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/chat/ChatWindow.java",
+    "src/test/java/app/character/CharacterControllerTest.java",
+    "src/test/java/app/character/animation/spine/SpineRendererTest.java",
+    "src/test/java/app/character/animation/spine/SpinePlayerTest.java",
+    "src/test/java/app/ui/chat/ChatWindowLifecycleTest.java",
+    "docs/character/spine-upgrade.md",
+    "docs/character/motion-local-validation.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "Opening chat immediately starts and continuously retains the Sit-based thinking pose through typing, completed/failed/cancelled replies and voice playback; hiding/disposal releases it exactly once.",
+      "verification": "Fake-clock/controller lease and stale-one-shot tests plus the real Swing/JavaFX visibility lifecycle probe, including mouth-overlay source mapping."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "The existing Move action is reachable through the pet Actions menu as a native walking loop, with accurate duration, bounded frames and explicit fallback behavior.",
+      "verification": "Direct bundled inventory, source-action/pixel checks, real renderer playback and menu/source inspection."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "After two minutes without pet interaction, normal standby becomes quiet Sleep; visible chat and active work prevent inappropriate sleep, and real interaction wakes it.",
+      "verification": "Deterministic clock advances for threshold, activity reset, speech return and chat suppression; inspect the one-second timer wiring and disposal."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Existing recent conversation, cancellation/voice behavior, transparent rendering and private settings remain intact; the reviewed local version is installed and starts from the original daily entry.",
+      "verification": "Full offline tests, package, native chat/pet checks in both checkout and actual runtime, protected-source/private-metadata guard and exact-file backup receipt."
+    },
+    {
+      "id": "AC-5",
+      "requirement": "All results remain local for user validation with no push/PR/remote CI/merge and no fabricated product acceptance.",
+      "verification": "Local Git state and head-bound evidence; delivery status LOCAL_VALIDATION_READY and user_acceptance=false."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Walking reuses the exported Move loop at the current desktop location; it does not move the window automatically.",
+    "Two minutes is the initial chosen long-idle delay and measures interaction with the pet, not global keyboard/mouse surveillance.",
+    "Thinking and talking mouth movements remain procedural overlays on Sit; no newly authored or phoneme-synchronized animation is claimed.",
+    "Local app restart clears the existing process-only chat history. Voice/model settings and independent services must be preserved.",
+    "Engineering checks are not user visual/hearing acceptance; remote checks are intentionally not requested."
+  ],
+  "rollback": "Stop only the identified pet process; after confirming installed hashes, restore the task-specific backups and remove only newly installed listed paths, rebuild the original daily runtime, and restart its unchanged entry. Preserve private settings and unrelated files.",
+  "review_budget": {
+    "max_diff_bytes": 160000
+  }
+}

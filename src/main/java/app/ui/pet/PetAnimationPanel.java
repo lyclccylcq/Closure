@@ -9,11 +9,14 @@ import app.character.animation.spine.SpineModel;
 import javax.swing.*;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 
 public final class PetAnimationPanel extends JPanel {
     private final JLabel frameLabel;
     private final AnimationPlayer animationPlayer;
     private final String rendererName;
+    private boolean facingLeft;
 
     public PetAnimationPanel(int width, int height, Icon fallbackIcon) {
         super(new BorderLayout());
@@ -71,4 +74,28 @@ public final class PetAnimationPanel extends JPanel {
     }
 
     public String rendererName() { return rendererName; }
+
+    public boolean isFacingLeft() { return facingLeft; }
+
+    public void setFacingLeft(boolean facingLeft) {
+        if (this.facingLeft == facingLeft) return;
+        this.facingLeft = facingLeft;
+        repaint();
+    }
+
+    @Override
+    protected void paintChildren(Graphics graphics) {
+        if (!facingLeft) {
+            super.paintChildren(graphics);
+            return;
+        }
+        Graphics2D mirrored = (Graphics2D) graphics.create();
+        try {
+            mirrored.translate(getWidth(), 0);
+            mirrored.scale(-1, 1);
+            super.paintChildren(mirrored);
+        } finally {
+            mirrored.dispose();
+        }
+    }
 }

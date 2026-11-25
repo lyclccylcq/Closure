@@ -18,6 +18,7 @@ public final class SpineRenderer {
     private final SpineModel model;
     private final Skeleton skeleton;
     private final Bounds bounds;
+    private final SpinePoseAnimator animator;
 
     public SpineRenderer(SpineModel model) {
         this.model = model;
@@ -26,19 +27,23 @@ public final class SpineRenderer {
             skeleton = new Skeleton(model.data);
             if (model.cameraBounds == null) model.cameraBounds = measureBounds();
             bounds = model.cameraBounds;
+            animator = new SpinePoseAnimator(model, skeleton);
         }
     }
 
     public static String sourceAction(AnimationType type) {
         return switch (type) {
-            case IDLE, TALK -> "Relax";
+            case IDLE, TALK, PRESSED, DRAGGING, LANDING -> "Relax";
+            case WALK -> "Move";
             case TAP, GREETING, HAPPY -> "Interact";
-            case THINKING -> "Sit";
+            case THINKING, THINKING_TALK -> "Sit";
             case SLEEP -> "Sleep";
         };
     }
 
-    public float duration(AnimationType type) { return model.animations().get(sourceAction(type)); }
+    public float duration(AnimationType type) {
+        return type == AnimationType.LANDING ? SpinePoseAnimator.LANDING_SECONDS : model.animations().get(sourceAction(type));
+    }
     public Bounds bounds() { return bounds; }
     public Map<String, Float> animations() { return model.animations(); }
 
@@ -51,16 +56,32 @@ public final class SpineRenderer {
         synchronized (model) {
             if (width < 32 || height < 32 || width > 1024 || height > 1024) throw new IllegalArgumentException("Invalid render size");
             pose(action, seconds, variant);
-            int factor = width <= 512 && height <= 512 ? 2 : 1;
-            BufferedImage rendered = renderCurrentPose(bounds, width * factor, height * factor);
-            if (factor == 1) return rendered;
-            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE);
-            Graphics2D graphics = image.createGraphics();
-            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            graphics.drawImage(rendered, 0, 0, width, height, null);
-            graphics.dispose();
-            return image;
+            return renderPose(width, height);
         }
+    }
+
+    public void beginLive(AnimationType animation, boolean loop) {
+        synchronized (model) { animator.begin(animation, loop); }
+    }
+
+    public BufferedImage renderLive(float delta, float horizontalMotion, int width, int height) {
+        synchronized (model) {
+            if (width < 32 || height < 32 || width > 1024 || height > 1024) throw new IllegalArgumentException("Invalid render size");
+            animator.apply(delta, horizontalMotion);
+            return renderPose(width, height);
+        }
+    }
+
+    private BufferedImage renderPose(int width, int height) {
+        int factor = width <= 512 && height <= 512 ? 2 : 1;
+        BufferedImage rendered = renderCurrentPose(bounds, width * factor, height * factor);
+        if (factor == 1) return rendered;
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        graphics.drawImage(rendered, 0, 0, width, height, null);
+        graphics.dispose();
+        return image;
     }
 
     private BufferedImage renderCurrentPose(Bounds camera, int width, int height) {
@@ -90,15 +111,7 @@ public final class SpineRenderer {
         if (animation == null || !Float.isFinite(seconds) || seconds < 0) throw new IllegalArgumentException("Invalid pose: " + action);
         skeleton.setToSetupPose();
         animation.apply(skeleton, 0, seconds, false, null, 1, MixBlend.setup, MixDirection.in);
-        if (variant == AnimationType.TALK) {
-            Bone mouth = skeleton.findBone("F_R_Mouth_II");
-            if (mouth != null) mouth.setScaleY(mouth.getScaleY() * (1 + .65f * Math.abs((float) Math.sin(seconds * 15))));
-            Bone head = skeleton.findBone("F_Head_I");
-            if (head != null) head.setRotation(head.getRotation() + 1.5f * (float) Math.sin(seconds * 7));
-        } else if (variant == AnimationType.THINKING) {
-            Bone head = skeleton.findBone("F_Head_I");
-            if (head != null) head.setRotation(head.getRotation() + 5 + (float) Math.sin(seconds * 2));
-        }
+        SpinePoseAnimator.applyVariant(skeleton, variant, seconds);
         skeleton.updateWorldTransform();
     }
 

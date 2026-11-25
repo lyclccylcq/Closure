@@ -24,30 +24,40 @@ public class ChatWindow extends JFrame {
     private final ChatSpeechController chatSpeechController;
     private final boolean ownsSpeechController;
     private final CharacterActivityListener characterActivity;
-    private ChatView chatView;
+    private final ChatService chatService;
+    private final boolean ownsChatService;
+    private volatile ChatView chatView;
     private Rectangle anchorBounds;
     private volatile boolean disposed;
+    private Runnable finishConversation;
 
     public ChatWindow() {
-        this(ChatSpeechController.fromEnvironment(), true, CharacterActivityListener.NONE);
+        this(ChatSpeechController.fromEnvironment(), true, CharacterActivityListener.NONE, null);
     }
 
     public ChatWindow(ChatSpeechController chatSpeechController) {
-        this(chatSpeechController, false, CharacterActivityListener.NONE);
+        this(chatSpeechController, false, CharacterActivityListener.NONE, null);
     }
 
     public ChatWindow(ChatSpeechController chatSpeechController, CharacterActivityListener characterActivity) {
-        this(chatSpeechController, false, characterActivity);
+        this(chatSpeechController, false, characterActivity, null);
+    }
+
+    public ChatWindow(ChatSpeechController chatSpeechController,CharacterActivityListener characterActivity,
+                      ChatService chatService){
+        this(chatSpeechController,false,characterActivity,java.util.Objects.requireNonNull(chatService,"chatService"));
     }
 
     private ChatWindow(ChatSpeechController chatSpeechController, boolean ownsSpeechController,
-                       CharacterActivityListener characterActivity) {
+                       CharacterActivityListener characterActivity,ChatService chatService) {
         UiFonts.applySwingDefaults();
         fxPanel = new JFXPanel();
         soundPlayer = new SoundPlayer();
         this.chatSpeechController = chatSpeechController;
         this.ownsSpeechController = ownsSpeechController;
         this.characterActivity = characterActivity == null ? CharacterActivityListener.NONE : characterActivity;
+        this.chatService=chatService==null ? new ChatService() : chatService;
+        this.ownsChatService=chatService==null;
 
         initWindow();
 
@@ -66,6 +76,12 @@ public class ChatWindow extends JFrame {
         }
 
         super.setVisible(visible);
+
+        if(visible && !wasVisible && isVisible() && !disposed){
+            finishConversation=characterActivity.conversationOpened();
+        }else if(!visible){
+            releaseConversation();
+        }
 
         // 每次聊天窗口从隐藏变成显示时，把消息列表滚到最新位置。
         if(visible && !wasVisible){
@@ -98,7 +114,7 @@ public class ChatWindow extends JFrame {
 
     private void initFxContent(){
         if(disposed){ return; }
-        chatView=new ChatView(new ChatService(),soundPlayer,chatSpeechController,characterActivity);
+        chatView=new ChatView(chatService,soundPlayer,chatSpeechController,characterActivity);
         fxPanel.setScene(new Scene(chatView));
     }
 
@@ -184,13 +200,23 @@ public class ChatWindow extends JFrame {
             return;
         }
         disposed=true;
+        releaseConversation();
 
         soundPlayer.stopVoice();
         if(chatView!=null){
             chatView.dispose();
         }
+        if(ownsChatService){
+            chatService.close();
+        }
         if(ownsSpeechController){
             chatSpeechController.close();
         }
+    }
+
+    private void releaseConversation(){
+        Runnable finish=finishConversation;
+        finishConversation=null;
+        if(finish!=null) finish.run();
     }
 }

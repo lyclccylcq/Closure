@@ -8,16 +8,19 @@ import signal
 import struct
 import threading
 import time
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from qwen_runtime import MODEL_ID, MODEL_REVISION, RUNTIME, DEFAULT_SPEED_FACTOR, sentence_segments, pcm_wav, profiles, validate_request, wav_bytes
+from qwen_runtime import MODEL_ID, MODEL_REVISION, RUNTIME, DEFAULT_SPEED_FACTOR, GENERATION_MAX_CHARS, utterance_segments, pcm_wav, profiles, validate_request, wav_bytes
 from qwen_audio import tempo
 from qwen_adapter import adapter_config_path, apply_adapter
 from stream_protocol import MAGIC
 
 END = object()
+VOICE_CONSISTENCY = "utterance-v1"
+GENERATION_MAX_TOKENS = 768
 
 
 class Engine:
@@ -25,6 +28,8 @@ class Engine:
     def __init__(self, model_path, sentence_limit, known_profiles, adapter_config=None):
         self.model_path = model_path
         self.adapter_config = adapter_config
+        # Retain the positional argument for existing launchers/callers. Normal replies
+        # now share one fixed 120-character context regardless of this legacy hint.
         self.sentence_limit = sentence_limit
         self.profiles = known_profiles
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen-metal")
@@ -58,6 +63,8 @@ class Engine:
         self.metrics["startup_seconds"] = round(time.monotonic() - started, 3)
 
     def generate(self, request, cancelled=None):
+        if cancelled is not None and cancelled.is_set():
+            return
         import mlx.core as mx
         import numpy as np
         options = dict(request)
@@ -67,16 +74,23 @@ class Engine:
         first = None
         count = 0
         text = options.pop("text")
-        for segment in sentence_segments(text, self.sentence_limit):
+        for segment in utterance_segments(text):
             if cancelled is not None and cancelled.is_set():
                 return
-            # Decode a complete sentence with its reference context, then adjust tempo.
+            # A short multi-sentence reply must not restart ICL at punctuation.
             generator = self.model.generate(text=segment, **options, stream=False,
-                                            max_tokens=768, verbose=False)
+                                            max_tokens=GENERATION_MAX_TOKENS, verbose=False)
             try:
                 for result in generator:
                     if cancelled is not None and cancelled.is_set():
                         return
+                    # mlx-audio also yields a normal result when its loop exhausts
+                    # the budget. EOS exits before appending a token, so reaching
+                    # this count means completion was not confirmed.
+                    if getattr(result, "token_count", 0) >= GENERATION_MAX_TOKENS:
+                        raise RuntimeError(
+                            f"Qwen3-TTS reached the generation token limit ({GENERATION_MAX_TOKENS}); "
+                            "refusing to return potentially truncated audio")
                     samples = np.asarray(result.audio, dtype=np.float32)
                     if samples.size == 0:
                         continue
@@ -98,9 +112,13 @@ class Engine:
         import wave
         frames = []
         rate = None
-        for rate, audio in self.generate(request):
-            with wave.open(io.BytesIO(audio), "rb") as wav:
-                frames.append(wav.readframes(wav.getnframes()))
+        with closing(self.generate(request)) as generated:
+            for next_rate, audio in generated:
+                if rate is not None and rate != next_rate:
+                    raise RuntimeError("Qwen3-TTS changed sample rate within an utterance")
+                rate = next_rate
+                with wave.open(io.BytesIO(audio), "rb") as wav:
+                    frames.append(wav.readframes(wav.getnframes()))
         return pcm_wav(b"".join(frames), rate)
 
     def stream(self, request, outgoing, cancelled):
@@ -114,10 +132,11 @@ class Engine:
         try:
             if cancelled.is_set():
                 return
-            for _rate, audio in self.generate(request, cancelled):
-                put(audio)
-                if cancelled.is_set():
-                    break
+            with closing(self.generate(request, cancelled)) as generated:
+                for _rate, audio in generated:
+                    put(audio)
+                    if cancelled.is_set():
+                        break
         except Exception as error:
             put(error)
         finally:
@@ -133,9 +152,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.respond(200, {"ready": self.server.engine.ready, "backend": "qwen3-tts",
                            "model_id": MODEL_ID, "device": "metal", "stream_protocol": "CTTS1",
-                           "synthesis_mode": "full-icl-sentence", "default_speed_factor": DEFAULT_SPEED_FACTOR,
+                           "synthesis_mode": "full-icl-utterance", "default_speed_factor": DEFAULT_SPEED_FACTOR,
+                           "voice_consistency": VOICE_CONSISTENCY,
+                           "generation_max_chars": GENERATION_MAX_CHARS,
                            "pitch_preserving_tempo": True,
-                           "sentence_max_chars": self.server.engine.sentence_limit,
                            "profiles": list(self.server.engine.profiles), **self.server.engine.metrics})
 
     def do_POST(self):
@@ -221,7 +241,8 @@ def main():
     adapter = parser.add_mutually_exclusive_group()
     adapter.add_argument("--adapter-config", type=Path, help="Local adapter manifest (defaults to runtime/active-adapter.json when present)")
     adapter.add_argument("--no-adapter", action="store_true", help="Use the original base voice even when a local adapter is activated")
-    parser.add_argument("--sentence-max-chars", type=int, default=80)
+    parser.add_argument("--sentence-max-chars", type=int, default=80,
+                        help="Legacy launch compatibility; generation now uses fixed 120-character utterances")
     args = parser.parse_args()
     if not 40 <= args.sentence_max_chars <= 160:
         parser.error("sentence max chars must be between 40 and 160")

@@ -1,0 +1,42 @@
+{
+  "schema_version":1,
+  "task_id":"TASK-0022",
+  "spec_version":1,
+  "status":"READY",
+  "title":"Increase waist lift and let the upper body dangle naturally",
+  "objective":"Make the held pose visibly stronger and cuter: raise the waist farther while shoulders/head and relaxed arms fall below the waist support, keeping the existing dangling legs and smooth release. Deliver locally without pushing.",
+  "architecture":[
+    "Codex directly implements on the current isolated checkout from clean 37197bb641cdfa577e7c3bf76ab9e487a22e2235. No Claude, delegation, remote publication or live model calls.",
+    "Adjust only the procedural pose animator: increase the waist lift, fold the upper torso through its own waist/chest bones and allow the head to droop. The pelvis remains the support point rather than rotating the whole figure as a rigid image. Relax hand IK as well as foot IK during the held pose, then orient the existing arms downward relative to world gravity with bounded shortest-angle blending.",
+    "Use a slightly longer eased modifier transition for entering/leaving a held pose so the larger fold unfolds naturally on release. Keep the existing landing clip duration, native timeline mixes, input handling, camera, actor scale, assets, roaming/sleep and voice/cache behavior.",
+    "Verify raised waist, lowered head/shoulders, hands below shoulders, suspended feet, relaxed/restored IK, no modifier accumulation and uninterrupted recovery. Existing frame tests exercise the full pose/motion range for visibility and unclipped borders; native pointer captures are visually reviewed. Re-run offline pointer/roaming/chat/window and Java/build checks.",
+    "Install only allowlisted reviewed public files into the known daily runtime using frozen baseline/hash backups and private/fixed-voice metadata guards. Verify actual-runtime checks and compiled parity, then normally restart only the identified app through its unchanged free entry. Restart clears temporary chat; no push or API verification."
+  ],
+  "non_goals":[
+    "No private configuration, model/TTS call, voice/cache, asset, renderer/camera/scale, input or launcher changes.",
+    "No cursor snapping, gravity simulation, new animations or dependency updates."
+  ],
+  "allowed_paths":[
+    "src/main/java/app/character/animation/spine/SpinePoseAnimator.java",
+    "src/test/java/app/character/animation/spine/SpinePoseAnimatorTest.java",
+    "docs/character-behavior.md"
+  ],
+  "acceptance_criteria":[
+    {"id":"AC-1","requirement":"The held waist is visibly higher and the upper body/head relax below the waist support, with freely hanging arms and feet rather than an upright rigid torso.","verification":"Bone position/orientation and IK tests plus own native held-pose image inspection."},
+    {"id":"AC-2","requirement":"The larger pose enters/exits smoothly, restores IK/standing or conversation pose and remains visible/unclipped without accumulating transforms.","verification":"Existing and updated animator/interruption/live-frame tests, native pickup/landing/dialog and roaming/chat regressions."},
+    {"id":"AC-3","requirement":"The reviewed local daily runtime uses the new pose while private settings, fixed audio, launchers and unrelated code are preserved; no push/model calls.","verification":"Frozen scoped install, actual-runtime checks/class parity and safe startup markers with technical evidence and pending user visual acceptance."}
+  ],
+  "checks":[
+    {"id":"CHECK-1","command":"./mvnw -B -Djava.awt.headless=true test","required":true},
+    {"id":"CHECK-2","command":"./mvnw -B -DskipTests package","required":true},
+    {"id":"CHECK-3","command":"python3 scripts/verify_startup.py","required":true},
+    {"id":"CHECK-4","command":"python3 scripts/ai_workflow.py validate","required":true},
+    {"id":"CHECK-5","command":"git diff --check","required":true}
+  ],
+  "risks":[
+    "The amount of folding and cuteness are subjective; inspect the native preview and keep user visual acceptance distinct from technical checks.",
+    "Hand IK must restore after dragging so original authored poses remain intact. Keep all changes weighted and reset each frame."
+  ],
+  "rollback":"Stop the identified app, restore only guarded public-file backups if installed hashes match, rebuild and start the unchanged daily entry. Preserve private files, fixed voice cache and unrelated sources.",
+  "review_budget":{"max_diff_bytes":30000}
+}

@@ -56,6 +56,64 @@ class SpineRendererTest {
                 pixels(renderer.render(AnimationType.TALK, .123f, 220, 220))));
         assertFalse(Arrays.equals(pixels(renderer.render("Sit", .123f, null, 220, 220)),
                 pixels(renderer.render(AnimationType.THINKING, .123f, 220, 220))));
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.THINKING, .123f, 220, 220)),
+                pixels(renderer.render(AnimationType.THINKING_TALK, .123f, 220, 220))));
+    }
+
+    @Test
+    void walkingUsesTheExistingMoveAndConversationSpeechKeepsTheSitBody(){
+        SpineRenderer renderer=new SpineRenderer(SpineModel.bundled());
+        assertEquals("Move",SpineRenderer.sourceAction(AnimationType.WALK));
+        assertEquals(8f,renderer.duration(AnimationType.WALK));
+        assertEquals("Sit",SpineRenderer.sourceAction(AnimationType.THINKING_TALK));
+        assertEquals(SpineRenderer.sourceAction(AnimationType.THINKING),SpineRenderer.sourceAction(AnimationType.THINKING_TALK));
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.WALK,.25f,220,220)),
+                pixels(renderer.render(AnimationType.WALK,2.25f,220,220))));
+    }
+
+    @Test
+    void proceduralPickupAndLandingAreVisibleAndUnclippedAtTheSameCamera(){
+        var renderer=new SpineRenderer(SpineModel.bundled());
+        var bounds=renderer.bounds();
+        for(var type:List.of(AnimationType.PRESSED,AnimationType.DRAGGING,AnimationType.LANDING)){
+            for(float time:new float[]{0,.1f,.2f,.38f}){
+                var image=renderer.render(type,time,220,220);
+                assertTrue(Arrays.stream(pixels(image)).filter(p->(p>>>24)>10).count()>500);
+                for(int n=0;n<220;n++){
+                    assertEquals(0,image.getRGB(n,0)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(n,219)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(0,n)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(219,n)>>>24,type.toString());
+                }
+                assertEquals(bounds,renderer.bounds());
+            }
+        }
+        assertFalse(Arrays.equals(pixels(renderer.render(AnimationType.IDLE,.2f,220,220)),
+                pixels(renderer.render(AnimationType.DRAGGING,.2f,220,220))));
+        assertEquals(.38f,renderer.duration(AnimationType.LANDING));
+    }
+
+    @Test
+    void liveNativeAndProceduralMixesKeepOneVisibleUnclippedModel(){
+        var renderer=new SpineRenderer(SpineModel.bundled());
+        renderer.beginLive(AnimationType.IDLE,true);
+        var camera=renderer.bounds();
+        for(var type:List.of(AnimationType.PRESSED,AnimationType.DRAGGING,AnimationType.LANDING,
+                AnimationType.THINKING,AnimationType.THINKING_TALK,AnimationType.IDLE,AnimationType.SLEEP,
+                AnimationType.WALK,AnimationType.TAP)){
+            renderer.beginLive(type,type!=AnimationType.LANDING && type!=AnimationType.TAP);
+            for(int frame=0;frame<15;frame++){
+                var image=renderer.renderLive(.033f,frame<7?1:-1,220,220);
+                assertTrue(Arrays.stream(pixels(image)).filter(p->(p>>>24)>10).count()>400,type.toString());
+                for(int n=0;n<220;n++){
+                    assertEquals(0,image.getRGB(n,0)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(n,219)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(0,n)>>>24,type.toString());
+                    assertEquals(0,image.getRGB(219,n)>>>24,type.toString());
+                }
+                assertEquals(camera,renderer.bounds());
+            }
+        }
     }
 
     @Test

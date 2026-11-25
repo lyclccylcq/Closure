@@ -20,6 +20,8 @@ public final class SpineAnimationPlayer implements AnimationPlayer {
     private final AtomicBoolean publishQueued = new AtomicBoolean();
     private volatile boolean playing;
     private volatile boolean closed;
+    private volatile float dragMotion;
+    private volatile long lastDragInput;
     private ScheduledFuture<?> timer;
 
     public SpineAnimationPlayer(JLabel label, int width, int height, SpineModel model) {
@@ -27,13 +29,15 @@ public final class SpineAnimationPlayer implements AnimationPlayer {
         this.width = width;
         this.height = height;
         renderer = new SpineRenderer(Objects.requireNonNull(model));
-        BufferedImage initial = renderer.render(AnimationType.IDLE, 0, width, height);
+        renderer.beginLive(AnimationType.IDLE, true);
+        BufferedImage initial = renderer.renderLive(0, 0, width, height);
         label.setIcon(new ImageIcon(initial));
         executor = Executors.newSingleThreadScheduledExecutor(task -> {
             Thread thread = new Thread(task, "closure-spine-render");
             thread.setDaemon(true);
             return thread;
         });
+        System.out.println("CLOSURE_INTERACTION_MIXING_READY waist_lift=true");
     }
 
     @Override public void play(AnimationType animation) { start(animation, true, () -> { }); }
@@ -49,14 +53,19 @@ public final class SpineAnimationPlayer implements AnimationPlayer {
         executor.execute(() -> {
             cancelTimer();
             if (closed || token != generation.get()) return;
+            renderer.beginLive(animation, loop);
             long started = System.nanoTime();
+            long[] previous = {started};
             Runnable tick = () -> {
                 if (closed || token != generation.get()) return;
-                float elapsed = (System.nanoTime() - started) / 1_000_000_000f;
+                long now = System.nanoTime();
+                float elapsed = (now - started) / 1_000_000_000f;
+                float delta = Math.max(0, (now - previous[0]) / 1_000_000_000f);
+                previous[0] = now;
                 float duration = renderer.duration(animation);
-                float poseTime = loop ? elapsed % duration : Math.min(duration, elapsed);
                 try {
-                    latest.set(renderer.render(animation, poseTime, width, height));
+                    float motion = now - lastDragInput <= 120_000_000L ? dragMotion : 0;
+                    latest.set(renderer.renderLive(delta, motion, width, height));
                     publish(token);
                 } catch (RuntimeException failure) {
                     cancelTimer();
@@ -99,6 +108,13 @@ public final class SpineAnimationPlayer implements AnimationPlayer {
     }
 
     @Override public boolean isPlaying() { return playing; }
+
+    @Override
+    public void setDragMotion(float horizontal) {
+        if (closed) return;
+        dragMotion = Float.isFinite(horizontal) ? Math.max(-1, Math.min(1, horizontal)) : 0;
+        lastDragInput = System.nanoTime();
+    }
 
     @Override
     public synchronized void close() {

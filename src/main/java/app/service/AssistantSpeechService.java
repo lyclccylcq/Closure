@@ -14,5 +14,10 @@ public interface AssistantSpeechService {
 
     CompletableFuture<Void> speak(String text, VoiceProfile profile);
 
+    /** Fixed UI phrases may reuse audio; local providers retain ordinary speech behavior. */
+    default CompletableFuture<Void> speakFixedPhrase(String text, VoiceProfile profile) {
+        return speak(text, profile);
+    }
+
     void stop();
 }

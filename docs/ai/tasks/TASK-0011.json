@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0011",
+  "spec_version": 1,
+  "status": "DRAFT",
+  "title": "Design Closure persona and dialogue evaluation fixtures",
+  "objective": "Deliver a concise source-grounded role card, a 38-scene provenance index, 40 original evaluation cases and a practical model/context evaluation protocol. This stage produces reviewable design artifacts; no live prompt/backend/voice/memory implementation or paid inference is part of this stage.",
+  "architecture": [
+    "The user selected the next step after providing the PRTS voice-record page: prepare the compact role card and evaluation questions before choosing a new backend. Codex authors directly under the standing override. Reuse the clean isolated checkout on a dedicated design branch, retaining the accepted animation fix and all live/legacy customizations.",
+    "Use the supplied public PRTS voice page and the inspected 38 scene labels. Store only scene metadata/provenance, compact paraphrased interpretation and original test fixtures; source game dialogue/audio stays at its reference URL. Distinguish sourced characterization from desktop adaptation rules.",
+    "Keep the role card separate from response JSON format, source catalog, user memory and evaluator rubrics. The role card contains no answer demonstrations. Do not change the deployed system prompt; the current gpt-6.1-sol configuration and voice adapter remain the baseline.",
+    "Define 40 original cases in eight categories with five cases each. Separate 30 model-only fixtures from 10 application-integration cases requiring future memory/session services. Judge meaning and behavior, not a single canonical reply. All setup data and assistant context/protocol fixtures are explicitly synthetic.",
+    "Declare an allowlist of model-visible fields; evaluator expectations, reference IDs and state oracles never enter generation prompts. Maintain equal history/memory fixtures when comparing model families. Distinguish current end-to-end single-turn baseline from controlled model comparisons, so orchestration changes are not attributed to model quality.",
+    "Keep all model results empty and execution status NOT_RUN. Validate artifact structure, IDs, references, grouping, fixture consistency and role-card length offline. Existing code/runtime tests are unchanged and are not a substitute for future model/style or memory-behavior evaluation.",
+    "Document the existing live-only AI client and reasoning-policy changes as a baseline dependency for any later implementation. No Claude calls, real user transcript/config reads, real memory writes, cloud resources, model downloads, training, API fees, source promotion or daily-app activation occur in this design step."
+  ],
+  "non_goals": [
+    "No changes to src, pom, deployed prompt, animation, voice, AI settings, application storage or service processes.",
+    "No game transcript/audio corpus in the repository; no real user messages, credentials, local configuration, schedules, recordings or weights in fixtures.",
+    "No real inference, synthesized voice, model ranking, benchmark scores, automatic selection or claim of user acceptance. No development dispatcher start/publish/finalize while this work is design-only."
+  ],
+  "allowed_paths": [
+    "docs/character/closure-role-card.zh-CN.txt",
+    "docs/character/dialogue-evaluation/**"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "A source index identifies all 38 unique voice scenes and their revision/retrieval provenance, with 21 interaction, 16 tactical and one title entry under the stated working classification.",
+      "verification": "Offline JSON checks for source fields, unique IDs, scene counts and grouping; no transcript/audio payload fields."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "A compact role card and evidence map distinguish characterization from desktop-specific behavior and protocol; examples do not become fixed answers or user memories.",
+      "verification": "Editorial review, evidence reference checks, bounded role-card size and unchanged live prompt/source."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "Forty original cases cover eight categories, equal category counts, separate model/integration tracks, concrete expected behaviors, clear failure conditions and synthetic fixtures.",
+      "verification": "Offline structural/reference validation and full case review; model input allowlist and judge-only metadata are explicit."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "The evaluation protocol defines controlled model comparisons, context/memory variants, scoring, unsupported-capability treatment, leakage boundaries and unexecuted result status.",
+      "verification": "Cross-check README against JSON and existing reply/memory contracts; no fabricated model or application outcome."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    }
+  ],
+  "risks": [
+    "The 38 scripted source scenes are not 38 independent natural conversations; tests remain a small reviewed design set, not demonstrated generalization.",
+    "Source scene conditions and paraphrased interpretation cannot establish acoustic performance. Audio evaluation requires separate paired material and real listening.",
+    "Memory/session target behavior is a proposed application contract. Unsupported current capabilities and unrun model outputs must not be marked PASS.",
+    "Any future runtime implementation must preserve live-only AI client/reasoning changes and private voice/settings; the draft artifacts do not authorize fees or silently activate a new model."
+  ],
+  "rollback": "Remove or revise only these design artifacts on the dedicated branch. No live app, settings, data or source files are modified, so no runtime rollback is required.",
+  "review_budget": {
+    "max_diff_bytes": 160000
+  }
+}

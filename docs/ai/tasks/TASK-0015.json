@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0015",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Add opt-in Fish Drama3 voice with the user-selected Closure reference",
+  "objective": "Prepare a local-only, opt-in Drama3 HTTP voice backend using community reference 4632f51d7f524e6da1952135e498a6a3, with offline verification and preserved current voice runtime. Live synthesis and activation remain pending local credentials, quota and explicit paid-call authorization.",
+  "architecture": [
+    "User supplied https://fish.audio/m/4632f51d7f524e6da1952135e498a6a3 after requesting alternatives and approving this voice by listening. Continue Codex direct implementation, reusing the clean isolated checkout on codex/fish-drama-local based on d65ab1665f9755f5ff73af0b3830e02fecc46e09. No Claude or remote publication.",
+    "Official Fish docs define POST /v1/tts, Authorization Bearer and exact model: drama-3 header; missing/misspelled model silently falls back to s2.1-pro. Always send the exact model, one configured reference_id, whole sanitized reply and complete WAV. Keep sampling defaults and no added performance tags in this first integration so the user-selected voice can be assessed directly.",
+    "Add separate FishAudioConfig/FishAudioClient through VoiceSynthesisClient. Explicit CLOSURE_VOICE_BACKEND=fish-drama3 selects this path; existing local Qwen/GPT-SoVITS configuration, code and files remain available. Credentials are read by the app from an ignored local-fish-voice file or scoped environment, never hard-coded, printed or opened by the agent.",
+    "Reuse speech playback, cancellation and temporary-file cleanup. Hosted references require no local reference WAV, weights or local model initialization. Startup/readiness must not synthesize paid warmup speech; skip automatic hosted startup greetings and retry loops. User-triggered chat/bubble speech makes one request with no application retry, provider fallback or reference switching.",
+    "Validate complete PCM WAV, bounded body size and whole-request timeout; cancel the in-flight HTTP operation, suppress late audio and clean temporary files. Errors must be useful for invalid credentials, quota, reference access, throttling and service problems without exposing response bodies, credentials or user text.",
+    "Provide a separate opt-in launch helper and public configuration example with this reference. Preserve the existing daily entry and private settings. Package/native smoke and fake loopback tests are authorized; no real cloud synthesis, uploading reference recordings, new downloads/training or changing the active voice backend in this task.",
+    "The Fish web page failed read-only retrieval via web and browser. Reference ID is extracted from the user-supplied URL; title, permissions and real Drama3 compatibility remain unverified until an authorized live request. Do not claim actual voice quality or API-account acceptance from mocks."
+  ],
+  "non_goals": [
+    "No cloud fees, real inference, new account/key, credential inspection, private audio/weights/config reads or community-sample download.",
+    "No replacing accepted text prompts, conversation memory or motion, no cloud model auto-fallback, and no forced voice switch.",
+    "No push, PR, remote CI, merge or unrelated deployment."
+  ],
+  "allowed_paths": [
+    ".gitignore",
+    "src/main/java/app/voice/FishAudioConfig.java",
+    "src/main/java/app/voice/FishAudioClient.java",
+    "src/test/java/app/voice/FishAudioConfigTest.java",
+    "src/test/java/app/voice/FishAudioClientTest.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/service/SpeechService.java",
+    "src/main/java/app/voice/GptSovitsServerProcess.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/service/SpeechServiceTest.java",
+    "src/test/java/app/voice/GptSovitsServerProcessTest.java",
+    "config/fish-voice.example.properties",
+    "deploy/tts/start-fish-preview.sh",
+    "deploy/tts/FISH.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "Opt-in Fish configuration uses the user-selected fixed reference and exact Drama3 model without altering existing backend defaults or leaking credentials.",
+      "verification": "Pure Properties/environment-map configuration tests and captured loopback HTTP request; no real private file contents."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "One user-triggered reply makes one bounded complete-WAV request; cancellation, timeout, malformed/failed responses and temporary files are handled.",
+      "verification": "Loopback synthetic PCM tests cover exact JSON/headers, one-call errors, bounded WAV and cancellation/late-response cleanup."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "Hosted startup/readiness has zero synthesis calls and never starts local Qwen/SoVITS; existing local playback, chat and motion remain intact.",
+      "verification": "Fake backend/service and startup guard tests, full Java suite and native silent chat lifecycle."
+    },
+    {
+      "id": "AC-4",
+      "requirement": "Deliver a buildable local integration with opt-in launcher and precise setup/limitations; active runtime/private settings and user quality acceptance remain unchanged.",
+      "verification": "Full Java/Python checks, package, native offline pet startup, shell syntax check, exact local packet/report and no live API inference."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Community voice reference is user-selected but page metadata/account permission and actual quality have not been verified.",
+    "Real Fish synthesis consumes API credit and sends text to Fish; this task performs no such call and leaves opt-in explicit.",
+    "Whole-WAV playback prioritizes correctness over first-audio latency; no latency claim until actual listening.",
+    "Model header is explicit, but provider-side model choice cannot be independently authenticated if no response identity is exposed."
+  ],
+  "rollback": "Leave the Fish opt-in environment unset and use the unchanged original daily entry. Existing Qwen/GPT-SoVITS files/settings remain intact. Local source changes can be reverted as one reviewed commit; no private configuration migration is needed.",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}

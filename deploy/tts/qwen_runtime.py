@@ -10,6 +10,7 @@ MODEL_REVISION = "50f45ef0047cde7e84c2ef04326acb8ada2436a7"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = PROJECT_ROOT / ".runtime" / "qwen3-tts"
 DEFAULT_SPEED_FACTOR = 0.88
+GENERATION_MAX_CHARS = 120
 PROMPTS = {
     "neutral": "六号无人机起飞，视野正常……可以出发。",
     "question": "嗯？你带我来这里，是想给这里置办一点新装饰吗？",
@@ -63,6 +64,11 @@ def sentence_segments(text, limit=80):
         if sentence.strip():
             result.extend(generation_segments(sentence.strip(), limit))
     return result
+
+
+def utterance_segments(text):
+    """Keep a normal reply in one ICL context; only bound longer auxiliary text."""
+    return generation_segments(text, GENERATION_MAX_CHARS)
 
 
 def validate_request(body, known_profiles):

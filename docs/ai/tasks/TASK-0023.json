@@ -1,0 +1,42 @@
+{
+  "schema_version":1,
+  "task_id":"TASK-0023",
+  "spec_version":1,
+  "status":"READY",
+  "title":"Use a restrained nape-supported held pose",
+  "objective":"Replace the excessive folded waist lift with a gentler nape-supported pose: stable slightly tucked head/neck, body and relaxed limbs hanging below, modest lift and sway, and the existing smooth release. Deliver locally without pushing.",
+  "architecture":[
+    "Codex direct implementation from clean isolated fee4b71f3cde3b3297873addb13e122859f73533. No Claude, delegation, push, API calls or private configuration inspection.",
+    "Only adjust the procedural pose animator. Remove the large waist/chest fold and head rotation. Use the exported head/neck joint as the support: sample its native world position, apply restrained body/limb rotations, then compensate the waist translation in its parent's local space so the support remains stable with a modest vertical lift. Keep head orientation near upright with a small tuck while the body sways beneath it.",
+    "Retain gravity-aligned relaxed arms/feet and weighted IK release/restoration, existing .24s held modifier easing, .38s landing, native timeline mixes and generation/lifecycle guards. Do not change cursor/window grab offset, input, camera, actor scale, assets, roaming, sleep, voice/cache or launchers.",
+    "Replace tests for the user-rejected folded pose with nape support/vertical body relationship checks. Verify support stability during opposite drag impulses, modest head/body angles, suspended feet/hands, no accumulated offsets, IK restoration and unchanged recovery/conversation behavior. Reuse the existing complete live-frame and native gesture/dialog/walking/chat checks and visually inspect own-model previews.",
+    "Install only reviewed allowlisted public files into the known daily runtime with frozen per-file hashes/backups, private/fixed-audio metadata guards and exact compiled parity. Normally restart only the identified app through its unchanged free voice launcher after actual-runtime checks. Restart clears temporary conversation. Record technical pass separately from user visual preference."
+  ],
+  "non_goals":[
+    "No image rotation/crossfade, new assets, gravity simulation, cursor snapping or input changes.",
+    "No voice/model calls, dependency/configuration changes, private-file inspection or remote publication."
+  ],
+  "allowed_paths":[
+    "src/main/java/app/character/animation/spine/SpinePoseAnimator.java",
+    "src/test/java/app/character/animation/spine/SpinePoseAnimatorTest.java",
+    "docs/character-behavior.md"
+  ],
+  "acceptance_criteria":[
+    {"id":"AC-1","requirement":"The held head/neck remains stable and near upright, with a moderate lift, body below it and loosely hanging hands/feet instead of the rejected deep waist fold.","verification":"Bone position/angle and moving-support checks plus own native model preview inspection."},
+    {"id":"AC-2","requirement":"The support/motion remains bounded and smooth, with restored authored IK and standing/conversation poses after release and no clipping/accumulation or input regressions.","verification":"Animator/live-frame unit tests and native pointer/dialog, roaming and chat checks."},
+    {"id":"AC-3","requirement":"The local daily runtime runs the reviewed pose with private files, fixed voice cache, launchers and unrelated sources preserved, without push/model calls.","verification":"Scoped installation guards, actual-runtime checks/compiled parity and safe startup evidence; user visual acceptance pending."}
+  ],
+  "checks":[
+    {"id":"CHECK-1","command":"./mvnw -B -Djava.awt.headless=true test","required":true},
+    {"id":"CHECK-2","command":"./mvnw -B -DskipTests package","required":true},
+    {"id":"CHECK-3","command":"python3 scripts/verify_startup.py","required":true},
+    {"id":"CHECK-4","command":"python3 scripts/ai_workflow.py validate","required":true},
+    {"id":"CHECK-5","command":"git diff --check","required":true}
+  ],
+  "risks":[
+    "The preferred pickup style remains subjective; show the tested preview and keep user acceptance distinct from technical completion.",
+    "The nape is a procedural support point in the existing rig, not a new authored clip or a new mouse anchor. All weighted changes must reset and recover correctly."
+  ],
+  "rollback":"Stop the identified app, restore only guarded backed-up public files, rebuild and use the unchanged daily launcher. Keep private files, fixed voice cache and unrelated sources untouched.",
+  "review_budget":{"max_diff_bytes":30000}
+}

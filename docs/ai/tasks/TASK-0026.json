@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0026",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "docs: synchronize current progress README to development branch",
+  "objective": "Correct the stale August progress shown on the previously shared codex/drag-facing-local branch by copying the reviewed, published November 25 main README exactly, without merging or changing functional code.",
+  "architecture": [
+    "Codex direct documentation correction in the existing clean isolated development checkout. The default main README was already updated by PR #11; its exact README blob a4ad389cde150659b929987bdb7e5ffc41605560 is the source of truth.",
+    "Copy README bytes from main merge 502e068f9409ce3f82ddfe32c2ce6cc178f95745 to the active development branch at 2932e31dc9d117330ae9179c52d79960016110c9. Keep the accurate main/development distinction and branch-qualified links.",
+    "Only README and this task Spec change. Verify repository links, shell syntax, task contract and whitespace; reuse the exact already-CI-verified documentation rather than changing runtime code. Record head-bound local evidence and push a normal fast-forward update to the user-shared development branch.",
+    "Verify both remote main and development README blobs match the same reviewed file. Do not claim a new application deployment or restart."
+  ],
+  "non_goals": [
+    "No functional merge, runtime rebuild/restart, configuration inspection, voice/model calls, dependency changes or edits to original desktop workspace.",
+    "No new main PR: main documentation is already correct; the missing publication target is the existing development branch."
+  ],
+  "allowed_paths": [
+    "README.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "The shared development branch README displays the November 25 progress and matches the already reviewed main README exactly.",
+      "verification": "Byte/blob equality against main merge 502e068; remote README blob equality after publishing."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Documentation references and commands remain valid, and no functional/private/runtime files change.",
+      "verification": "Repository link existence, shell syntax, task validation, exact changed-path check and whitespace check."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Readers of immutable older commit URLs will still see historical documentation; branch README URLs show current content."
+  ],
+  "rollback": "Revert only the documentation correction with a new commit; do not reset or rewrite published branch history.",
+  "review_budget": {
+    "max_diff_bytes": 50000
+  }
+}

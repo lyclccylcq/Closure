@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0019",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "Reuse Fish audio for repeated fixed touch phrases",
+  "objective": "The same fixed touch phrase must replay the same generated audio rather than regenerate on each touch, including after restart when cache storage is writable. Preserve normal chat synthesis and deliver locally without pushing.",
+  "architecture": [
+    "User clarified that two separate syntheses of identical touch text sound different. This is cross-request variation, not an intra-utterance defect. Codex directly implements from clean isolated baseline 2de669a9f960f43f85c7245a0aa4b85c16ddb5d3. No Claude, delegation or remote publication.",
+    "Remove TASK-0018's initial tone cue, lower temperature and explicit chunk overrides because they addressed the wrong interpretation. Restore the TASK-0017 free/paid request payloads, voice reference and natural rendering parameters. Reproducibility comes from replaying cached audio, not a fictional deterministic seed or a forced tone.",
+    "Add an explicit fixed-phrase speech route from the six static touch lines in PetWindow through ChatSpeechController, AssistantSpeechService, SpeechService and VoiceSynthesisClient. Defaults on the small interfaces retain current behavior for local providers and test implementations. Ordinary chat, background speech and startup recordings do not use the new persistent cache.",
+    "Fish caches fixed phrases only, keyed by SHA-256 of a versioned namespace, endpoint, exact model and full request payload (text, reference and generation parameters); no API key or plain-text index. Store validated complete WAVs under ignored .runtime/fish-voice/fixed-lines. Use atomic same-directory writes. Each playback owns a temporary copy so ordinary cleanup never deletes the canonical cached WAV.",
+    "Coalesce overlapping identical fixed requests. Canceling a playback waiter prevents late delivery and removes its temporary copy, while the single shared fixed-phrase generation may finish and populate the cache for subsequent touches. Ordinary uncached chat retains its existing HTTP cancellation. Failures are not cached or retried. Invalid cache data is replaced only after a successful fresh synthesis. If disk persistence fails, retain the successful fixed clip in this client for the session and emit a redacted memory-only marker rather than silence or repeat synthesis.",
+    "Verify HTTP request counts, byte-identical replay, temporary-file ownership, persistence across new client instances, key separation by model/reference/text, ordinary chat bypass, invalid/failed cache handling, overlapping callers and cancellation using a loopback fake provider. Verify route selection in controller/service tests. No real calls in automated tests.",
+    "Extend the manual diagnostic to render one public fixed touch phrase via the exact free model, delete playback copies, replay from the cache and reopen a new client to demonstrate persistence with no extra synthesis. Host counts safe synthesis/hit markers, validates the saved synthetic output and runs native stop/replay. At most one controlled free-model request, no paid TTS, private file inspection or reference recordings.",
+    "Install only reviewed changed public files in the known daily runtime with per-file baseline hashes/backups and private metadata guards, preserving all launchers and unrelated sources/services. Check actual-runtime tests/build/offline startup and changed compiled classes before gracefully restarting only the identified app through its unchanged free entry. Normal restart clears temporary in-process conversation."
+  ],
+  "non_goals": [
+    "No push, PR, remote CI, merge, paid calls, purchase, top-up, reference downloads or model change.",
+    "No persistent cache of private/generated chat, chat-history changes, persona changes, retraining, forced per-sentence emotion or deterministic-generation guarantee.",
+    "No animation behavior, private configuration or launcher changes; a one-line UI route change only."
+  ],
+  "allowed_paths": [
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/service/AssistantSpeechService.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/service/SpeechService.java",
+    "src/main/java/app/voice/VoiceSynthesisClient.java",
+    "src/main/java/app/voice/FishAudioClient.java",
+    "src/main/java/app/voice/FixedPhraseAudioCache.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/service/SpeechServiceTest.java",
+    "src/test/java/app/voice/FishAudioClientTest.java",
+    "deploy/tts/FishVoiceSmoke.java",
+    "deploy/tts/FISH.md"
+  ],
+  "acceptance_criteria": [
+    {"id": "AC-1", "requirement": "Repeated identical fixed touch text replays byte-identical audio with one initial synthesis, including a new client when persistent storage is writable.", "verification": "Loopback and controlled free fixed-phrase diagnostic request counts, distinct temporary playback copies and equal audio hashes after deletion/reopening."},
+    {"id": "AC-2", "requirement": "Cache identity includes actual provider/model/reference/text/parameters; ordinary chat bypasses the cache and the mistaken TASK-0018 payload changes are removed.", "verification": "Captured exact restored payloads, cache-key separation tests, two ordinary identical chat requests and full diff review."},
+    {"id": "AC-3", "requirement": "Overlapping identical requests share generation, canceled waiters never play late audio, failed synthesis is not cached, invalid cache data regenerates, and disk-write failure retains session replay without logging secrets or text.", "verification": "Deterministic loopback lifecycle, failure, corrupt-file and memory-fallback tests plus preserved existing uncached cancellation tests."},
+    {"id": "AC-4", "requirement": "Only static touch interaction uses the fixed-phrase route, local providers remain compatible, and the verified daily free runtime is delivered locally with launchers/private files preserved.", "verification": "Controller/service route tests, reviewed single touch UI call, native playback/window startup, root/runtime checks, compiled-class parity and frozen scoped installation evidence. User acoustic quality acceptance remains separate."}
+  ],
+  "checks": [
+    {"id": "CHECK-1", "command": "./mvnw -B -Djava.awt.headless=true test", "required": true},
+    {"id": "CHECK-2", "command": "./mvnw -B -DskipTests package", "required": true},
+    {"id": "CHECK-3", "command": "python3 scripts/verify_startup.py", "required": true},
+    {"id": "CHECK-4", "command": "python3 scripts/ai_workflow.py validate", "required": true},
+    {"id": "CHECK-5", "command": "git diff --check", "required": true}
+  ],
+  "risks": [
+    "Caching reproduces the first successful rendering, including any disliked delivery; changing voice/model/parameters changes the key, and deliberately clearing only this cache permits regeneration.",
+    "When disk persistence is unavailable, a redacted marker identifies session-only reuse. Completed in-memory fallback entries are limited by the six fixed UI phrases, not arbitrary chat.",
+    "A canceled fixed playback may leave its one shared provider generation running to populate the cache. It cannot trigger late playback and it never retries automatically.",
+    "Native playback and byte equality prove replay behavior, not subjective voice quality. Free API availability and provider policy remain external."
+  ],
+  "rollback": "Stop the identified app, restore only guarded backed-up public files if current installed hashes match, remove only newly installed public files if originally absent, rebuild and restart the unchanged daily entry. Cache WAVs are derived local artifacts and may be retained; do not modify private settings or restore unrelated files.",
+  "review_budget": {"max_diff_bytes": 80000}
+}

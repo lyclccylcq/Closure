@@ -21,6 +21,7 @@ public final class SpinePreview {
         var rows = new ArrayList<>(model.animations().keySet());
         rows.add("TALK (procedural)");
         rows.add("THINKING (procedural)");
+        rows.add("THINKING_TALK (procedural)");
         for (boolean dark : new boolean[]{false, true}) {
             BufferedImage sheet = new BufferedImage(880, rows.size() * 248, BufferedImage.TYPE_INT_RGB);
             Graphics2D graphics = sheet.createGraphics();
@@ -31,6 +32,7 @@ public final class SpinePreview {
             for (int row = 0; row < rows.size(); row++) {
                 String name = rows.get(row);
                 AnimationType variant = name.startsWith("TALK") ? AnimationType.TALK
+                        : name.startsWith("THINKING_TALK") ? AnimationType.THINKING_TALK
                         : name.startsWith("THINKING") ? AnimationType.THINKING : null;
                 String action = variant == null ? name : SpineRenderer.sourceAction(variant);
                 float duration = model.animations().get(action);
@@ -38,7 +40,8 @@ public final class SpinePreview {
                     float time = duration * column / 4;
                     BufferedImage image = renderer.render(action, time, variant, 220, 220);
                     graphics.drawImage(image, column * 220, row * 248 + 24, null);
-                    graphics.drawString(name + "  " + String.format(Locale.ROOT, "%.2fs", time), column * 220 + 8, row * 248 + 18);
+                    String caption = variant == AnimationType.THINKING_TALK ? "THINKING + TALK (proc.)" : name;
+                    graphics.drawString(caption + "  " + String.format(Locale.ROOT, "%.2fs", time), column * 220 + 8, row * 248 + 18);
                     if (!dark) ImageIO.write(image, "png", output.resolve("pose-" + row + "-" + column + ".png").toFile());
                 }
             }
@@ -48,6 +51,8 @@ public final class SpinePreview {
         gif(renderer, AnimationType.TAP, output.resolve("interact.gif"), renderer.duration(AnimationType.TAP));
         gif(renderer, AnimationType.TALK, output.resolve("talk.gif"), 4);
         gif(renderer, AnimationType.THINKING, output.resolve("thinking.gif"), 4);
+        gif(renderer, AnimationType.THINKING_TALK, output.resolve("thinking-talk.gif"), 4);
+        gif(renderer, AnimationType.WALK, output.resolve("walk.gif"), renderer.duration(AnimationType.WALK));
         long start = System.nanoTime();
         for (int i = 0; i < 30; i++) renderer.render(AnimationType.IDLE, i / 30f, 220, 220);
         double averageMillis = (System.nanoTime() - start) / 30_000_000.0;
