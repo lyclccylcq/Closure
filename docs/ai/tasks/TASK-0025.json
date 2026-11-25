@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0025",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "docs: refresh README with current development progress",
+  "objective": "Update the GitHub default-branch README to the verified 2026-11-25 progress, clearly separating existing main features from the published development branch and documenting practical startup, dialogue/memory, Fish/local voice, desktop interactions and remaining work.",
+  "architecture": [
+    "Codex direct implementation in an independent shared clone from latest origin/main 73349db4b32293b0fdd6d9edf7a4b324807a59cc. Preserve the existing feature checkout and daily runtime unchanged. No Claude, delegated agent or live model calls.",
+    "Only README.md and this task Spec change. Do not merge the 15 development feature commits into main as part of a documentation update. Mark their current branch and provide explicit development checkout/startup commands and branch-qualified links for files absent on main.",
+    "Verify current claims against public source and documentation at development head 2932e31dc9d117330ae9179c52d79960016110c9 and the main baseline. Do not inspect private configurations or assert the installed private model name, current cloud prices, resolved Spine licence or subjective quality acceptance.",
+    "Keep memory limits and lifecycle explicit: recent 12 complete turns / 24000 Unicode code points, process-only persistence, stop/new-conversation semantics. Explain fixed touch audio reuse separately from freshly generated normal chat. Document real roaming, nape pickup and reverse drag facing without claiming authored clips or audio-level lipsync.",
+    "Validate Markdown links/paths, shell-block syntax, task contracts and existing workflow tests. Record a genuine head/base/Spec/check-bound review. Publish an accurately attributed Codex draft PR using the connector because the legacy publisher hardcodes Claude authorship; feed the real PR into the trusted finalize gate for required CI, exact-head merge and merged main build/startup verification."
+  ],
+  "non_goals": [
+    "No application, asset, dependency, private configuration, launcher, audio-cache or runtime changes. No paid/model calls or app restart.",
+    "No premature feature merge, release packaging, speculative long-term memory or new engine integration."
+  ],
+  "allowed_paths": [
+    "README.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "README reflects the actual current progress, clearly distinguishes main from the published development features, and states realistic dialogue/memory, voice/cache, animation and roadmap boundaries.",
+      "verification": "Read complete README against public main/development code and existing verified feature records; no private model or pricing assumptions."
+    },
+    {
+      "id": "AC-2",
+      "requirement": "Readers can choose main or the development preview, configure AI and Fish or local voice, locate relevant docs, and understand basic privacy/licence constraints without broken links or misleading default startup claims.",
+      "verification": "Validate each local and branch-qualified repository link/path and all shell code-block syntax, compare config names and startup commands to public sources."
+    },
+    {
+      "id": "AC-3",
+      "requirement": "The change is limited to documentation and its task Spec, respects existing runtime/private data, and has a current technical review and required checks for safe default-branch publication.",
+      "verification": "Exact changed-path check, whitespace check, task validation and existing workflow tests; final publication remains gated by CI and post-merge verification."
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Main and development branch intentionally contain different functionality. Keep the distinction and branch-qualified links until features are merged.",
+    "Text/voice perception and Spine licence ownership remain unconfirmed; engineering evidence is not user acceptance or rights clearance."
+  ],
+  "rollback": "Revert only this README/task documentation change with a new reviewed commit; do not reset branches or modify daily runtime/configuration.",
+  "review_budget": {
+    "max_diff_bytes": 50000
+  }
+}
