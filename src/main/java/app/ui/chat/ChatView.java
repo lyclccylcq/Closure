@@ -149,7 +149,7 @@ final class ChatView extends BorderPane {
     }
 
     private void cancelReplies(){
-        for(var request:List.copyOf(pendingRequests)) request.cancel();
+        chatService.cancelReplies(pendingRequests);
         pendingRequests.clear();
         for(var renderer:List.copyOf(renderers)) renderer.stopTyping();
         chatSpeechController.stop();

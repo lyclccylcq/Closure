@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
@@ -86,12 +87,16 @@ public class ChatService implements AutoCloseable {
         }
 
         public void cancel(){
+            if(markCancelled()) post(() -> cancelInLoop(List.of(this)));
+        }
+
+        private boolean markCancelled(){
             State previous;
             do{
                 previous=state.get();
-                if(previous!=State.QUEUED && previous!=State.RUNNING) return;
+                if(previous!=State.QUEUED && previous!=State.RUNNING) return false;
             }while(!state.compareAndSet(previous,State.CANCELLED));
-            post(() -> cancelInLoop(this));
+            return true;
         }
 
         @Override public void close(){ cancel(); }
@@ -124,6 +129,13 @@ public class ChatService implements AutoCloseable {
 
     public List<ConversationHistory.Turn> completedTurns(){
         return history.completedTurns();
+    }
+
+    public void cancelReplies(Collection<Request> requests){
+        List<Request> pending=List.copyOf(requests);
+        if(!pending.isEmpty()){
+            post(() -> cancelInLoop(pending.stream().filter(Request::markCancelled).toList()));
+        }
     }
 
     public CompletableFuture<Void> newConversation(){
@@ -167,7 +179,7 @@ public class ChatService implements AutoCloseable {
                     .withReasoningEffort(policy.effortFor(next.input));
             try{
                 if(next.state.get()!=State.RUNNING){
-                    cancelInLoop(next);
+                    cancelInLoop(List.of(next));
                     return;
                 }
                 next.transport=Objects.requireNonNull(aiClient.streamChatCancellable(request,new AiStreamListener(){
@@ -219,11 +231,13 @@ public class ChatService implements AutoCloseable {
         post(this::startNext);
     }
 
-    private void cancelInLoop(Request request){
-        cancelTransport(request);
-        queue.remove(request);
-        if(active==request) active=null;
-        notifyError(request,new CancellationException("已停止回复"));
+    private void cancelInLoop(List<Request> requests){
+        for(Request request:requests){
+            cancelTransport(request);
+            queue.remove(request);
+            if(active==request) active=null;
+            notifyError(request,new CancellationException("已停止回复"));
+        }
         post(this::startNext);
     }
 
