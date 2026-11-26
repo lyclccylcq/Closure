@@ -7,8 +7,12 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.TreeView;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.Region;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -75,6 +79,8 @@ class WorkbenchWindowTest {
             assertTrue(window.isShowing());
             return null;
         });
+        int initialWidth = swing(() -> window.getContentPane().getWidth());
+        await(() -> Math.abs(view().getWidth() - initialWidth) <= 1);
         fx(() -> {
             var brand = (Label) view().lookup(".workbench-brand");
             assertEquals("Closure Display", brand.getFont().getFamily());
@@ -82,14 +88,34 @@ class WorkbenchWindowTest {
             assertEquals("Closure Pixel", section.getFont().getFamily());
             assertNotNull(view().lookup(".workbench-welcome"));
             assertButtonGraphic("workbench-new-session");
-            assertButtonGraphic("workbench-open-project");
+            assertButtonGraphic("workbench-project-entry");
+            assertFalse(filesToggle().isSelected());
+            assertNull(files());
             capture("workbench-welcome");
-            view().openProject(project);
+            ToggleButton sidebar = (ToggleButton) view().lookup("#workbench-toggle-navigation");
+            double widthWithSidebar = conversationWidth();
+            sidebar.fire();
+            assertNull(sessions());
+            assertTrue(conversationWidth() > widthWithSidebar);
+            sidebar.fire();
+            assertEquals(1, sessions().getItems().size());
             return null;
         });
 
         String firstPrompt = "工作台启动检查\n帮我核对桌宠入口和项目文件预览。";
-        send(firstPrompt);
+        fx(() -> {
+            TextArea input = editor();
+            input.setText("工作台启动检查");
+            input.end();
+            pressEnter(input, true);
+            assertEquals("工作台启动检查\n", input.getText());
+            input.appendText("帮我核对桌宠入口和项目文件预览。");
+            pressEnter(input, false);
+            assertSame(input, editor());
+            ChatView chat = (ChatView) view().lookup(".workbench-chat");
+            assertSame(composer(), chat.getBottom());
+            return null;
+        });
         var first = fx(clients::getFirst).take();
         assertEquals(firstPrompt, first.request().getMessages().getLast().getContent());
 
@@ -104,7 +130,7 @@ class WorkbenchWindowTest {
         var other = fx(clients::getLast).take();
         assertEquals(2, other.request().getMessages().size());
         fx(() -> {
-            ((Button) composer().getChildren().get(2)).fire();
+            button("workbench-stop").fire();
             return null;
         });
         other.cancelled().get(5, TimeUnit.SECONDS);
@@ -120,8 +146,19 @@ class WorkbenchWindowTest {
         });
         await(() -> shows(answer));
 
+        fx(() -> {
+            capture("workbench-focus");
+            double focusedWidth = conversationWidth();
+            filesToggle().fire();
+            assertTrue(conversationWidth() < focusedWidth);
+            assertNotNull(files());
+            assertButtonGraphic("workbench-open-project");
+            view().openProject(project);
+            return null;
+        });
         await(() -> files().getRoot() != null && files().getRoot().getChildren().size() == 4);
         fx(() -> {
+            assertEquals("示例项目", button("workbench-project-entry").getText());
             files().getRoot().getChildren().getFirst().setExpanded(true);
             return null;
         });
@@ -144,6 +181,20 @@ class WorkbenchWindowTest {
         });
         await(() -> source.equals(preview().getText()));
 
+        fx(() -> {
+            var selected = files().getSelectionModel().getSelectedItem();
+            filesToggle().fire();
+            conversationWidth();
+            assertNull(files());
+            assertTrue(shows(answer));
+            button("workbench-project-entry").fire();
+            assertTrue(filesToggle().isSelected());
+            conversationWidth();
+            assertSame(selected, files().getSelectionModel().getSelectedItem());
+            assertEquals(source, preview().getText());
+            return null;
+        });
+
         swing(() -> {
             window.setVisible(false);
             window.setVisible(true);
@@ -162,12 +213,12 @@ class WorkbenchWindowTest {
             window.setSize(window.getMinimumSize());
             return null;
         });
-        await(() -> view().lookup(".workbench-composer").getBoundsInParent().getWidth() < 600);
+        await(() -> view().getWidth() <= window.getMinimumSize().width);
         fx(() -> {
-            ChatInputBar bar = composer();
-            for (int index = 1; index <= 2; index++) {
-                Button button = (Button) bar.getChildren().get(index);
-                assertTrue(button.getWidth() >= button.prefWidth(-1) - 1);
+            view().layout();
+            for (String id : List.of("workbench-send", "workbench-stop", "workbench-open-project")) {
+                Button action = button(id);
+                assertTrue(action.getWidth() >= action.prefWidth(-1) - 1);
             }
             capture("workbench-narrow");
             return null;
@@ -179,12 +230,11 @@ class WorkbenchWindowTest {
         assertEquals(answer, next.request().getMessages().get(2).getContent());
         next.finish("先确认工作台能正常打开。");
         await(() -> services.getFirst().completedTurns().size() == 2);
-        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS theme=true sessions=true multiline=true restore=true preview=true");
+        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS layout=true theme=true sessions=true multiline=true restore=true preview=true");
     }
 
     private void assertButtonGraphic(String id) {
-        Button button = (Button) view().lookup("#" + id);
-        var graphic = assertInstanceOf(ImageView.class, button.getGraphic());
+        var graphic = assertInstanceOf(ImageView.class, button(id).getGraphic());
         assertFalse(graphic.getImage().isError());
         assertTrue(graphic.getImage().getWidth() > 0);
     }
@@ -217,17 +267,38 @@ class WorkbenchWindowTest {
         return (TextArea) view().lookup("#workbench-file-preview");
     }
 
+    private TextArea editor() {
+        return (TextArea) view().lookup("#workbench-editor");
+    }
+
+    private Button button(String id) {
+        return (Button) view().lookup("#" + id);
+    }
+
+    private ToggleButton filesToggle() {
+        return (ToggleButton) view().lookup("#workbench-toggle-files");
+    }
+
+    private double conversationWidth() {
+        view().applyCss();
+        view().layout();
+        return ((Region) view().lookup(".workbench-conversation")).getWidth();
+    }
+
     private ChatInputBar composer() {
         return (ChatInputBar) view().lookup(".workbench-composer");
     }
 
     private void send(String text) throws Exception {
         fx(() -> {
-            ChatInputBar composer = composer();
-            ((TextArea) composer.getChildren().getFirst()).setText(text);
-            ((Button) composer.getChildren().get(1)).fire();
+            editor().setText(text);
+            button("workbench-send").fire();
             return null;
         });
+    }
+
+    private static void pressEnter(TextArea input, boolean shift) {
+        input.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.ENTER, shift, false, false, false));
     }
 
     private boolean shows(String text) {

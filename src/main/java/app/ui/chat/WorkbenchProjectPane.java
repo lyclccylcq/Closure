@@ -1,6 +1,8 @@
 package app.ui.chat;
 
 import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -48,7 +50,8 @@ final class WorkbenchProjectPane extends VBox {
     private final Label previewTitle = new Label("文件预览");
     private final Label previewStatus = new Label();
     private final TextArea preview = new TextArea();
-    private Path root;
+    private final ReadOnlyObjectWrapper<Path> root = new ReadOnlyObjectWrapper<>();
+    private final Consumer<Consumer<Path>> chooseProject;
     private Future<?> previewTask;
     private long projectRevision;
     private long previewRevision;
@@ -56,6 +59,7 @@ final class WorkbenchProjectPane extends VBox {
 
     WorkbenchProjectPane(Consumer<Consumer<Path>> chooseProject) {
         super(12);
+        this.chooseProject = chooseProject;
         getStyleClass().add("workbench-project");
         Label caption = WorkbenchTheme.heading("项目文件");
         caption.setMaxWidth(Double.MAX_VALUE);
@@ -63,7 +67,7 @@ final class WorkbenchProjectPane extends VBox {
         Button choose = new Button("选择目录", WorkbenchTheme.icon(WorkbenchTheme.OPEN_DIRECTORY));
         choose.setId("workbench-open-project");
         choose.getStyleClass().add("workbench-action");
-        choose.setOnAction(event -> chooseProject.accept(this::openProject));
+        choose.setOnAction(event -> chooseDirectory());
         HBox heading = new HBox(8, caption, choose);
         heading.setAlignment(Pos.CENTER_LEFT);
 
@@ -115,10 +119,18 @@ final class WorkbenchProjectPane extends VBox {
         getChildren().addAll(heading, location, browser);
     }
 
+    ReadOnlyObjectProperty<Path> directory() {
+        return root.getReadOnlyProperty();
+    }
+
+    void chooseDirectory() {
+        chooseProject.accept(this::openProject);
+    }
+
     void openProject(Path directory) {
         if (closed) return;
         long revision = ++projectRevision;
-        root = null;
+        root.set(null);
         files.setRoot(null);
         display(null);
         showLocation(directory, "正在读取目录…");
@@ -128,7 +140,7 @@ final class WorkbenchProjectPane extends VBox {
                 List<Entry> entries = list(actual, actual);
                 Platform.runLater(() -> {
                     if (closed || revision != projectRevision) return;
-                    root = actual;
+                    root.set(actual);
                     showLocation(actual, fileName(actual));
                     TreeItem<Entry> project = new TreeItem<>(new Entry(actual, fileName(actual), true));
                     project.getChildren().setAll(entries.stream().map(e -> item(e, actual, revision)).toList());
@@ -182,9 +194,8 @@ final class WorkbenchProjectPane extends VBox {
         preview.clear();
         previewTitle.setText("文件预览");
         previewStatus.setText("");
-        if (closed || root == null || entry == null || entry.path() == null || entry.directory()) return;
-
-        Path project = root;
+        Path project = root.get();
+        if (closed || project == null || entry == null || entry.path() == null || entry.directory()) return;
         previewTitle.setText(project.relativize(entry.path()).toString());
         previewStatus.setText("正在读取…");
         previewTask = reader.submit(() -> {
@@ -229,7 +240,7 @@ final class WorkbenchProjectPane extends VBox {
         return actual;
     }
 
-    private static String fileName(Path path) {
+    static String fileName(Path path) {
         return path.getFileName() == null ? path.toString() : path.getFileName().toString();
     }
 

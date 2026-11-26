@@ -10,6 +10,8 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -26,6 +28,9 @@ final class WorkbenchView extends BorderPane {
     private final ListView<Session> sessions = new ListView<>();
     private final BorderPane conversation = new BorderPane();
     private final Label conversationTitle = new Label();
+    private final SplitPane content = new SplitPane();
+    private final ToggleButton showFiles = new ToggleButton("项目文件", WorkbenchTheme.icon(WorkbenchTheme.DIRECTORY));
+    private double projectWidth = 306;
 
     WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject) {
         this.services = services;
@@ -33,20 +38,28 @@ final class WorkbenchView extends BorderPane {
         getStyleClass().add("workbench");
         getStylesheets().add(Objects.requireNonNull(getClass().getResource("/ui/workbench.css")).toExternalForm());
 
-        Label brand = WorkbenchTheme.wordmark();
         Label title = WorkbenchTheme.heading("工作台");
         title.getStyleClass().add("workbench-title");
-        HBox top = new HBox(16, brand, title);
-        top.getStyleClass().add("workbench-top");
-        top.setAlignment(Pos.CENTER_LEFT);
-        setTop(top);
+        HBox identity = new HBox(9, WorkbenchTheme.wordmark(), title);
+        identity.setAlignment(Pos.CENTER_LEFT);
+        identity.getStyleClass().add("workbench-identity");
 
-        Label heading = WorkbenchTheme.heading("会话");
         Button add = new Button("新会话", WorkbenchTheme.icon(WorkbenchTheme.NEW_SESSION));
         add.setId("workbench-new-session");
         add.getStyleClass().add("workbench-action");
         add.setMaxWidth(Double.MAX_VALUE);
         add.setOnAction(event -> newSession());
+
+        Button folder = new Button("", WorkbenchTheme.icon(WorkbenchTheme.OPEN_DIRECTORY));
+        folder.setId("workbench-project-entry");
+        folder.getStyleClass().add("workbench-project-entry");
+        folder.setMinWidth(0);
+        folder.setMaxWidth(Double.MAX_VALUE);
+        folder.textProperty().bind(project.directory().map(WorkbenchProjectPane::fileName).orElse("打开项目"));
+        folder.setOnAction(event -> {
+            showFiles.setSelected(true);
+            if (project.directory().get() == null) project.chooseDirectory();
+        });
 
         sessions.setId("workbench-sessions");
         sessions.setAccessibleText("工作台会话");
@@ -81,22 +94,57 @@ final class WorkbenchView extends BorderPane {
             }
         });
 
-        VBox navigation = new VBox(13, heading, add, sessions);
-        navigation.setMinWidth(162);
+        VBox navigation = new VBox(10, identity, add, WorkbenchTheme.heading("项目"), folder,
+                WorkbenchTheme.heading("会话"), sessions);
+        navigation.setId("workbench-navigation");
+        navigation.setPrefWidth(222);
+        navigation.setMinWidth(0);
         navigation.getStyleClass().add("workbench-navigation");
         VBox.setVgrow(sessions, Priority.ALWAYS);
+        setLeft(navigation);
+
         conversation.getStyleClass().add("workbench-conversation");
         conversation.setMinWidth(305);
         conversationTitle.getStyleClass().add("workbench-conversation-title");
+        conversationTitle.setMinWidth(0);
         conversationTitle.setMaxWidth(Double.MAX_VALUE);
-        conversation.setTop(conversationTitle);
-        project.setMinWidth(245);
+        HBox.setHgrow(conversationTitle, Priority.ALWAYS);
 
-        SplitPane panels = new SplitPane(navigation, conversation, project);
-        panels.getStyleClass().add("workbench-panels");
-        panels.setDividerPositions(0.18, 0.70);
-        setCenter(panels);
+        ToggleButton showNavigation = new ToggleButton("侧栏");
+        showNavigation.setId("workbench-toggle-navigation");
+        showNavigation.getStyleClass().add("workbench-panel-toggle");
+        showNavigation.setTooltip(new Tooltip("显示或隐藏会话侧栏"));
+        showNavigation.setSelected(true);
+        showNavigation.selectedProperty().addListener((property, oldValue, visible) ->
+                setLeft(visible ? navigation : null));
+
+        showFiles.setId("workbench-toggle-files");
+        showFiles.getStyleClass().add("workbench-panel-toggle");
+        showFiles.setTooltip(new Tooltip("显示或隐藏项目文件"));
+        showFiles.selectedProperty().addListener((property, oldValue, visible) -> setFilesVisible(visible));
+        HBox toolbar = new HBox(11, showNavigation, conversationTitle, showFiles);
+        toolbar.setAlignment(Pos.CENTER_LEFT);
+        toolbar.getStyleClass().add("workbench-toolbar");
+        conversation.setTop(toolbar);
+
+        project.setId("workbench-project-pane");
+        project.setMinWidth(245);
+        SplitPane.setResizableWithParent(project, false);
+        content.getStyleClass().add("workbench-panels");
+        content.getItems().add(conversation);
+        setCenter(content);
         newSession();
+    }
+
+    private void setFilesVisible(boolean visible) {
+        if (visible) {
+            content.getItems().add(project);
+            double available = content.getWidth();
+            content.setDividerPositions(available > 0 ? 1 - projectWidth / available : 0.65);
+        } else {
+            if (project.getWidth() > 0) projectWidth = project.getWidth();
+            content.getItems().remove(project);
+        }
     }
 
     private void newSession() {
@@ -106,6 +154,7 @@ final class WorkbenchView extends BorderPane {
     }
 
     void openProject(Path directory) {
+        showFiles.setSelected(true);
         project.openProject(directory);
     }
 
