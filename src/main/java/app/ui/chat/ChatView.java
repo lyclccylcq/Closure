@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 final class ChatView extends BorderPane {
     private static final Duration REPLY_STREAM_INTERVAL=Duration.millis(95);
@@ -34,6 +35,8 @@ final class ChatView extends BorderPane {
     private final VBox messageBox;
     private final ScrollPane scrollPane;
     private final ChatActivity characterActivity;
+    private final Consumer<String> onUserMessage;
+    private final boolean workbench;
     private final Set<ChatService.Request> pendingRequests=new HashSet<>();
     private final Set<StreamingContentRenderer> renderers=new HashSet<>();
     private volatile boolean disposed;
@@ -45,9 +48,20 @@ final class ChatView extends BorderPane {
 
     ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController,
              CharacterActivityListener activityListener){
+        this(chatService,soundPlayer,chatSpeechController,activityListener,null);
+    }
+
+    ChatView(ChatService chatService,Consumer<String> onUserMessage){
+        this(chatService,null,null,CharacterActivityListener.NONE,onUserMessage);
+    }
+
+    private ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController,
+                     CharacterActivityListener activityListener,Consumer<String> onUserMessage){
         this.chatService=chatService;
         this.soundPlayer=soundPlayer;
         this.chatSpeechController=chatSpeechController;
+        this.onUserMessage=onUserMessage;
+        workbench=onUserMessage!=null;
         characterActivity=new ChatActivity(activityListener);
         setStyle(ChatStyles.BACKGROUND_STYLE);
 
@@ -62,11 +76,12 @@ final class ChatView extends BorderPane {
         scrollPane.setStyle(ChatStyles.BACKGROUND_STYLE+" -fx-background: #080c12; -fx-border-color: transparent;");
         messageBox.heightProperty().addListener((observable,oldHeight,newHeight) -> scrollToLatestMessage());
         setCenter(scrollPane);
-        setBottom(new ChatInputBar(this::handleUserMessage,this::cancelReplies,this::startNewConversation));
+        setBottom(new ChatInputBar(this::handleUserMessage,this::cancelReplies,
+                workbench ? null : this::startNewConversation));
 
         List<app.service.ConversationHistory.Turn> turns=chatService.completedTurns();
         if(turns.isEmpty()){
-            addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
+            if(!workbench) addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
         }else{
             for(var turn:turns){
                 addMessage(new ChatMessage(MessageRole.USER,turn.userText()));
@@ -78,13 +93,14 @@ final class ChatView extends BorderPane {
 
     private void handleUserMessage(String userText){
         if(disposed) return;
+        if(onUserMessage!=null) onUserMessage.accept(userText);
         addMessage(new ChatMessage(MessageRole.USER,userText));
         MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,"等待回复..."));
         streamReplyInto(bubble,userText);
     }
 
     private MessageBubble addMessage(ChatMessage message){
-        MessageBubble bubble=new MessageBubble(message);
+        MessageBubble bubble=new MessageBubble(message,workbench);
         messageBox.getChildren().add(bubble);
         scrollToLatestMessage();
         return bubble;
@@ -152,7 +168,7 @@ final class ChatView extends BorderPane {
         chatService.cancelReplies(pendingRequests);
         pendingRequests.clear();
         for(var renderer:List.copyOf(renderers)) renderer.stopTyping();
-        chatSpeechController.stop();
+        if(chatSpeechController!=null) chatSpeechController.stop();
     }
 
     private void startNewConversation(){
@@ -179,7 +195,7 @@ final class ChatView extends BorderPane {
         Platform.runLater(() -> {
             cancelReplies();
             for(var renderer:List.copyOf(renderers)) renderer.dispose();
-            soundPlayer.stopVoice();
+            if(soundPlayer!=null) soundPlayer.stopVoice();
         });
     }
 
@@ -217,7 +233,7 @@ final class ChatView extends BorderPane {
             }
             pendingFinalReply=reply;
             setTargetTextOnFx(reply.getDisplayText());
-            chatSpeechController.speakAssistantReply(reply);
+            if(chatSpeechController!=null) chatSpeechController.speakAssistantReply(reply);
             completeIfFinalTextRendered();
         }
 

@@ -8,6 +8,7 @@ import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.net.URL;
@@ -15,7 +16,7 @@ import java.net.URL;
 final class MessageBubble extends HBox {
     private final Label bubbleLabel;
 
-    MessageBubble(ChatMessage message){
+    MessageBubble(ChatMessage message,boolean workbench){
         super(8);
         boolean isUser=message.getRole().isUser();
 
@@ -23,8 +24,9 @@ final class MessageBubble extends HBox {
         setAlignment(isUser ? Pos.TOP_RIGHT : Pos.TOP_LEFT);
 
         ImageView avatarView=createAvatarView(message.getRole());
-        bubbleLabel=createBubbleLabel(message.getContent());
+        bubbleLabel=createBubbleLabel(message.getContent(),workbench,isUser);
         VBox contentColumn=createContentColumn(message,isUser);
+        HBox.setHgrow(contentColumn,Priority.SOMETIMES);
 
         if(isUser){
             getChildren().addAll(contentColumn,avatarView);
@@ -49,12 +51,16 @@ final class MessageBubble extends HBox {
         bubbleLabel.setText(content);
     }
 
-    private Label createBubbleLabel(String content){
+    private Label createBubbleLabel(String content,boolean workbench,boolean isUser){
         Label label=new Label(content);
         // JavaFX 自己处理文本测量和换行，避免 Swing JTextArea 手算尺寸的问题。
         label.setWrapText(true);
-        label.setMaxWidth(ChatStyles.BUBBLE_MAX_WIDTH);
-        label.setStyle(ChatStyles.BUBBLE_STYLE);
+        label.setMaxWidth(workbench ? 540 : ChatStyles.BUBBLE_MAX_WIDTH);
+        if(workbench){
+            label.getStyleClass().add(isUser ? "workbench-user-message" : "workbench-assistant-message");
+        }else{
+            label.setStyle(ChatStyles.BUBBLE_STYLE);
+        }
         UiFonts.applyJavaFxFont(label,14);
         return label;
     }

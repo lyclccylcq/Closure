@@ -20,6 +20,7 @@ import app.service.ChatSpeechController;
 import app.service.ChatService;
 import app.service.SpeechLifecycleListener;
 import app.ui.chat.ChatWindow;
+import app.ui.chat.WorkbenchWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
 import app.ui.pet.TranslucentWindowPainter;
@@ -159,6 +160,7 @@ public class PetWindow extends JFrame {
      * 这样可以避免程序一启动就创建聊天窗口。
      */
     private ChatWindow chatWindow;
+    private WorkbenchWindow workbenchWindow;
     private ChatService chatService;
 
     /**
@@ -1187,6 +1189,9 @@ public class PetWindow extends JFrame {
         // 创建“通讯”菜单项
         JMenuItem chatItem = new JMenuItem("通讯");
         chatItem.setFont(menuFont);
+        JMenuItem workbenchItem = new JMenuItem("工作台");
+        workbenchItem.setFont(menuFont);
+        workbenchItem.addActionListener(e -> openWorkbenchWindow());
 
         // 创建定时提醒菜单项
         JMenuItem timedReminderItem = new JMenuItem("定时提醒...");
@@ -1214,6 +1219,7 @@ public class PetWindow extends JFrame {
 
         // 把“通讯”加入菜单
         popupMenu.add(chatItem);
+        popupMenu.add(workbenchItem);
 
         JMenu characterActions = new JMenu("动作");
         characterActions.setFont(menuFont);
@@ -1274,6 +1280,15 @@ public class PetWindow extends JFrame {
                 event.getX(),
                 event.getY()
         );
+    }
+
+    private void openWorkbenchWindow() {
+        if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
+            workbenchWindow = new WorkbenchWindow();
+        }
+        workbenchWindow.setVisible(true);
+        workbenchWindow.setExtendedState(workbenchWindow.getExtendedState() & ~JFrame.ICONIFIED);
+        workbenchWindow.toFront();
     }
 
     /**
@@ -1395,6 +1410,7 @@ public class PetWindow extends JFrame {
         if (chatWindow != null) {
             chatWindow.dispose();
         }
+        if (workbenchWindow != null) workbenchWindow.dispose();
         if (chatService != null) chatService.close();
         if (speechController != null) {
             speechController.close();
@@ -1419,6 +1435,7 @@ public class PetWindow extends JFrame {
         closeRoaming();
         if (idleSleepTimer != null) idleSleepTimer.stop();
         if (chatWindow != null) chatWindow.dispose();
+        if (workbenchWindow != null) workbenchWindow.dispose();
         if (chatService != null) chatService.close();
         if (characterController != null) characterController.close();
         if (petAnimationPanel != null) petAnimationPanel.dispose();

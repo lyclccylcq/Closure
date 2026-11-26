@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0029",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "新增 Closure 桌面工作台",
+  "objective": "从桌宠打开可用于长对话的工作台。用户能在一个窗口中切换会话、选择项目目录并预览文件。延续 Closure 的角色和对话能力，工作台采用自己的原生桌面布局。",
+  "architecture": [
+    "从经核对的 origin/main 在独立副本由 Codex 直接实现。保留桌宠菜单和紧凑通讯窗口，新增工作台入口。",
+    "工作台以 JavaFX 内容嵌入 Swing 窗口，复用 ChatView、ChatService 及既有回复协议。多个进程内会话各自持有历史和请求，切换时保留正文及正在生成的回复。",
+    "项目面板使用用户选择的本地目录。目录遍历和 UTF-8 预览在后台读取，预览结果与当前选择绑定。工作台内置多行文字输入。"
+  ],
+  "non_goals": [
+    "跨重启会话存储、文件编辑、终端和代码代理、导入其他产品的界面资产、主项目配置迁移。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/ui/chat/ChatInputBar.java",
+    "src/main/java/app/ui/chat/MessageBubble.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/WorkbenchProjectPane.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java",
+    "src/test/java/app/ui/pet/PetPointerWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "桌宠右键可打开实际原生工作台，关闭再打开保留工作台当前状态。原来的通讯入口继续工作。",
+      "verification": "验证真实桌宠菜单以及原生聊天和工作台窗体。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "工作台可以新建和切换多个可用对话，正文支持多行输入及流式显示，停止只影响当前会话。",
+      "verification": "使用假模型在实际窗口发送及取消请求，验证切换、请求及历史隔离。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "工作台可选择项目目录、浏览目录并打开 UTF-8 文件预览。无效文件给出可理解状态，快速切换时只显示最新选择。",
+      "verification": "在实际工作台用临时合成项目检查目录、文本预览以及二进制回退，核对后台读取和生命周期。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "交付界面清晰可用，项目选择和会话操作可以发现，正常构建和离线启动已验证。",
+      "verification": "检查真实窗口截图与缩放，运行可信单元、打包和启动检查，核对 README 启动入口。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "首次版本保留进程内会话。设备字体和窗口大小通过本机原生测试核验。",
+    "真实模型输出与配置随使用者环境而异，工程检查使用合成项目和模型替身。"
+  ],
+  "rollback": "通过普通 PR 回退本任务合并，并检查原来的桌宠通讯入口和离线启动。",
+  "review_budget": {
+    "max_diff_bytes": 85000
+  }
+}
