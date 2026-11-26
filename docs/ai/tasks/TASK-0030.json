@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0030",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "为 Closure 工作台加入复古终端主题",
+  "objective": "把指定 DSH 皮肤的复古终端风格应用到现有 Closure 工作台，并使用可分发的原始像素图标与字体材料。",
+  "architecture": [
+    "基于最新 origin/main，由 Codex 在独立副本直接实现。工作台采用深靛色层次、切角控件、顶栏扫描线和像素面板标签。",
+    "从 dsh-closure-skin 导入通用 UI 图标并使用 Orbitron 字体，从 dsh-closure-pet 采用 Ark Pixel 字体。字体以 JavaFX 可加载的小字集打包并附授权与来源。空会话使用 Closure 已有桌宠帧。",
+    "工作台继续使用现有 Swing、JavaFX、会话状态和项目浏览逻辑，主题资源随程序本地打包。",
+    "发布后按可信完成策略验证当前 PR 的检查，合并精确受审提交，然后核对主分支 CI、打包和实际启动。"
+  ],
+  "non_goals": [
+    "DSH 插件及其脚本、宿主接口、计费、音频或视频移植，跨重启会话持久化，以及修改桌宠动画或现有 AI 对话协议。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/ui/chat/ChatInputBar.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/WorkbenchProjectPane.java",
+    "src/main/java/app/ui/chat/WorkbenchTheme.java",
+    "src/main/resources/ui/workbench.css",
+    "src/main/resources/ui/workbench/*",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "实际工作台使用与参考相近的深靛色、像素标识、切角和局部扫描线，空会话有 Closure 角色视觉，长文本和文件预览清晰，窄窗口可完成主要操作。",
+      "verification": "检查真实窗口的空场景、对话及项目场景和最小尺寸，验证主题 CSS、视觉资源显示与主要按钮可操作。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "至少各使用一个指定仓库中的可分发资源，记录来源、版本和授权。主题以本地资源运作。",
+      "verification": "比对上游文件和 Git blob，检查字体字集及名称、图标显示、许可证及打包文件。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "右键桌宠仍能打开原生工作台，多会话、多行、流式对话、停止、文件预览、关窗重开及原通讯行为照常。",
+      "verification": "运行真实桌宠和工作台回归及现有 Java 测试，检查空会话进入正文和回切。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "在发布前以候选提交核验构建、离线桌面启动和实际主题呈现，确认提交可复核。",
+      "verification": "运行冻结的工程检查和原生窗口回归，核对应用包资源和提交范围。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "采用字体的子集适用于固定标题。会话正文、文件名和编辑区继续采用支持任意输入的原字体。",
+    "使用本机示例项目与模型替身验证界面；实际模型服务连接沿用原配置。"
+  ],
+  "rollback": "通过常规 PR 回退本任务的合并，再核验桌宠菜单、工作台和离线启动。",
+  "review_budget": {
+    "max_diff_bytes": 85000
+  }
+}
