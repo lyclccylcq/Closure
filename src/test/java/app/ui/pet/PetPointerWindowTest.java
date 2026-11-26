@@ -163,6 +163,18 @@ class PetPointerWindowTest {
             assertEquals(CharacterState.THINKING,character.state());
             ((ChatWindow)field(window,"chatWindow")).setVisible(false);
             assertEquals(CharacterState.IDLE,character.state());
+
+            JPopupMenu popup=(JPopupMenu)field(window,"popupMenu");
+            javax.swing.JMenuItem workbenchItem=java.util.Arrays.stream(popup.getComponents())
+                    .filter(javax.swing.JMenuItem.class::isInstance).map(javax.swing.JMenuItem.class::cast)
+                    .filter(item -> "工作台".equals(item.getText())).findFirst().orElseThrow();
+            workbenchItem.doClick();
+            var workbench=(app.ui.chat.WorkbenchWindow)field(window,"workbenchWindow");
+            assertTrue(workbench.isShowing());
+            workbench.setVisible(false);
+            workbenchItem.doClick();
+            assertSame(workbench,field(window,"workbenchWindow"));
+            assertTrue(workbench.isShowing());
             return null;
         });
         assertEquals(0,aiCalls.get());

@@ -1,0 +1,178 @@
+.workbench {
+    -fx-background-color: #111a21;
+    -fx-base: #17232c;
+    -fx-accent: #78cdb5;
+    -fx-focus-color: #78cdb5;
+    -fx-faint-focus-color: #78cdb52b;
+    -fx-text-fill: #e7f1f3;
+}
+
+.workbench-top {
+    -fx-background-color: #14212a;
+    -fx-padding: 13 20 13 20;
+    -fx-border-color: transparent transparent #283b44 transparent;
+    -fx-border-width: 1;
+}
+
+.workbench-brand {
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #84d9c2;
+}
+
+.workbench-title {
+    -fx-font-size: 14px;
+    -fx-text-fill: #c3d6d9;
+}
+
+.workbench-panels, .workbench-browser {
+    -fx-background-color: #283944;
+    -fx-padding: 0;
+}
+
+.workbench-panels > .split-pane-divider,
+.workbench-browser > .split-pane-divider {
+    -fx-padding: 0 1 0 0;
+    -fx-background-color: #30414b;
+}
+
+.workbench-browser:vertical > .split-pane-divider {
+    -fx-padding: 1 0 0 0;
+}
+
+.workbench-navigation, .workbench-project {
+    -fx-background-color: #131f27;
+    -fx-padding: 15;
+}
+
+.workbench-heading {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #e7f1f3;
+}
+
+.workbench-action {
+    -fx-background-color: #1c353a;
+    -fx-background-radius: 6;
+    -fx-border-color: #315450;
+    -fx-border-radius: 6;
+    -fx-padding: 5 10 5 10;
+    -fx-text-fill: #a0e0cc;
+}
+
+.workbench-action:hover, .workbench-action:focused {
+    -fx-background-color: #27494f;
+    -fx-border-color: #78cdb5;
+}
+
+.workbench-conversation {
+    -fx-background-color: #080c12;
+}
+
+.workbench-conversation-title {
+    -fx-background-color: #111b23;
+    -fx-padding: 13 17 13 17;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #eff9f7;
+    -fx-border-color: transparent transparent #283944 transparent;
+}
+
+.workbench-session-list, .workbench-file-tree {
+    -fx-background-color: #131f27;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+}
+
+.workbench-session-list .list-cell, .workbench-file-tree .tree-cell {
+    -fx-background-color: #131f27;
+    -fx-text-fill: #c8dadd;
+    -fx-padding: 7 6 7 6;
+}
+
+.workbench-session-list .list-cell:filled:selected,
+.workbench-file-tree .tree-cell:filled:selected {
+    -fx-background-color: #25434b;
+    -fx-background-radius: 5;
+    -fx-text-fill: #e4fbf5;
+}
+
+.workbench-file-tree .tree-cell .tree-disclosure-node .arrow {
+    -fx-background-color: #88a4aa;
+}
+
+.workbench-path {
+    -fx-text-fill: #97afb6;
+    -fx-font-size: 12px;
+}
+
+.workbench-preview-pane {
+    -fx-background-color: #0e171e;
+    -fx-padding: 10 0 0 0;
+}
+
+.workbench-preview {
+    -fx-background-color: #0e171e;
+    -fx-control-inner-background: #0e171e;
+    -fx-text-fill: #d7e6e8;
+    -fx-prompt-text-fill: #9cb0b7;
+    -fx-font-family: "Monospaced";
+    -fx-font-size: 12px;
+}
+
+.workbench-composer .text-area {
+    -fx-control-inner-background: #0e1620;
+}
+
+.workbench-user-message {
+    -fx-background-color: #182e34;
+    -fx-background-radius: 7;
+    -fx-padding: 9 12 9 12;
+    -fx-text-fill: #e8f6f4;
+}
+
+.workbench-assistant-message {
+    -fx-padding: 6 10 8 0;
+    -fx-text-fill: #e1eff0;
+}
+
+.workbench-composer-input {
+    -fx-background-color: #102028;
+    -fx-control-inner-background: #102028;
+    -fx-border-color: #345159;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-text-fill: #e7f1f3;
+    -fx-prompt-text-fill: #97afb6;
+}
+
+.workbench-composer-input .content {
+    -fx-background-color: #102028;
+    -fx-background-radius: 6;
+}
+
+.workbench-send, .workbench-stop {
+    -fx-padding: 7 13 7 13;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+}
+
+.workbench-send {
+    -fx-background-color: #76c9b0;
+    -fx-text-fill: #102d29;
+    -fx-font-weight: bold;
+}
+
+.workbench-send:hover, .workbench-send:focused {
+    -fx-background-color: #9bdcc7;
+}
+
+.workbench-stop {
+    -fx-background-color: #152730;
+    -fx-border-color: #36545d;
+    -fx-text-fill: #d7e7e8;
+}
+
+.workbench-stop:hover, .workbench-stop:focused {
+    -fx-background-color: #24414a;
+}
