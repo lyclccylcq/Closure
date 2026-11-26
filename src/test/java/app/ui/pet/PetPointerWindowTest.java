@@ -168,8 +168,17 @@ class PetPointerWindowTest {
             var right=new MouseEvent(panel,MouseEvent.MOUSE_PRESSED,System.currentTimeMillis(),0,
                     110,145,window.getX()+110,window.getY()+145,1,true,MouseEvent.BUTTON3);
             for(var listener:panel.getMouseListeners()) listener.mousePressed(right);
+            return null;
+        });
+        edt(()->{
+            JPopupMenu popup=(JPopupMenu)field(window,"popupMenu");
             assertTrue(popup.isShowing());
             assertEquals(new java.awt.Color(0x1b1831),popup.getBackground());
+            var popupWindow=SwingUtilities.getWindowAncestor(popup);
+            if(popupWindow.getGraphicsConfiguration().getDevice().isWindowTranslucencySupported(
+                    java.awt.GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSLUCENT)){
+                assertEquals(0,popupWindow.getBackground().getAlpha());
+            }
             assertEquals("工作台",((JMenuItem)popup.getComponent(0)).getText());
             captureMenu(popup,"pet-menu.png");
             JMenu actions=java.util.Arrays.stream(popup.getComponents()).filter(JMenu.class::isInstance)
@@ -211,6 +220,8 @@ class PetPointerWindowTest {
         BufferedImage image=new BufferedImage(menu.getWidth(),menu.getHeight(),BufferedImage.TYPE_INT_ARGB);
         var graphics=image.createGraphics();
         try{menu.paint(graphics);}finally{graphics.dispose();}
+        assertEquals(0,image.getRGB(0,0)>>>24,"Menu corners must be transparent");
+        assertEquals(255,image.getRGB(menu.getWidth()/2,12)>>>24,"Menu body must remain readable");
         Path directory=Path.of(output);Files.createDirectories(directory);
         assertTrue(ImageIO.write(image,"png",directory.resolve(name).toFile()));
     }

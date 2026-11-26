@@ -36,6 +36,7 @@ public final class ChatSpeechController implements AutoCloseable {
     private final Object requestLock = new Object();
 
     private CompletableFuture<Void> activeSpeechFuture;
+    private Object activeSpeechOwner;
     private CompletableFuture<Void> readyForSpeechFuture;
     private SpeechLifecycleListener speechLifecycleListener = SpeechLifecycleListener.NO_OP;
     private String lastWarningKey;
@@ -208,6 +209,29 @@ public final class ChatSpeechController implements AutoCloseable {
         speakAssistantReplyAsync(assistantReply);
     }
 
+    public SpeechSession createSession() {
+        return new SpeechSession();
+    }
+
+    public final class SpeechSession {
+        private SpeechSession() {}
+
+        public CompletableFuture<Void> speak(AssistantReply reply) {
+            synchronized (requestLock) {
+                return reply == null ? CompletableFuture.completedFuture(null)
+                        : requestSpeech(reply.getSpeechText(), reply.getDominantEmotion(), false, this);
+            }
+        }
+
+        public void stop() {
+            synchronized (requestLock) {
+                boolean ownsSpeech;
+                synchronized (ChatSpeechController.this) { ownsSpeech = activeSpeechOwner == this; }
+                if (ownsSpeech) ChatSpeechController.this.stop();
+            }
+        }
+    }
+
     public CompletableFuture<Void> speakAssistantReplyAsync(AssistantReply assistantReply) {
         if (assistantReply != null) {
             return speakWithEmotionAsync(assistantReply.getSpeechText(), assistantReply.getDominantEmotion());
@@ -283,6 +307,11 @@ public final class ChatSpeechController implements AutoCloseable {
     }
 
     private CompletableFuture<Void> requestSpeech(String speechText, SpeechEmotion emotion, boolean fixedPhrase) {
+        return requestSpeech(speechText, emotion, fixedPhrase, null);
+    }
+
+    private CompletableFuture<Void> requestSpeech(String speechText, SpeechEmotion emotion, boolean fixedPhrase,
+                                                   Object owner) {
         if (!isAutoSpeakEnabled()) {
             return CompletableFuture.completedFuture(null);
         }
@@ -308,7 +337,7 @@ public final class ChatSpeechController implements AutoCloseable {
             return CompletableFuture.completedFuture(null);
         }
 
-        long requestId = startNewRequest();
+        long requestId = startNewRequest(owner);
         CompletableFuture<Void> speechFuture;
         try {
             speechFuture = fixedPhrase ? speechService.speakFixedPhrase(speechText, profile)
@@ -347,6 +376,7 @@ public final class ChatSpeechController implements AutoCloseable {
             synchronized (this) {
                 requestGeneration++;
                 activeSpeechFuture = null;
+                activeSpeechOwner = null;
             }
 
             if (speechService != null) {
@@ -361,12 +391,13 @@ public final class ChatSpeechController implements AutoCloseable {
         stop();
     }
 
-    private long startNewRequest() {
+    private long startNewRequest(Object owner) {
         long requestId;
         synchronized (this) {
             requestGeneration++;
             requestId = requestGeneration;
             activeSpeechFuture = null;
+            activeSpeechOwner = owner;
         }
 
         speechService.stop();
@@ -390,6 +421,7 @@ public final class ChatSpeechController implements AutoCloseable {
                 return;
             }
             activeSpeechFuture = null;
+            activeSpeechOwner = null;
         }
 
         notifySpeechFinished();

@@ -23,6 +23,7 @@ public class Main {
             }
             PetWindow petWindow=new PetWindow();
             petWindow.setVisible(true);
+            if (Boolean.getBoolean("closure.openWorkbench")) petWindow.openWorkbenchWindow();
         });
         if("frames".equals(System.getProperty("closure.animation","spine"))){
             openWindow.run();

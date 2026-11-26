@@ -1288,11 +1288,11 @@ public class PetWindow extends JFrame {
         );
     }
 
-    private void openWorkbenchWindow() {
+    public void openWorkbenchWindow() {
         pauseRoaming();
         hideSpeechBubble();
         if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
-            workbenchWindow = new WorkbenchWindow();
+            workbenchWindow = new WorkbenchWindow(speechController);
             workbenchWindow.addComponentListener(new ComponentAdapter() {
                 @Override public void componentHidden(ComponentEvent event) {
                     if (!workbenchWindow.isVisible()) restorePetAlwaysOnTop();
@@ -1304,6 +1304,7 @@ public class PetWindow extends JFrame {
         workbenchWindow.setExtendedState(workbenchWindow.getExtendedState() & ~JFrame.ICONIFIED);
         workbenchWindow.toFront();
         workbenchWindow.requestFocus();
+        System.out.println("CLOSURE_WORKBENCH_OPENED");
     }
 
     /**

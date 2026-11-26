@@ -36,7 +36,7 @@ cd Closure
 
 普通 Maven 启动读取本机的 AI 和语音配置。使用 Fish 朗读请配置 API key 后运行对应脚本。[Fish 配置与启动](#fish-云端语音)
 
-macOS 也可以双击 `scripts/launch-desktop.command`。已有本地配置位于其他目录时，可运行 `scripts/launch-desktop.command --runtime-directory "/原运行目录"`。它从当前工程构建应用，并在指定目录读取本机配置。
+macOS 也可以双击 `scripts/launch-desktop.command`。已有本地配置位于其他目录时，可运行 `scripts/launch-desktop.command --runtime-directory "/原运行目录"`。它从当前工程构建应用，并在指定目录读取本机配置。加上 `--workbench` 可以在启动桌宠时直接打开工作台。
 
 ### 只看人物和动作
 
@@ -66,6 +66,8 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 右键桌宠，选择「工作台」。从左侧新建会话或打开本地项目。标题栏的「侧栏」和「项目文件」可以分别展开或收起对应区域。项目面板在本机只读预览 UTF-8 文本，收起后会保留当前文件。工作台关窗重开可继续当前进程中的会话。
 
 工作台使用深靛色和像素美术。新会话居中输入，开始对话后输入框移到窗口下方。Enter 发送，Shift+Enter 换行。[主题素材来源与授权](src/main/resources/ui/workbench/NOTICE.md)
+
+正式启动时，工作台使用运行目录中的 AI 配置，并共享桌宠已有的朗读服务。当前会话回复完成后朗读 `speechText`。切换会话或隐藏工作台会停止该会话的语音，后台完成的回复保留文字。每个会话的「停止」只取消自己正在持有的语音。
 
 工作台的可露形象支持本地透明动画。安装 FFmpeg 后，使用 `python3 scripts/import_workbench_mascot.py "/本机资源包/assets/video/idle.webm"` 导入。动画存放于 `~/.closure/assets/workbench/`，随工作台显示播放、隐藏暂停。桌宠右键的「工作台」可直接进入，菜单与工作台共用深靛配色。
 

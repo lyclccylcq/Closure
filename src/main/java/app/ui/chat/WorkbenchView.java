@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.service.ChatSpeechController;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.geometry.Pos;
@@ -24,6 +25,7 @@ import java.util.function.Supplier;
 
 final class WorkbenchView extends BorderPane {
     private final Supplier<ChatService> services;
+    private final ChatSpeechController speech;
     private final WorkbenchProjectPane project;
     private final ListView<Session> sessions = new ListView<>();
     private final BorderPane conversation = new BorderPane();
@@ -32,8 +34,10 @@ final class WorkbenchView extends BorderPane {
     private final ToggleButton showFiles = new ToggleButton("项目文件", WorkbenchTheme.icon(WorkbenchTheme.DIRECTORY));
     private double projectWidth = 306;
 
-    WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject) {
+    WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
+                  ChatSpeechController speech) {
         this.services = services;
+        this.speech = speech;
         project = new WorkbenchProjectPane(chooseProject);
         getStyleClass().add("workbench");
         getStylesheets().add(Objects.requireNonNull(getClass().getResource("/ui/workbench.css")).toExternalForm());
@@ -83,6 +87,7 @@ final class WorkbenchView extends BorderPane {
             }
         });
         sessions.getSelectionModel().selectedItemProperty().addListener((property, oldValue, selected) -> {
+            if (oldValue != null) oldValue.chat.setSpeechActive(false);
             conversationTitle.textProperty().unbind();
             if (selected == null) {
                 conversationTitle.setText("");
@@ -90,8 +95,13 @@ final class WorkbenchView extends BorderPane {
             } else {
                 conversationTitle.textProperty().bind(selected.title);
                 conversation.setCenter(selected.chat);
+                selected.chat.setSpeechActive(isVisible());
                 selected.chat.scrollToLatestMessage();
             }
+        });
+        visibleProperty().addListener((property, oldValue, visible) -> {
+            Session selected = sessions.getSelectionModel().getSelectedItem();
+            if (selected != null) selected.chat.setSpeechActive(visible);
         });
 
         VBox navigation = new VBox(10, identity, add, WorkbenchTheme.heading("项目"), folder,
@@ -148,7 +158,7 @@ final class WorkbenchView extends BorderPane {
     }
 
     private void newSession() {
-        Session session = new Session(services.get());
+        Session session = new Session(services.get(), speech);
         sessions.getItems().addFirst(session);
         sessions.getSelectionModel().select(session);
     }
@@ -173,9 +183,9 @@ final class WorkbenchView extends BorderPane {
         private final StringProperty title = new SimpleStringProperty("新会话");
         private boolean named;
 
-        private Session(ChatService service) {
+        private Session(ChatService service, ChatSpeechController speech) {
             this.service = service;
-            chat = new ChatView(service, this::nameFromMessage);
+            chat = new ChatView(service, this::nameFromMessage, speech);
         }
 
         private void nameFromMessage(String message) {

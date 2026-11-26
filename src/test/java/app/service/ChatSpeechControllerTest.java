@@ -32,6 +32,30 @@ class ChatSpeechControllerTest {
     Path tempDir;
 
     @Test
+    void speechSessionsOnlyStopTheirOwnCurrentReply() throws Exception {
+        FakeSpeechService service = new FakeSpeechService();
+        var controller = controller(service, true, new ArrayList<>());
+        var first = controller.createSession();
+        var second = controller.createSession();
+        var reply = new AssistantReply("正文。", "朗读。", SpeechEmotion.NEUTRAL);
+        first.speak(reply);
+        second.speak(reply);
+        int stops = service.stopCount;
+        first.stop();
+        assertEquals(stops, service.stopCount);
+        second.stop();
+        assertEquals(stops + 1, service.stopCount);
+        controller.speakAssistantReply(reply);
+        first.stop();
+        second.stop();
+        assertEquals(stops + 2, service.stopCount);
+        first.speak(reply);
+        service.futures.getFirst().complete(null);
+        first.stop();
+        assertEquals(stops + 4, service.stopCount);
+    }
+
+    @Test
     void fishFactoryPreparesWithoutSynthesisAndCancelsTheFirstWholeReply() {
         Properties settings = new Properties();
         settings.setProperty("fish.apiKey", "synthetic-test-key");

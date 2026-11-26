@@ -16,6 +16,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <javafx.version>21.0.6</javafx.version>
         <closure.smokeTest>false</closure.smokeTest>
+        <closure.openWorkbench>false</closure.openWorkbench>
         <closure.animation>spine</closure.animation>
         <javafx.workingDirectory>${project.basedir}</javafx.workingDirectory>
     </properties>
@@ -91,6 +92,7 @@
                             <workingDirectory>${javafx.workingDirectory}</workingDirectory>
                             <options>
                                 <option>-Dclosure.smokeTest=${closure.smokeTest}</option>
+                                <option>-Dclosure.openWorkbench=${closure.openWorkbench}</option>
                                 <option>-Dclosure.animation=${closure.animation}</option>
                             </options>
                             <launcher>app</launcher>
