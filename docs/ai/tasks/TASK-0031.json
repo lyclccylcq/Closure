@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0031",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "重新布局 Closure 工作台",
+  "objective": "参考 Codex 的桌面工作流组织 Closure 工作台。将对话作为主视图，侧栏集中新会话和项目入口，文件面板按需展开，使用现有深靛色、像素素材和角色画面。",
+  "architecture": [
+    "从核对过的 origin/main 由 Codex 在独立副本中直接实现。使用 Swing 内嵌 JavaFX 的现有窗口和对话服务。",
+    "工作台默认显示会话侧栏和居中对话。以独立的可收起面板承载只读项目文件，同一窗口内保留目录、浏览位置和文件预览。左侧显示已选目录并可打开项目面板。",
+    "复用工作台现有图标、字标、中文像素字体和角色帧。采用紧凑顶栏、内容宽度约束和位于输入区底部的操作按钮。空会话的输入栏和角色画面同组，对话开始后输入栏驻底。",
+    "完成本机候选验证后，按可信完成策略处理 PR CI、精确合并和合并版本的主分支 CI、构建及启动。"
+  ],
+  "non_goals": [
+    "引入 Codex 组件、代码或品牌素材，移植 DSH 运行时，新增终端、代理执行、文件写入、项目会话归档和跨进程持久化。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/WorkbenchProjectPane.java",
+    "src/main/java/app/ui/chat/WorkbenchTheme.java",
+    "src/main/java/app/ui/chat/ChatInputBar.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "原生工作台默认突出中央对话与左侧会话、项目入口。左右侧区可以按需展开或收起，当前项目与预览在切换侧区和窗口重开后保留。",
+      "verification": "从真实窗口检查默认状态、左右侧区切换、对话宽度变化、项目选中状态和窄窗布局。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "保留深靛色、像素图标、标题字体和原有角色画面。空会话提供居中入口，首条消息送出后输入区留在对话底部并支持多行和常用键盘操作。",
+      "verification": "检查欢迎、对话加文件面板和最小尺寸截图，验证两套字体、图标和首发消息的输入栏重排。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "会话、流式回复、按会话停止、文件异步预览以及桌宠通讯功能可照常使用。",
+      "verification": "使用实际窗口执行会话隔离、读取项目、停止、窗口重开、桌宠菜单和原通讯回归。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "发布前的候选提交能通过范围校验、全量测试、打包和离线启动。",
+      "verification": "运行冻结的宿主检查，确认当前提交日志和原生窗口证据。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "会话和面板状态保存在当前应用进程，项目浏览继续使用本地只读访问。",
+    "原生窗口回归使用合成项目和模型替身。"
+  ],
+  "rollback": "通过常规 PR 回退任务合并，再检查桌宠菜单、工作台和离线启动。",
+  "review_budget": {
+    "max_diff_bytes": 85000
+  }
+}
