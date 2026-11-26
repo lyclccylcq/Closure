@@ -129,6 +129,19 @@ class ChatWindowLifecycleTest {
         if(node instanceof Parent parent) for(Node child:parent.getChildrenUnmodifiable()) labels(child,result);
     }
 
+    private long awaitVisibleText(String expected) throws Exception {
+        long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
+        do{
+            if(fx(() -> {
+                List<String> values=new ArrayList<>();
+                labels(view(),values);
+                return values.contains(expected);
+            })) return System.nanoTime();
+            TimeUnit.MILLISECONDS.sleep(10);
+        }while(System.nanoTime()<deadline);
+        return fail("Streamed text did not appear in the window: "+expected);
+    }
+
     @Test
     void realWindowRecreationStopAndNewConversationPreserveTheRightState() throws Exception {
         var client=new Client();
@@ -148,9 +161,19 @@ class ChatWindowLifecycleTest {
         var service=new ChatService(client);
         try{
             open(service,speech);
+            long sent=System.nanoTime();
             send("先处理第二个文件，颜色表。");
-            client.take().finish("测试已接收。");
+            var first=client.take();
+            first.listener().onToken("{\"displayText\":\"测");
+            long firstVisible=awaitVisibleText("测");
+            assertTrue(service.completedTurns().isEmpty());
+            assertTrue(speechSpy.spoken.isEmpty());
+            first.listener().onToken("试已接收。\",\"speechText\":\"测试已接收。\",\"dominantEmotion\":\"NEUTRAL\"}");
+            first.listener().onComplete();
             assertEquals("测试已接收。",speechSpy.take());
+            System.out.printf("CLOSURE_CHAT_LOCAL_TIMING firstVisibleMs=%d speechRequestMs=%d%n",
+                    TimeUnit.NANOSECONDS.toMillis(firstVisible-sent),
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-sent));
             fx(() -> null);
             assertTrue(motion.played.contains(AnimationType.THINKING_TALK));
             assertEquals(AnimationType.THINKING,motion.current);

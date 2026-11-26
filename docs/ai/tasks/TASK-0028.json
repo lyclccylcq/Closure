@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0028",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "重构文本回复提示词并回归桌宠体验",
+  "objective": "用户已要求开始体验回归并在本轮重构提示词。让日常聊天承接具体细节，让技术帮助直接推进问题，让跨轮回复遵循用户最新的更正。验证真实聊天、朗读和桌面交互入口。",
+  "architecture": [
+    "由 Codex 在以已核对 origin/main 为基线的独立副本直接实现。角色卡专注身份、相处方式和性格。文本提示词表达场景相关的回复取舍，沿用现有三字段协议和运行时装配。",
+    "复用已有的对话用例和真实窗口回归。记录合成流式回复从发送到首字可见和静音语音替身被调用的观测时间，并复查停止、关窗、拖放、走动及 Fish 固定台词复用。",
+    "对照使用同一套合成输入和评审条件，记录角色卡及文本提示词版本。产品模型生成、云端听感和真实服务时延按实际执行状态记录。",
+    "GitHub CI exposed an ordering race covered by experience regression. The chat window cancels its current and queued requests as one operation on the conversation executor before dispatch can advance."
+  ],
+  "non_goals": [
+    "会话持久化、模型或语音供应商切换、付费模型或云语音调用、桌面安装与私有配置调整。"
+  ],
+  "allowed_paths": [
+    "src/main/resources/prompts/closure-role-card.zh-CN.txt",
+    "src/main/resources/prompts/closure-system-prompt.txt",
+    "docs/character/closure-role-card.zh-CN.txt",
+    "docs/character/dialogue-evaluation/README.md",
+    "docs/character/dialogue-evaluation/cases.v1.json",
+    "docs/character/dialogue-evaluation/prompt-regression.md",
+    "src/test/java/app/service/ChatServiceTest.java",
+    "src/test/java/app/ui/chat/ChatWindowLifecycleTest.java",
+    "src/main/java/app/service/ChatService.java",
+    "src/main/java/app/ui/chat/ChatView.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "运行时提示词给出适用于分享、求助、称呼偏好和跨轮更正的回复策略，保留角色语气、来源边界和能力真实性。",
+      "verification": "逐条对照基线、角色卡、案例集和实际附加的会话能力，核对提示词文本、用例不变及发布资源一致性。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "实际聊天请求加载新资源并继续使用三字段协议、已有会话历史投影和实时上下文。",
+      "verification": "ChatServiceTest 检查真实请求内容，现有解析、上下文和朗读测试覆盖五种标签及中断行为。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "原生窗口显示流式首字，完整回复进入朗读。一次停止取消当前及排队请求，旧队列不能因停止操作而发起传输。关窗、拖放、走动和固定台词缓存均可回归。",
+      "verification": "回归 ChatService 的批量和单条取消，以及真实窗口的停止、清空和动作切换。保留语音替身测试与原始时间记录。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "体验记录给出可复现的新旧提示词对照，呈现实际测试覆盖与生成模型的执行状态。",
+      "verification": "核对出厂基线提交、提示词版本、场景编号、盲评方法、测量口径和验证日志。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "提示词对不同推理模型的自然度和用时影响需由同模型对照验证。真实听感取决于用户实际使用的语音后端。",
+    "本地回归使用合成对话、静音语音替身及回环 HTTP，仍需以真实设备体验确认用户偏好。"
+  ],
+  "rollback": "通过普通 revert PR 回到前一版提示词、评测记录和测试，使用相同的构建与启动检查核对回退版本。",
+  "review_budget": {
+    "max_diff_bytes": 50000
+  }
+}
