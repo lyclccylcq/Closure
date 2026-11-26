@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0033",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "柔化桌宠菜单并接入工作台语音",
+  "objective": "让桌宠右键菜单具有圆角和柔和选中态，工作台在正式启动入口中使用已有 API 与 TTS 环境，用户可以从桌面启动直接进入可对话、可朗读的工作台。",
+  "architecture": [
+    "Codex 从核对过的 origin/main 在独立副本直接实现。菜单继续使用 Swing，外框和选中项采用抗锯齿圆角，弹出窗口使用透明背景，保留子菜单和勾选功能。",
+    "工作台从桌宠接收已有 ChatSpeechController，文字对话继续按会话创建 ChatService 并读取启动时指定的原运行目录。独立工作台入口可创建并释放自己持有的语音控制器。",
+    "共享语音控制器为工作台会话提供有归属的朗读请求，停止和关闭只取消本会话持有的语音。切换会话或隐藏工作台时暂停该会话朗读，后台回复不触发新朗读。",
+    "桌面启动器提供工作台启动选项，在正常启动中加载既有服务。交付后更新用户现有入口为正式运行目录和最新合并版。"
+  ],
+  "non_goals": [
+    "改变既有 API、TTS 端点或模型配置，新增云部署和计费行为，重构音频后端，移植 DSH 逻辑，读取或展示密钥值，CI 中进行真实模型调用。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "pom.xml",
+    "scripts/launch_desktop.py",
+    "scripts/tests/test_launch_desktop.py",
+    "src/main/java/app/Main.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/pet/PetMenuTheme.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/ui/pet/PetPointerWindowTest.java",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "右键菜单外框、菜单项高亮和子菜单都使用柔和圆角，文字、勾选与交互保持清晰。",
+      "verification": "检查真实根菜单和动作子菜单截图、透明角落与选中项，执行桌宠入口和菜单行为回归。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "工作台通过原运行目录接入现有对话 API，并通过桌宠共享的语音控制器处理助手回复。正常启动可直接打开工作台。",
+      "verification": "核对配置路径和依赖注入，验证启动选项、工作台回复到共享 TTS 的原生流程及精确候选的离线启动。正式配置加载在安装后单独记录。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "切换或隐藏工作台会停止本会话的语音，隐藏会话的新回复保留文字，其他会话或通讯窗口的语音不会被该会话的停止操作取消。",
+      "verification": "运行有归属的共享语音控制器回归，使用实际工作台和静音 TTS 替身验证后台完成、重新选中、停止与隐藏恢复。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "候选通过范围校验、可信全量测试、打包和离线启动。",
+      "verification": "执行冻结宿主检查，审阅完整改动和绑定当前提交的原生日志，发布后继续按可信策略完成 CI、合并和交付。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "菜单透明圆角取决于桌面渲染能力，需以本机原生窗口验证。",
+    "工程回归使用替身后端；正式启动沿用用户已设置的服务和权限。"
+  ],
+  "rollback": "通过常规 PR 回退本轮合并，并恢复备份的桌面启动入口，检查通讯与工作台。",
+  "review_budget": {
+    "max_diff_bytes": 100000
+  }
+}
