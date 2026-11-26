@@ -15,7 +15,7 @@
   },
   "role_card": {
     "path": "../closure-role-card.zh-CN.txt",
-    "sha256": "c8c76683a0df9413962d851498ac4459f5ab67c312bba5f87fe89a8954c7b534",
+    "sha256": "461a8e9e169a2fa78b848cf991114da68508652b496dc55d26eb7e08e4ef2179",
     "max_characters_design_limit": 1100
   },
   "source_catalog": "source-scenes.json",

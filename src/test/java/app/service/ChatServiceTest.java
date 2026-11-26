@@ -68,8 +68,13 @@ class ChatServiceTest {
             assertEquals(card,bundled);
             assertEquals(List.of(AiChatRole.SYSTEM,AiChatRole.USER),request.getMessages().stream().map(AiChatMessage::getRole).toList());
             String system=request.getMessages().getFirst().getContent();
-            assertTrue(system.startsWith(card+"\n\n回复协议："));
-            assertTrue(system.contains("当前会话能力"));
+            try(var resource=ChatService.class.getResourceAsStream("/prompts/closure-system-prompt.txt")){
+                assertNotNull(resource);
+                String prompt=new String(resource.readAllBytes(),StandardCharsets.UTF_8).strip();
+                String shipped=card+"\n\n"+prompt;
+                assertTrue(system.startsWith(shipped));
+                assertTrue(system.substring(shipped.length()).stripLeading().startsWith("当前会话能力："));
+            }
             assertTrue(system.contains("当前日期"));
             assertTrue(system.contains("重启后清空"));
             assertEquals("这是合成的首条输入。",request.getMessages().getLast().getContent());
