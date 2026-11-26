@@ -14,9 +14,11 @@ import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
-import javafx.scene.control.Label;
+import javafx.geometry.Pos;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import java.util.HashSet;
@@ -29,12 +31,14 @@ import java.util.function.Consumer;
 final class ChatView extends BorderPane {
     private static final Duration REPLY_STREAM_INTERVAL=Duration.millis(95);
     private static final String OPENING="我在，想聊点什么？";
+    private static final double WORKBENCH_CONTENT_WIDTH=780;
 
     private final ChatService chatService;
     private final SoundPlayer soundPlayer;
     private final ChatSpeechController chatSpeechController;
     private final VBox messageBox;
     private final ScrollPane scrollPane;
+    private final ChatInputBar composer;
     private final ChatActivity characterActivity;
     private final Consumer<String> onUserMessage;
     private final boolean workbench;
@@ -67,32 +71,36 @@ final class ChatView extends BorderPane {
         messageBox=new VBox(18);
         messageBox.setPadding(new Insets(14));
         messageBox.setFillWidth(true);
-        scrollPane=new ScrollPane(messageBox);
+        scrollPane=new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         messageBox.heightProperty().addListener((observable,oldHeight,newHeight) -> scrollToLatestMessage());
         setCenter(scrollPane);
-        ChatInputBar composer=new ChatInputBar(this::handleUserMessage,this::cancelReplies,
+        composer=new ChatInputBar(this::handleUserMessage,this::cancelReplies,
                 workbench ? null : this::startNewConversation);
+        setBottom(composer);
         if(workbench){
             getStyleClass().add("workbench-chat");
             scrollPane.getStyleClass().add("workbench-messages");
-            Label shortcut=new Label("Enter 发送 · Shift+Enter 换行");
-            shortcut.getStyleClass().add("workbench-shortcut");
-            VBox dock=new VBox(composer,shortcut);
-            dock.getStyleClass().add("workbench-chat-dock");
-            setBottom(dock);
+            messageBox.setMinWidth(0);
+            messageBox.setMaxWidth(WORKBENCH_CONTENT_WIDTH);
+            StackPane transcript=new StackPane(messageBox);
+            transcript.setMinWidth(0);
+            transcript.setAlignment(Pos.TOP_CENTER);
+            scrollPane.setContent(transcript);
+            composer.setMaxWidth(WORKBENCH_CONTENT_WIDTH);
+            BorderPane.setAlignment(composer,Pos.CENTER);
         }else{
+            scrollPane.setContent(messageBox);
             setStyle(ChatStyles.BACKGROUND_STYLE);
             messageBox.setStyle(ChatStyles.BACKGROUND_STYLE);
             scrollPane.setStyle(ChatStyles.BACKGROUND_STYLE+" -fx-background: #080c12; -fx-border-color: transparent;");
-            setBottom(composer);
         }
 
         List<app.service.ConversationHistory.Turn> turns=chatService.completedTurns();
         if(turns.isEmpty()){
-            if(workbench) setCenter(WorkbenchTheme.welcome());
+            if(workbench) showEmptyWorkbench();
             else addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
         }else{
             for(var turn:turns){
@@ -103,9 +111,24 @@ final class ChatView extends BorderPane {
         // The greeting is UI-only, never a user fact or an assistant history entry.
     }
 
+    private void showEmptyWorkbench(){
+        setBottom(null);
+        VBox start=new VBox(12,WorkbenchTheme.welcome(),composer);
+        start.setAlignment(Pos.CENTER);
+        start.setMaxHeight(Region.USE_PREF_SIZE);
+        start.setMaxWidth(WORKBENCH_CONTENT_WIDTH);
+        StackPane welcome=new StackPane(start);
+        welcome.getStyleClass().add("workbench-welcome");
+        setCenter(welcome);
+    }
+
     private void handleUserMessage(String userText){
         if(disposed) return;
-        if(workbench && getCenter()!=scrollPane) setCenter(scrollPane);
+        if(workbench && getCenter()!=scrollPane){
+            setCenter(scrollPane);
+            setBottom(composer);
+            composer.focusInput();
+        }
         if(onUserMessage!=null) onUserMessage.accept(userText);
         addMessage(new ChatMessage(MessageRole.USER,userText));
         MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,"等待回复..."));
