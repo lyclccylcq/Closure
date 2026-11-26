@@ -12,6 +12,8 @@ import javax.swing.SwingUtilities;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -19,6 +21,7 @@ import java.util.function.Supplier;
 public final class WorkbenchWindow extends JFrame {
     private volatile boolean disposed;
     private boolean choosingProject;
+    private volatile boolean windowVisible;
     private WorkbenchView view;
 
     public WorkbenchWindow() {
@@ -36,13 +39,25 @@ public final class WorkbenchWindow extends JFrame {
         setMinimumSize(new Dimension(Math.min(900, screen.width), Math.min(560, screen.height)));
         setSize(Math.min(1260, screen.width), Math.min(780, screen.height));
         setLocationRelativeTo(null);
+        addComponentListener(new ComponentAdapter() {
+            @Override public void componentShown(ComponentEvent event) { updateVisibility(true); }
+            @Override public void componentHidden(ComponentEvent event) { updateVisibility(false); }
+        });
 
         Platform.setImplicitExit(false);
         Platform.runLater(() -> {
             if (!disposed) {
                 view = new WorkbenchView(sessions, this::chooseProject);
+                view.setVisible(windowVisible);
                 panel.setScene(new Scene(view));
             }
+        });
+    }
+
+    private void updateVisibility(boolean visible) {
+        windowVisible = visible;
+        Platform.runLater(() -> {
+            if (view != null) view.setVisible(windowVisible);
         });
     }
 

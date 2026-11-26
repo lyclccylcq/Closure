@@ -3,7 +3,6 @@ package app.ui.chat;
 import app.chat.model.MessageRole;
 import app.ui.UiFonts;
 import javafx.geometry.Pos;
-import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -16,7 +15,6 @@ final class WorkbenchTheme {
     private static final String ASSETS = "/ui/workbench/";
     private static final Font DISPLAY = loadFont("closure-display.ttf", 20);
     private static final Font PIXEL = loadFont("closure-pixel.ttf", 13);
-    private static final Image MASCOT = loadImage("/animations/closure/open/frame_096.png");
     static final Image NEW_SESSION = loadImage(ASSETS + "plus-pixel.png");
     static final Image OPEN_DIRECTORY = loadImage(ASSETS + "folder-open-glow.png");
     static final Image DIRECTORY = loadImage(ASSETS + "folder-closed-glow.png");
@@ -51,14 +49,7 @@ final class WorkbenchTheme {
         name.getStyleClass().add("workbench-welcome-name");
         UiFonts.applyJavaFxFont(name, 23);
 
-        ImageView mascot = new ImageView(MASCOT);
-        mascot.setViewport(new Rectangle2D(56, 84, 86, 98));
-        mascot.setPreserveRatio(true);
-        mascot.setFitHeight(104);
-        mascot.setSmooth(false);
-        mascot.setMouseTransparent(true);
-
-        VBox welcome = new VBox(9, mascot, name);
+        VBox welcome = new VBox(9, new WorkbenchMascot(), name);
         welcome.setAlignment(Pos.CENTER);
         return welcome;
     }

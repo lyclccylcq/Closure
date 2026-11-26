@@ -23,6 +23,7 @@ import app.ui.chat.ChatWindow;
 import app.ui.chat.WorkbenchWindow;
 import app.ui.pet.PetAction;
 import app.ui.pet.PetAnimationPanel;
+import app.ui.pet.PetMenuTheme;
 import app.ui.pet.TranslucentWindowPainter;
 import app.ui.quick.PetSpeechBubbleWindow;
 import app.ui.reminder.CourseScheduleWindow;
@@ -38,6 +39,8 @@ import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -1191,6 +1194,7 @@ public class PetWindow extends JFrame {
         chatItem.setFont(menuFont);
         JMenuItem workbenchItem = new JMenuItem("工作台");
         workbenchItem.setFont(menuFont);
+        workbenchItem.setIcon(PetMenuTheme.workbenchIcon());
         workbenchItem.addActionListener(e -> openWorkbenchWindow());
 
         // 创建定时提醒菜单项
@@ -1218,8 +1222,9 @@ public class PetWindow extends JFrame {
         exitItem.addActionListener(e -> exitApplication());
 
         // 把“通讯”加入菜单
-        popupMenu.add(chatItem);
         popupMenu.add(workbenchItem);
+        popupMenu.add(chatItem);
+        popupMenu.addSeparator();
 
         JMenu characterActions = new JMenu("动作");
         characterActions.setFont(menuFont);
@@ -1256,6 +1261,7 @@ public class PetWindow extends JFrame {
 
         // 把“下线”加入菜单
         popupMenu.add(exitItem);
+        PetMenuTheme.apply(popupMenu);
     }
 
     /**
@@ -1283,12 +1289,21 @@ public class PetWindow extends JFrame {
     }
 
     private void openWorkbenchWindow() {
+        pauseRoaming();
+        hideSpeechBubble();
         if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
             workbenchWindow = new WorkbenchWindow();
+            workbenchWindow.addComponentListener(new ComponentAdapter() {
+                @Override public void componentHidden(ComponentEvent event) {
+                    if (!workbenchWindow.isVisible()) restorePetAlwaysOnTop();
+                }
+            });
         }
+        setAlwaysOnTop(false);
         workbenchWindow.setVisible(true);
         workbenchWindow.setExtendedState(workbenchWindow.getExtendedState() & ~JFrame.ICONIFIED);
         workbenchWindow.toFront();
+        workbenchWindow.requestFocus();
     }
 
     /**
