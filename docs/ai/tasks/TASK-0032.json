@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0032",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "修复桌宠工作台入口并统一模型与菜单",
+  "objective": "让用户桌面启动的 Closure 可以从桌宠右键进入工作台，工作台角色采用指定资源包的本地模型，桌宠右键菜单与深靛色工作台保持一致。",
+  "architecture": [
+    "Codex 直接在独立副本修复。核对用户桌面的启动脚本，交付后把现有启动入口接到精确合并版本，并保留现有运行配置路径。",
+    "在仓库提供可重复使用的桌面启动脚本，明确区分工程目录与运行配置目录，支持离线与既有启动自检。桌宠打开工作台时处理置前、焦点和重开。",
+    "工作台从本机素材目录读取由指定 dsh-closure-pet 的 idle.webm 转换的透明动画。提供只处理本地输入的导入工具，素材存入本机用户目录，程序内复用本地精灵图并在场景隐藏时暂停。",
+    "桌宠菜单使用局部 Swing 绘制，统一深靛背景、浅紫选中、图标、子菜单及勾选样式，工作台入口优先显示。",
+    "候选通过真实回归后发布 PR、等待必要 CI、合并精确受审提交，再核对主分支 CI 和交付版构建、启动及本地入口。"
+  ],
+  "non_goals": [
+    "修改桌宠现有 Spine 动画和对话头像，导入 DSH 插件运行时或计费逻辑，发布限定本机使用的角色视频和导出动画到公共仓库，迁移或读取私有配置内容。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "pom.xml",
+    "scripts/launch-desktop.command",
+    "scripts/launch_desktop.py",
+    "scripts/import_workbench_mascot.py",
+    "scripts/tests/test_launch_desktop.py",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/pet/PetMenuTheme.java",
+    "src/main/java/app/ui/chat/WorkbenchTheme.java",
+    "src/main/java/app/ui/chat/WorkbenchMascot.java",
+    "src/main/resources/ui/workbench/NOTICE.md",
+    "src/test/java/app/ui/pet/PetPointerWindowTest.java",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "代码提供可以从工程副本启动桌宠的可靠入口，可指定既有配置的运行目录。桌宠右键可打开并置前工作台，隐藏后可重开。",
+      "verification": "核对实际桌面启动旧目标，验证新启动脚本的真实离线自检及原生右键菜单到工作台的完整窗口状态。交付后的用户入口单独记录。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "工作台可显示本机导入的资源包可露透明模型，动画能够循环并随工作台隐藏暂停，原对话头像继续使用现有文件。",
+      "verification": "核验上游模型文件摘要与本地导入、实际动画截图、帧变化及隐藏恢复，核对未改动头像和公共提交的文件列表。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "桌宠右键菜单与工作台的深靛色、浅紫高亮一致，子菜单、勾选和主要操作有清晰的可见状态。",
+      "verification": "检查真实右键菜单及动作子菜单截图，执行工作台、通讯和自主走动相关原生窗口回归。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "本轮候选通过范围检查、可信测试、打包和离线启动，附三项问题的实际验证证据。",
+      "verification": "运行冻结工程检查和相关本机窗口回归，审查精确提交的完整改动及日志。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "限定个人使用的角色动画只安装到用户本机。没有本地素材时继续显示已有角色画面。",
+    "原生回归使用本地模型替身和合成项目，普通启动沿用用户已有的运行目录。"
+  ],
+  "rollback": "通过常规 PR 回退本任务合并，恢复备份的桌面启动入口，检查桌宠通讯和离线启动。",
+  "review_budget": {
+    "max_diff_bytes": 105000
+  }
+}

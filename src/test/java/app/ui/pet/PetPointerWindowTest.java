@@ -165,12 +165,35 @@ class PetPointerWindowTest {
             assertEquals(CharacterState.IDLE,character.state());
 
             JPopupMenu popup=(JPopupMenu)field(window,"popupMenu");
+            var right=new MouseEvent(panel,MouseEvent.MOUSE_PRESSED,System.currentTimeMillis(),0,
+                    110,145,window.getX()+110,window.getY()+145,1,true,MouseEvent.BUTTON3);
+            for(var listener:panel.getMouseListeners()) listener.mousePressed(right);
+            assertTrue(popup.isShowing());
+            assertEquals(new java.awt.Color(0x1b1831),popup.getBackground());
+            assertEquals("工作台",((JMenuItem)popup.getComponent(0)).getText());
+            captureMenu(popup,"pet-menu.png");
+            JMenu actions=java.util.Arrays.stream(popup.getComponents()).filter(JMenu.class::isInstance)
+                    .map(JMenu.class::cast).findFirst().orElseThrow();
+            actions.setPopupMenuVisible(true);
+            assertEquals(popup.getBackground(),actions.getPopupMenu().getBackground());
+            JCheckBoxMenuItem autonomous=java.util.Arrays.stream(actions.getMenuComponents())
+                    .filter(JCheckBoxMenuItem.class::isInstance).map(JCheckBoxMenuItem.class::cast)
+                    .findFirst().orElseThrow();
+            assertTrue(autonomous.isSelected());
+            autonomous.setArmed(true);
+            captureMenu(actions.getPopupMenu(),"pet-actions-menu.png");
+            actions.setPopupMenuVisible(false);
             javax.swing.JMenuItem workbenchItem=java.util.Arrays.stream(popup.getComponents())
                     .filter(javax.swing.JMenuItem.class::isInstance).map(javax.swing.JMenuItem.class::cast)
                     .filter(item -> "工作台".equals(item.getText())).findFirst().orElseThrow();
-            workbenchItem.doClick();
+            for (int id : new int[] {MouseEvent.MOUSE_ENTERED,MouseEvent.MOUSE_PRESSED,MouseEvent.MOUSE_RELEASED}) {
+                workbenchItem.dispatchEvent(new MouseEvent(workbenchItem,id,System.currentTimeMillis(),0,
+                        workbenchItem.getWidth()/2,workbenchItem.getHeight()/2,1,false,MouseEvent.BUTTON1));
+            }
             var workbench=(app.ui.chat.WorkbenchWindow)field(window,"workbenchWindow");
             assertTrue(workbench.isShowing());
+            assertFalse(window.isAlwaysOnTop());
+            popup.setVisible(false);
             workbench.setVisible(false);
             workbenchItem.doClick();
             assertSame(workbench,field(window,"workbenchWindow"));
@@ -180,6 +203,16 @@ class PetPointerWindowTest {
         assertEquals(0,aiCalls.get());
         assertEquals(0,speechCalls.get());
         System.out.println("CLOSURE_POINTER_NATIVE_PASS pressed=true waistLift=true dragFacing=true landing=true dragClickSuppressed=true dialog=true noModelCalls=true");
+    }
+
+    private void captureMenu(JPopupMenu menu,String name) throws Exception {
+        String output=System.getProperty("closure.menuEvidence");
+        if(output==null) return;
+        BufferedImage image=new BufferedImage(menu.getWidth(),menu.getHeight(),BufferedImage.TYPE_INT_ARGB);
+        var graphics=image.createGraphics();
+        try{menu.paint(graphics);}finally{graphics.dispose();}
+        Path directory=Path.of(output);Files.createDirectories(directory);
+        assertTrue(ImageIO.write(image,"png",directory.resolve(name).toFile()));
     }
 
     private void press(Point screen,int count){

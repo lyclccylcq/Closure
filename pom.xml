@@ -17,6 +17,7 @@
         <javafx.version>21.0.6</javafx.version>
         <closure.smokeTest>false</closure.smokeTest>
         <closure.animation>spine</closure.animation>
+        <javafx.workingDirectory>${project.basedir}</javafx.workingDirectory>
     </properties>
 
     <dependencies>
@@ -87,6 +88,7 @@
                         <id>default-cli</id>
                         <configuration>
                             <mainClass>com.example.closure/app.Main</mainClass>
+                            <workingDirectory>${javafx.workingDirectory}</workingDirectory>
                             <options>
                                 <option>-Dclosure.smokeTest=${closure.smokeTest}</option>
                                 <option>-Dclosure.animation=${closure.animation}</option>

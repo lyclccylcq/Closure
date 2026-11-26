@@ -13,12 +13,14 @@ import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.Region;
+import javafx.geometry.Rectangle2D;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +39,7 @@ class WorkbenchWindowTest {
     private WorkbenchWindow window;
     private final List<ChatWindowLifecycleTest.Client> clients = new ArrayList<>();
     private final List<ChatService> services = new ArrayList<>();
+    private String previousMascotDirectory;
 
     @AfterEach
     void dispose() throws Exception {
@@ -46,10 +49,28 @@ class WorkbenchWindowTest {
             return null;
         });
         await(() -> clients.stream().allMatch(client -> client.closed.get()));
+        if (previousMascotDirectory == null) System.clearProperty("closure.workbenchMascotDirectory");
+        else System.setProperty("closure.workbenchMascotDirectory", previousMascotDirectory);
     }
 
     @Test
     void workbenchRetainsSessionsAndPreviewsOnlyTheSelectedProjectFile() throws Exception {
+        previousMascotDirectory = System.getProperty("closure.workbenchMascotDirectory");
+        if (previousMascotDirectory == null) {
+            Path mascot = Files.createDirectory(temporary.resolve("mascot"));
+            BufferedImage sheet = new BufferedImage(40, 20, BufferedImage.TYPE_INT_ARGB);
+            var graphics = sheet.createGraphics();
+            try {
+                graphics.setColor(java.awt.Color.MAGENTA);
+                graphics.fillRect(0, 0, 20, 20);
+                graphics.setColor(java.awt.Color.CYAN);
+                graphics.fillRect(20, 0, 20, 20);
+            } finally { graphics.dispose(); }
+            ImageIO.write(sheet, "png", mascot.resolve("idle-test.png").toFile());
+            Files.writeString(mascot.resolve("idle.properties"),
+                    "image=idle-test.png\nwidth=20\nheight=20\ncolumns=2\nframes=2\nfps=12\n");
+            System.setProperty("closure.workbenchMascotDirectory", mascot.toString());
+        }
         Path project = Files.createDirectory(temporary.resolve("示例项目"));
         Path sources = Files.createDirectory(project.resolve("src"));
         String source = """
@@ -81,6 +102,18 @@ class WorkbenchWindowTest {
         });
         int initialWidth = swing(() -> window.getContentPane().getWidth());
         await(() -> Math.abs(view().getWidth() - initialWidth) <= 1);
+        WorkbenchMascot mascot = fx(() -> (WorkbenchMascot) view().lookup("#workbench-mascot"));
+        assertEquals("dsh-closure-pet", fx(() -> mascot.getProperties().get("source")));
+        await(mascot::isPlaying);
+        Rectangle2D firstFrame = fx(mascot::getViewport);
+        await(() -> !firstFrame.equals(mascot.getViewport()));
+        swing(() -> { window.setVisible(false); return null; });
+        await(() -> !mascot.isPlaying());
+        Rectangle2D pausedFrame = fx(mascot::getViewport);
+        TimeUnit.MILLISECONDS.sleep(200);
+        assertEquals(pausedFrame, fx(mascot::getViewport));
+        swing(() -> { window.setVisible(true); return null; });
+        await(mascot::isPlaying);
         fx(() -> {
             var brand = (Label) view().lookup(".workbench-brand");
             assertEquals("Closure Display", brand.getFont().getFamily());
@@ -230,7 +263,7 @@ class WorkbenchWindowTest {
         assertEquals(answer, next.request().getMessages().get(2).getContent());
         next.finish("先确认工作台能正常打开。");
         await(() -> services.getFirst().completedTurns().size() == 2);
-        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS layout=true theme=true sessions=true multiline=true restore=true preview=true");
+        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS mascot=true layout=true theme=true sessions=true multiline=true restore=true preview=true");
     }
 
     private void assertButtonGraphic(String id) {
