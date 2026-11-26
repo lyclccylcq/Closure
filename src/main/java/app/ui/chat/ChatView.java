@@ -14,6 +14,7 @@ import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
@@ -63,25 +64,36 @@ final class ChatView extends BorderPane {
         this.onUserMessage=onUserMessage;
         workbench=onUserMessage!=null;
         characterActivity=new ChatActivity(activityListener);
-        setStyle(ChatStyles.BACKGROUND_STYLE);
-
         messageBox=new VBox(18);
         messageBox.setPadding(new Insets(14));
         messageBox.setFillWidth(true);
-        messageBox.setStyle(ChatStyles.BACKGROUND_STYLE);
         scrollPane=new ScrollPane(messageBox);
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        scrollPane.setStyle(ChatStyles.BACKGROUND_STYLE+" -fx-background: #080c12; -fx-border-color: transparent;");
         messageBox.heightProperty().addListener((observable,oldHeight,newHeight) -> scrollToLatestMessage());
         setCenter(scrollPane);
-        setBottom(new ChatInputBar(this::handleUserMessage,this::cancelReplies,
-                workbench ? null : this::startNewConversation));
+        ChatInputBar composer=new ChatInputBar(this::handleUserMessage,this::cancelReplies,
+                workbench ? null : this::startNewConversation);
+        if(workbench){
+            getStyleClass().add("workbench-chat");
+            scrollPane.getStyleClass().add("workbench-messages");
+            Label shortcut=new Label("Enter 发送 · Shift+Enter 换行");
+            shortcut.getStyleClass().add("workbench-shortcut");
+            VBox dock=new VBox(composer,shortcut);
+            dock.getStyleClass().add("workbench-chat-dock");
+            setBottom(dock);
+        }else{
+            setStyle(ChatStyles.BACKGROUND_STYLE);
+            messageBox.setStyle(ChatStyles.BACKGROUND_STYLE);
+            scrollPane.setStyle(ChatStyles.BACKGROUND_STYLE+" -fx-background: #080c12; -fx-border-color: transparent;");
+            setBottom(composer);
+        }
 
         List<app.service.ConversationHistory.Turn> turns=chatService.completedTurns();
         if(turns.isEmpty()){
-            if(!workbench) addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
+            if(workbench) setCenter(WorkbenchTheme.welcome());
+            else addMessage(new ChatMessage(MessageRole.CLOSURE,OPENING));
         }else{
             for(var turn:turns){
                 addMessage(new ChatMessage(MessageRole.USER,turn.userText()));
@@ -93,6 +105,7 @@ final class ChatView extends BorderPane {
 
     private void handleUserMessage(String userText){
         if(disposed) return;
+        if(workbench && getCenter()!=scrollPane) setCenter(scrollPane);
         if(onUserMessage!=null) onUserMessage.accept(userText);
         addMessage(new ChatMessage(MessageRole.USER,userText));
         MessageBubble bubble=addMessage(new ChatMessage(MessageRole.CLOSURE,"等待回复..."));

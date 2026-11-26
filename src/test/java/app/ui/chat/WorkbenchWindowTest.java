@@ -8,12 +8,14 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TreeView;
+import javafx.scene.image.ImageView;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -74,19 +76,28 @@ class WorkbenchWindowTest {
             return null;
         });
         fx(() -> {
-            assertNotNull(view().lookup("#workbench-open-project"));
+            var brand = (Label) view().lookup(".workbench-brand");
+            assertEquals("Closure Display", brand.getFont().getFamily());
+            var section = (Label) view().lookup(".workbench-title");
+            assertEquals("Closure Pixel", section.getFont().getFamily());
+            assertNotNull(view().lookup(".workbench-welcome"));
+            assertButtonGraphic("workbench-new-session");
+            assertButtonGraphic("workbench-open-project");
+            capture("workbench-welcome");
             view().openProject(project);
             return null;
         });
 
-        String firstPrompt = "帮我整理工作台界面的启动检查。\n先核对入口，再看项目文件。";
+        String firstPrompt = "工作台启动检查\n帮我核对桌宠入口和项目文件预览。";
         send(firstPrompt);
         var first = fx(clients::getFirst).take();
         assertEquals(firstPrompt, first.request().getMessages().getLast().getContent());
 
         fx(() -> {
+            assertNull(view().lookup(".workbench-welcome"));
             ((Button) view().lookup("#workbench-new-session")).fire();
             assertEquals(2, sessions().getItems().size());
+            assertNotNull(view().lookup(".workbench-welcome"));
             return null;
         });
         send("这条写给另一段会话。");
@@ -99,7 +110,7 @@ class WorkbenchWindowTest {
         other.cancelled().get(5, TimeUnit.SECONDS);
         assertFalse(first.cancelled().isDone());
 
-        String answer = "先确认工作台能打开，再选一个目录，预览入口文件。";
+        String answer = "先从桌宠右键菜单打开工作台，再选择示例项目。打开 src/WorkspaceTask.java，确认能看到中文注释。";
         first.finish(answer);
         await(() -> services.getFirst().completedTurns().size() == 1);
         fx(() -> {
@@ -143,15 +154,7 @@ class WorkbenchWindowTest {
             assertEquals(2, sessions().getItems().size());
             assertTrue(shows(answer));
             assertEquals(source, preview().getText());
-            if (Boolean.getBoolean("closure.workbenchPreview")) {
-                view().applyCss();
-                view().layout();
-                Path screenshot = Path.of("target/workbench-preview.png").toAbsolutePath();
-                Files.createDirectories(screenshot.getParent());
-                assertTrue(ImageIO.write(SwingFXUtils.fromFXImage(view().snapshot(null, null), null),
-                        "png", screenshot.toFile()));
-                System.out.println("Workbench screenshot " + screenshot);
-            }
+            capture("workbench-preview");
             return null;
         });
 
@@ -166,6 +169,7 @@ class WorkbenchWindowTest {
                 Button button = (Button) bar.getChildren().get(index);
                 assertTrue(button.getWidth() >= button.prefWidth(-1) - 1);
             }
+            capture("workbench-narrow");
             return null;
         });
 
@@ -175,7 +179,25 @@ class WorkbenchWindowTest {
         assertEquals(answer, next.request().getMessages().get(2).getContent());
         next.finish("先确认工作台能正常打开。");
         await(() -> services.getFirst().completedTurns().size() == 2);
-        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS sessions=true multiline=true restore=true preview=true");
+        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS theme=true sessions=true multiline=true restore=true preview=true");
+    }
+
+    private void assertButtonGraphic(String id) {
+        Button button = (Button) view().lookup("#" + id);
+        var graphic = assertInstanceOf(ImageView.class, button.getGraphic());
+        assertFalse(graphic.getImage().isError());
+        assertTrue(graphic.getImage().getWidth() > 0);
+    }
+
+    private void capture(String name) throws IOException {
+        if (!Boolean.getBoolean("closure.workbenchPreview")) return;
+        view().applyCss();
+        view().layout();
+        Path screenshot = Path.of("target", name + ".png").toAbsolutePath();
+        Files.createDirectories(screenshot.getParent());
+        assertTrue(ImageIO.write(SwingFXUtils.fromFXImage(view().snapshot(null, null), null),
+                "png", screenshot.toFile()));
+        System.out.println("Workbench screenshot " + screenshot);
     }
 
     private WorkbenchView view() {

@@ -11,6 +11,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -56,11 +57,10 @@ final class WorkbenchProjectPane extends VBox {
     WorkbenchProjectPane(Consumer<Consumer<Path>> chooseProject) {
         super(12);
         getStyleClass().add("workbench-project");
-        Label caption = new Label("项目文件");
-        caption.getStyleClass().add("workbench-heading");
+        Label caption = WorkbenchTheme.heading("项目文件");
         caption.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(caption, Priority.ALWAYS);
-        Button choose = new Button("选择目录");
+        Button choose = new Button("选择目录", WorkbenchTheme.icon(WorkbenchTheme.OPEN_DIRECTORY));
         choose.setId("workbench-open-project");
         choose.getStyleClass().add("workbench-action");
         choose.setOnAction(event -> chooseProject.accept(this::openProject));
@@ -75,16 +75,24 @@ final class WorkbenchProjectPane extends VBox {
         files.setAccessibleText("项目文件树");
         files.getStyleClass().add("workbench-file-tree");
         files.setCellFactory(tree -> new TreeCell<>() {
+            private final ImageView folder = WorkbenchTheme.icon(WorkbenchTheme.DIRECTORY);
+
             @Override
             protected void updateItem(Entry item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.label());
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    setText(item.label());
+                    setGraphic(item.directory() ? folder : null);
+                }
             }
         });
         files.getSelectionModel().selectedItemProperty().addListener((property, previous, selected) ->
                 display(selected == null ? null : selected.getValue()));
 
-        previewTitle.getStyleClass().add("workbench-heading");
+        previewTitle.getStyleClass().add("workbench-preview-title");
         previewTitle.setMaxWidth(Double.MAX_VALUE);
         preview.setId("workbench-file-preview");
         preview.setAccessibleText("UTF-8 文件预览");

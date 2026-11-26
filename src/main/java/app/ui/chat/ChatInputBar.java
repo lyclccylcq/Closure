@@ -45,8 +45,6 @@ final class ChatInputBar extends HBox {
 
         setPadding(new Insets(10,12,12,12));
         setAlignment(Pos.CENTER);
-        setStyle(ChatStyles.BACKGROUND_STYLE);
-
         UiFonts.applyJavaFxFont(inputField,14);
 
         Button sendButton=new Button("发送");
@@ -66,6 +64,7 @@ final class ChatInputBar extends HBox {
             stopButton.getStyleClass().add("workbench-stop");
             stopButton.setMinWidth(Region.USE_PREF_SIZE);
         }else{
+            setStyle(ChatStyles.BACKGROUND_STYLE);
             inputField.setStyle(ChatStyles.INPUT_STYLE);
             sendButton.setStyle(ChatStyles.BUTTON_STYLE);
             stopButton.setStyle(ChatStyles.BUTTON_STYLE);

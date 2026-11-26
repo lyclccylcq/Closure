@@ -1,7 +1,6 @@
 package app.ui.chat;
 
 import app.service.ChatService;
-import app.ui.UiFonts;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.geometry.Pos;
@@ -32,28 +31,22 @@ final class WorkbenchView extends BorderPane {
         this.services = services;
         project = new WorkbenchProjectPane(chooseProject);
         getStyleClass().add("workbench");
-        setStyle(UiFonts.fxStyle(""));
         getStylesheets().add(Objects.requireNonNull(getClass().getResource("/ui/workbench.css")).toExternalForm());
 
-        Label brand = new Label("Closure");
-        brand.getStyleClass().add("workbench-brand");
-        Label title = new Label("工作台");
+        Label brand = WorkbenchTheme.wordmark();
+        Label title = WorkbenchTheme.heading("工作台");
         title.getStyleClass().add("workbench-title");
-        HBox top = new HBox(12, brand, title);
+        HBox top = new HBox(16, brand, title);
         top.getStyleClass().add("workbench-top");
         top.setAlignment(Pos.CENTER_LEFT);
         setTop(top);
 
-        Label heading = new Label("会话");
-        heading.getStyleClass().add("workbench-heading");
-        Button add = new Button("＋ 新会话");
+        Label heading = WorkbenchTheme.heading("会话");
+        Button add = new Button("新会话", WorkbenchTheme.icon(WorkbenchTheme.NEW_SESSION));
         add.setId("workbench-new-session");
         add.getStyleClass().add("workbench-action");
+        add.setMaxWidth(Double.MAX_VALUE);
         add.setOnAction(event -> newSession());
-        HBox navigationHeader = new HBox(8, heading, add);
-        navigationHeader.setAlignment(Pos.CENTER_LEFT);
-        heading.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(heading, Priority.ALWAYS);
 
         sessions.setId("workbench-sessions");
         sessions.setAccessibleText("工作台会话");
@@ -88,7 +81,7 @@ final class WorkbenchView extends BorderPane {
             }
         });
 
-        VBox navigation = new VBox(12, navigationHeader, sessions);
+        VBox navigation = new VBox(13, heading, add, sessions);
         navigation.setMinWidth(162);
         navigation.getStyleClass().add("workbench-navigation");
         VBox.setVgrow(sessions, Priority.ALWAYS);
