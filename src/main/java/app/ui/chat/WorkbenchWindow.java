@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.character.CharacterActivityListener;
 import app.service.ChatSpeechController;
 import app.ui.UiFonts;
 import javafx.application.Platform;
@@ -40,6 +41,10 @@ public final class WorkbenchWindow extends JFrame {
         this(ChatService::new, speech, false);
     }
 
+    public WorkbenchWindow(ChatSpeechController speech, CharacterActivityListener activity) {
+        this(ChatService::new, speech, false, activity);
+    }
+
     /** Real workbench UI with no user configuration or external model/voice services. */
     public static WorkbenchWindow startupSmokeWindow() {
         return startupSmokeWindow(null);
@@ -65,7 +70,16 @@ public final class WorkbenchWindow extends JFrame {
         this(sessions, speech, false);
     }
 
+    WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech, CharacterActivityListener activity) {
+        this(sessions, speech, false, activity);
+    }
+
     private WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech, boolean ownsSpeech) {
+        this(sessions, speech, ownsSpeech, CharacterActivityListener.NONE);
+    }
+
+    private WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech, boolean ownsSpeech,
+                            CharacterActivityListener activity) {
         super("Closure 工作台");
         this.speech = speech;
         this.ownsSpeech = ownsSpeech;
@@ -87,7 +101,7 @@ public final class WorkbenchWindow extends JFrame {
         Platform.runLater(() -> {
             if (!disposed) {
                 try {
-                    view = new WorkbenchView(sessions, this::chooseProject, speech);
+                    view = new WorkbenchView(sessions, this::chooseProject, speech, activity);
                     view.setVisible(windowVisible);
                     panel.setScene(new Scene(view));
                     firstFrame = new AnimationTimer() {

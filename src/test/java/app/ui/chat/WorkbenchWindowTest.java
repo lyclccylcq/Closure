@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.character.CharacterActivityListener;
 import app.ui.UiFonts;
 import app.service.AssistantSpeechService;
 import app.service.ChatSpeechController;
@@ -54,6 +55,7 @@ class WorkbenchWindowTest {
     private final BlockingQueue<String> spoken = new LinkedBlockingQueue<>();
     private final AtomicInteger speechStops = new AtomicInteger();
     private ChatSpeechController speech;
+    private final AtomicInteger activeRequests = new AtomicInteger();
 
     @AfterEach
     void dispose() throws Exception {
@@ -121,7 +123,12 @@ class WorkbenchWindowTest {
                 clients.add(client);
                 services.add(service);
                 return service;
-            }, speech);
+            }, speech, new CharacterActivityListener() {
+                @Override public Runnable thinkingStarted() {
+                    activeRequests.incrementAndGet();
+                    return activeRequests::decrementAndGet;
+                }
+            });
             window.setVisible(true);
             assertTrue(window.isShowing());
             return null;
@@ -176,6 +183,7 @@ class WorkbenchWindowTest {
             return null;
         });
         var first = fx(clients::getFirst).take();
+        await(() -> activeRequests.get() == 1);
         assertEquals(firstPrompt, first.request().getMessages().getLast().getContent());
 
         fx(() -> {
@@ -193,11 +201,13 @@ class WorkbenchWindowTest {
             return null;
         });
         other.cancelled().get(5, TimeUnit.SECONDS);
+        await(() -> activeRequests.get() == 1);
         assertFalse(first.cancelled().isDone());
 
         String answer = "先从桌宠右键菜单打开工作台，再选择示例项目。打开 src/WorkspaceTask.java，确认能看到中文注释。";
         first.finish(answer);
         await(() -> services.getFirst().completedTurns().size() == 1);
+        await(() -> activeRequests.get() == 0);
         fx(() -> {
             assertFalse(shows(answer));
             assertTrue(spoken.isEmpty(),"An off-screen conversation must retain text without speaking");

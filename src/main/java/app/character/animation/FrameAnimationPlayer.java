@@ -90,9 +90,11 @@ public final class FrameAnimationPlayer implements AnimationPlayer {
         return animationTimer != null && animationTimer.isRunning();
     }
 
+    @Override public boolean supportsWalking() { return false; }
+
     private PetAction actionFor(AnimationType animation) {
         return switch (animation) {
-            case IDLE, WALK, PRESSED, DRAGGING, LANDING, TALK, TAP, GREETING, HAPPY, THINKING, THINKING_TALK, SLEEP -> PetAction.OPEN;
+            case IDLE, WALK, PRESSED, DRAGGING, LANDING, TALK, TAP, GREETING, HAPPY, SAD, THINKING, THINKING_TALK, SLEEP -> PetAction.OPEN;
         };
     }
 

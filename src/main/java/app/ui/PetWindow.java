@@ -291,7 +291,7 @@ public class PetWindow extends JFrame {
 
     private PetWindow(boolean startupSmoke, Supplier<WorkbenchWindow> workbenches) {
         UiFonts.applySwingDefaults();
-        workbenchFactory = workbenches == null ? () -> new WorkbenchWindow(speechController) : workbenches;
+        workbenchFactory = workbenches == null ? () -> new WorkbenchWindow(speechController, characterController) : workbenches;
 
         // 初始化窗口基本属性
         initWindow();
@@ -323,14 +323,15 @@ public class PetWindow extends JFrame {
         // 初始化手动事件提醒
         initEventReminder();
 
+        // 菜单动作取决于当前模型，先选择播放器再创建菜单。
+        openPetModel();
+
         // 初始化右键菜单
         initPopupMenu();
 
         // 初始化桌面闲置随机对白
         initIdleChatterTimer();
 
-        // 程序启动后直接显示可露希尔模型。
-        openPetModel();
         startIdleSleepTimer();
         startRoamingTimer();
         playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
@@ -658,6 +659,7 @@ public class PetWindow extends JFrame {
 
     private void tickRoaming() {
         if (roamingController == null || characterController == null || petAnimationPanel == null) return;
+        if (!petAnimationPanel.supportsWalking()) return;
         CharacterState state = characterController.state();
         boolean available = isShowing() && !petMousePressed && getMousePosition(true) == null
                 && (popupMenu == null || !popupMenu.isVisible())
@@ -1246,15 +1248,28 @@ public class PetWindow extends JFrame {
         walkAction.addActionListener(event -> startManualWalk());
         sleepAction.addActionListener(event -> playAnimation(AnimationType.SLEEP));
         characterActions.add(idleAction);
-        characterActions.add(walkAction);
+        boolean walkingAvailable = petAnimationPanel != null && petAnimationPanel.supportsWalking();
+        if (walkingAvailable) characterActions.add(walkAction);
+        if (!walkingAvailable) sleepAction.setText("安静待机");
         characterActions.add(sleepAction);
+        if (!walkingAvailable) {
+            String[] labels = {"打招呼", "互动", "开心", "难过"};
+            AnimationType[] actions = {AnimationType.GREETING, AnimationType.TAP, AnimationType.HAPPY, AnimationType.SAD};
+            for (int i = 0; i < labels.length; i++) {
+                JMenuItem action = new JMenuItem(labels[i]);
+                action.setFont(menuFont);
+                AnimationType type = actions[i];
+                action.addActionListener(event -> playAnimation(type));
+                characterActions.add(action);
+            }
+        }
         autonomousWalkAction = new JCheckBoxMenuItem("自主走动", true);
         autonomousWalkAction.setFont(menuFont);
         autonomousWalkAction.addActionListener(event -> {
             pauseRoaming();
             if (roamingController != null) roamingController.setEnabled(autonomousWalkAction.isSelected());
         });
-        characterActions.add(autonomousWalkAction);
+        if (walkingAvailable) characterActions.add(autonomousWalkAction);
         popupMenu.add(characterActions);
 
         // 添加一条分隔线

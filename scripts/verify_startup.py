@@ -14,7 +14,9 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+from pet_smoke_assets import fixture_assets
 
 MARKER = "CLOSURE_STARTUP_SMOKE_PASS"
 PET_ONLY_MARKER = "CLOSURE_PET_STARTUP_ONLY_PASS"
@@ -99,6 +101,7 @@ def main(argv=None):
     parser.add_argument("--pet-only", action="store_true", help="compatibility option; startup is always pet-only")
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--log", help="optional startup output file")
+    parser.add_argument("--assets-directory", type=Path, help="explicit local v2 model directory; never falls back to fixtures")
     args = parser.parse_args(argv)
     try:
         if not 0 < args.timeout <= 600:
@@ -110,11 +113,22 @@ def main(argv=None):
                and not key.startswith(("CLOSURE_", "ANTHROPIC_", "OPENAI_", "AWS_", "AZURE_", "GOOGLE_"))}
         env["JAVA_HOME"] = str(selected_home)
         env["PATH"] = str(selected_home / "bin") + os.pathsep + env.get("PATH", "")
-        text = execute(smoke_command(repo, args.offline, environ=env), repo, env, args.timeout)
+        assets = args.assets_directory or Path.home() / ".closure/assets/pet"
+        with tempfile.TemporaryDirectory(prefix="closure-synthetic-model-") as temporary:
+            synthetic = args.assets_directory is None and not (assets / "model.properties").is_file()
+            if synthetic:
+                assets = fixture_assets(temporary)
+            elif not (assets / "model.properties").is_file():
+                raise StartupError("Requested v2 model directory has no model.properties")
+            env["CLOSURE_PET_ASSETS_DIRECTORY"] = str(assets.resolve())
+            text = execute(smoke_command(repo, args.offline, environ=env), repo, env, args.timeout)
+            if "CLOSURE_NEW_MODEL_READY renderer=sprite fps=30" not in text:
+                raise StartupError("Startup did not use the new model player\n" + text[-6000:])
         if args.log:
             Path(args.log).write_text(text)
         print(json.dumps({"status": "PASS", "marker": MARKER, "java_home": str(selected_home),
                           "scope": "Real pet-only startup; workbench not created",
+                          "model_assets": "synthetic CI fixture" if synthetic else "local supplied artwork",
                           "external_services": "skipped", "user_reminders": "skipped"}))
         return 0
     except (StartupError, OSError, subprocess.SubprocessError) as failure:

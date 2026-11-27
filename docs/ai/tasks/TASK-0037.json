@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0037",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "将新版可露透明动画设为默认桌宠并保存旧版分支",
+  "objective": "默认桌宠使用 dsh-closure-pet 新版角色及动画，保留正式聊天与 TTS、拖动及菜单工作台入口；更换前完整版本保存到独立远端分支，原桌面入口安装可运行版本。",
+  "architecture": [
+    "用户明确要求进行模型更换并将旧版单独保存为分支。Codex direct implementation，基于 main e24bc071dbca95193fd902b8441078ac59e6cdaa 的独立副本；旧版保存到 codex/legacy-spine-pet-20261127，不混入原工作区未提交改动。",
+    "只采用 fengshiyangrouguan/dsh-closure-pet 固定提交 e1008aae230eeb65917593dae7de602d4c8e6204 的十二段角色动画，不引入 DSH 插件逻辑或语音音效。受限制的美术保存在用户本地资源目录，不提交衍生帧到公开仓库。",
+    "本地导入工具以 libvpx-vp9 保留透明度，生成保留 30fps 的分页面帧图、受限元数据及来源说明；原子发布导入结果。Java 后台播放器按需读取分页并限制缓存、合并 EDT 帧发布，保留比例与高分屏清晰度。",
+    "沿用 CharacterController 与共享语音回调。思考含进出场，TTS 立即切换 Talk，点击/开心/庆祝/难过一次播放后恢复当前状态。取消、抢占、stop 与 dispose 使旧回调失效。原生拖动仍移动窗口，可使用整幅图像的轻微反馈，不伪称骨骼摆动或逐字口型。",
+    "默认选择新版播放器。缺失本地美术时明确诊断并回退现有帧显示，不伪称已加载新版。CI 使用明确标注的合成资源检查相同播放器，真实本地导入和原桌面入口另有证据。旧 Spine 可显式选择以保持兼容及原生回归。",
+    "新版隐藏不具备素材的行走及自主走动菜单，保留安静待机、互动、打招呼、开心和难过等动作。只显示模型启动；工作台只由模型右键菜单延迟创建并继续共享后端/语音。",
+    "代码核对发现工作台会话原先未传入角色请求活动监听器。本轮将同一 CharacterController 接到现有 ChatActivity 的请求开始/完成/取消钩子，确保正式工作台请求能驱动新版思考；不改变会话、布局、模型协议或语音所有权。"
+  ],
+  "non_goals": [
+    "重新构建提示词、修改工作台布局和字体、引入 DSH 计费或通知逻辑、替换正式 API/TTS 配置或模型权重、真实付费生成、公开上传受限角色动画、强制关闭旧进程。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "pom.xml",
+    "docs/character/new-model.md",
+    "docs/character/spine-upgrade.md",
+    "docs/character-behavior.md",
+    "src/main/java/app/Main.java",
+    "src/main/java/app/character/CharacterController.java",
+    "src/main/java/app/character/animation/AnimationType.java",
+    "src/main/java/app/character/animation/AnimationPlayer.java",
+    "src/main/java/app/character/animation/FrameAnimationPlayer.java",
+    "src/main/java/app/character/animation/spine/SpineRenderer.java",
+    "src/main/java/app/character/animation/sprite/**",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/pet/PetAnimationPanel.java",
+    "scripts/import_pet_model.py",
+    "scripts/pet_smoke_assets.py",
+    "scripts/verify_startup.py",
+    "scripts/tests/test_pet_model_import.py",
+    "scripts/tests/test_startup.py",
+    "src/test/java/app/character/**",
+    "src/test/java/app/ui/pet/**",
+    "src/test/java/app/MainStartupWindowTest.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "旧版完整版本通过独立远端分支保存，默认安装入口显示新版可露且启动只显示模型。",
+      "verification": "核对备份分支 SHA 与更换前 main 一致；真实本地资源及安装入口原生启动证明 renderer=sprite、新版文件来源正确、没有工作台创建。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "导入完整十二段透明动画，保留 30fps、比例和半透明边缘，不将限制素材公开提交；大段动画缓存有界。",
+      "verification": "来源 Git blob 核验、导入分页数据检查、浅深背景与真实模型动作预览；元数据/路径/损坏图像/尺寸和缓存测试，审查完整提交文件清单。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "新版接入思考和真实语音生命周期，互动或情绪动画后恢复当前状态，取消和关闭不触发过期回调。",
+      "verification": "确定性时间轴及异步播放器测试；真实窗口结合本地合成语音服务检查思考、TTS 开始结束、抢占/恢复、关闭线程，无付费生成。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "模型右键菜单风格及工作台入口正常，工作台不自动打开；拖动可用，新版不暴露无素材的行走功能。",
+      "verification": "真实模型右键打开工作台并验证复用及共享语音；新模型拖动及菜单动作回归，既有旧版指针/漫游与工作台测试保持通过。"
+    },
+    {
+      "id": "AC-5",
+      "requirement": "完整复核、CI 与精确提交合并后，在原启动可露入口交付新版，保留原正式运行目录、工作台素材和 API/TTS 配置。",
+      "verification": "冻结检查、main CI、合并版构建和实际新版模型窗口回归，安装文件哈希与入口实际运行验证；不读取或覆盖私密配置。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "新版为预渲染透明动画而非骨骼工程；没有作者制作的行走或睡眠动作，不宣称支持逐字口型或原骨骼物理。",
+    "角色动画 NOTICE 限个人本机娱乐，继续本地导入；公共 CI 的合成图只覆盖技术路径，本机另验证真实美术。",
+    "现有进程和内存中的会话不强制关闭；原桌面入口重启后使用新版。"
+  ],
+  "rollback": "从 codex/legacy-spine-pet-20261127 恢复更换前代码；本地恢复备份启动入口即可重新使用旧版，保留 API/TTS 配置和所有模型资源。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}

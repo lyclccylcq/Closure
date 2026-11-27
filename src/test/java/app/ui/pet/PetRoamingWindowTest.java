@@ -10,6 +10,7 @@ import app.character.animation.spine.SpineModel;
 import app.character.animation.spine.SpineRenderer;
 import app.ui.PetWindow;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
@@ -34,6 +35,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Opt-in real pet window only: no chat services, private files, voice or other applications. */
 @EnabledIfSystemProperty(named = "closure.nativeRoamingTest", matches = "true")
 class PetRoamingWindowTest {
+    private String previousRenderer;
+    @BeforeEach void useLegacyRig() { previousRenderer = System.getProperty("closure.animation"); System.setProperty("closure.animation", "spine"); }
     private PetWindow window;
     private PetAnimationPanel panel;
     private Timer timer;
@@ -45,6 +48,8 @@ class PetRoamingWindowTest {
         if (panel != null && panel.animationPlayer() instanceof SpineAnimationPlayer spine) {
             assertTrue(spine.awaitClosed(1500));
         }
+        if (previousRenderer == null) System.clearProperty("closure.animation");
+        else System.setProperty("closure.animation", previousRenderer);
     }
 
     @Test

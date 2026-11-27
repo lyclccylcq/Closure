@@ -1,5 +1,7 @@
 # Spine character and actions
 
+The default character is now the [local v2 transparent animation model](new-model.md). This document describes the retained explicit Spine mode and the full legacy branch `codex/legacy-spine-pet-20261127`, not the default model's capabilities.
+
 The assistant uses the Spine character and action scheduler by default. On 2026-11-23 the user selected the previewed solution for adoption. Runtime licence ownership remains **unconfirmed**; selecting the solution does not establish a licence. Activation preserves the existing daily runtime's local chat customizations, private settings and voice services, with backups of the affected files.
 
 ## Run and inspect

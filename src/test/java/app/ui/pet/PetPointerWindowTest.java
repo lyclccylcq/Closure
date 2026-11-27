@@ -15,6 +15,7 @@ import app.voice.VoiceProfileRegistry;
 import app.voice.model.SpeechEmotion;
 import app.voice.model.VoiceProfile;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,6 +42,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfSystemProperty(named="closure.nativeTransitionTest",matches="true")
 class PetPointerWindowTest {
     @TempDir Path temporary;
+    private String previousRenderer;
+    @BeforeEach void useLegacyRig() { previousRenderer = System.getProperty("closure.animation"); System.setProperty("closure.animation", "spine"); }
     private PetWindow window;
     private PetAnimationPanel panel;
     private CharacterController character;
@@ -54,6 +57,8 @@ class PetPointerWindowTest {
         if(panel!=null && panel.animationPlayer() instanceof SpineAnimationPlayer spine){
             assertTrue(spine.awaitClosed(1500));
         }
+        if (previousRenderer == null) System.clearProperty("closure.animation");
+        else System.setProperty("closure.animation", previousRenderer);
     }
 
     @Test

@@ -5,6 +5,8 @@ import app.character.animation.AnimationType;
 import app.character.animation.FrameAnimationPlayer;
 import app.character.animation.spine.SpineAnimationPlayer;
 import app.character.animation.spine.SpineModel;
+import app.character.animation.sprite.SpriteAnimationPlayer;
+import app.character.animation.sprite.SpriteModel;
 
 import javax.swing.*;
 import java.awt.BorderLayout;
@@ -31,7 +33,14 @@ public final class PetAnimationPanel extends JPanel {
         add(frameLabel, BorderLayout.CENTER);
 
         AnimationPlayer selected = null;
-        if (!"frames".equals(System.getProperty("closure.animation", "spine"))) {
+        String renderer = System.getProperty("closure.animation", "sprite");
+        if ("sprite".equals(renderer)) {
+            try {
+                selected = new SpriteAnimationPlayer(frameLabel, width, height, SpriteModel.local());
+            } catch (RuntimeException failure) {
+                System.err.println("新版模型不可用，临时显示原帧素材。请按 docs/character/new-model.md 导入：" + failure.getMessage());
+            }
+        } else if ("spine".equals(renderer)) {
             try {
                 String root = System.getProperty("closure.spine.resources", SpineModel.RESOURCE_ROOT);
                 SpineModel model = root.equals(SpineModel.RESOURCE_ROOT) ? SpineModel.bundled() : SpineModel.load(root);
@@ -43,7 +52,8 @@ public final class PetAnimationPanel extends JPanel {
         }
         if (selected == null) selected = new FrameAnimationPlayer(frameLabel, width, height, fallbackIcon);
         animationPlayer = selected;
-        rendererName = selected instanceof SpineAnimationPlayer ? "spine" : "frames";
+        rendererName = selected instanceof SpriteAnimationPlayer ? "sprite"
+                : selected instanceof SpineAnimationPlayer ? "spine" : "frames";
     }
 
     public PetAnimationPanel(AnimationType initialAnimation, int width, int height, Icon fallbackIcon) {
@@ -74,6 +84,7 @@ public final class PetAnimationPanel extends JPanel {
     }
 
     public String rendererName() { return rendererName; }
+    public boolean supportsWalking() { return animationPlayer.supportsWalking(); }
 
     public boolean isFacingLeft() { return facingLeft; }
 

@@ -47,7 +47,7 @@ public final class CharacterController implements CharacterActivityListener, Aut
     public synchronized void play(AnimationType animation){
         if(closed) return;
         switch(Objects.requireNonNull(animation)){
-            case TAP, GREETING, HAPPY -> { recordActivity(); interact(animation); }
+            case TAP, GREETING, HAPPY, SAD -> { recordActivity(); interact(animation); }
             case TALK -> setTalking(true);
             case WALK -> { recordActivity(); cancelInteraction(); walking=true; refresh(); }
             case SLEEP -> { cancelInteraction(); sleeping=true; walking=false; refresh(); }
