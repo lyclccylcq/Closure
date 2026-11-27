@@ -36,12 +36,14 @@ final class ChatView extends BorderPane {
     private final ChatService chatService;
     private final SoundPlayer soundPlayer;
     private final ChatSpeechController chatSpeechController;
+    private final ChatSpeechController.SpeechSession speechSession;
     private final VBox messageBox;
     private final ScrollPane scrollPane;
     private final ChatInputBar composer;
     private final ChatActivity characterActivity;
     private final Consumer<String> onUserMessage;
     private final boolean workbench;
+    private boolean speechActive;
     private final Set<ChatService.Request> pendingRequests=new HashSet<>();
     private final Set<StreamingContentRenderer> renderers=new HashSet<>();
     private volatile boolean disposed;
@@ -57,7 +59,11 @@ final class ChatView extends BorderPane {
     }
 
     ChatView(ChatService chatService,Consumer<String> onUserMessage){
-        this(chatService,null,null,CharacterActivityListener.NONE,onUserMessage);
+        this(chatService,onUserMessage,null);
+    }
+
+    ChatView(ChatService chatService,Consumer<String> onUserMessage,ChatSpeechController speech){
+        this(chatService,null,speech,CharacterActivityListener.NONE,onUserMessage);
     }
 
     private ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController,
@@ -67,6 +73,7 @@ final class ChatView extends BorderPane {
         this.chatSpeechController=chatSpeechController;
         this.onUserMessage=onUserMessage;
         workbench=onUserMessage!=null;
+        speechSession=workbench && chatSpeechController!=null ? chatSpeechController.createSession() : null;
         characterActivity=new ChatActivity(activityListener);
         messageBox=new VBox(18);
         messageBox.setPadding(new Insets(14));
@@ -204,7 +211,13 @@ final class ChatView extends BorderPane {
         chatService.cancelReplies(pendingRequests);
         pendingRequests.clear();
         for(var renderer:List.copyOf(renderers)) renderer.stopTyping();
-        if(chatSpeechController!=null) chatSpeechController.stop();
+        if(speechSession!=null) speechSession.stop();
+        else if(chatSpeechController!=null) chatSpeechController.stop();
+    }
+
+    void setSpeechActive(boolean active){
+        speechActive=active;
+        if(!active && speechSession!=null) speechSession.stop();
     }
 
     private void startNewConversation(){
@@ -269,7 +282,9 @@ final class ChatView extends BorderPane {
             }
             pendingFinalReply=reply;
             setTargetTextOnFx(reply.getDisplayText());
-            if(chatSpeechController!=null) chatSpeechController.speakAssistantReply(reply);
+            if(speechSession!=null){
+                if(speechActive) speechSession.speak(reply);
+            }else if(chatSpeechController!=null) chatSpeechController.speakAssistantReply(reply);
             completeIfFinalTextRendered();
         }
 

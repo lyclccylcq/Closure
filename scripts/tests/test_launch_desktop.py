@@ -21,6 +21,11 @@ class DesktopLauncherTest(unittest.TestCase):
         self.assertIn("-Dclosure.smokeTest=true", command)
         self.assertNotIn("-o", command)
 
+    def test_workbench_option_reaches_the_application_entry_point(self):
+        command = launch_desktop.desktop_command(Path("/project"), Path("/runtime"), workbench=True)
+        self.assertIn("-Dclosure.openWorkbench=true", command)
+        self.assertNotIn("-Dclosure.smokeTest=true", command)
+
     def test_main_launches_current_sources_from_selected_runtime(self):
         with patch.object(launch_desktop, "java_home", return_value=Path("/jdk21")), \
                 patch.object(launch_desktop.subprocess, "call", return_value=0) as call:

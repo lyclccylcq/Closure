@@ -1,6 +1,11 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.service.AssistantSpeechService;
+import app.service.ChatSpeechController;
+import app.voice.VoiceProfileRegistry;
+import app.voice.model.SpeechEmotion;
+import app.voice.model.VoiceProfile;
 import javafx.embed.swing.JFXPanel;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.control.Button;
@@ -26,8 +31,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static app.ui.chat.ChatWindowLifecycleTest.fx;
 import static app.ui.chat.ChatWindowLifecycleTest.swing;
@@ -40,6 +50,9 @@ class WorkbenchWindowTest {
     private final List<ChatWindowLifecycleTest.Client> clients = new ArrayList<>();
     private final List<ChatService> services = new ArrayList<>();
     private String previousMascotDirectory;
+    private final BlockingQueue<String> spoken = new LinkedBlockingQueue<>();
+    private final AtomicInteger speechStops = new AtomicInteger();
+    private ChatSpeechController speech;
 
     @AfterEach
     void dispose() throws Exception {
@@ -49,6 +62,7 @@ class WorkbenchWindowTest {
             return null;
         });
         await(() -> clients.stream().allMatch(client -> client.closed.get()));
+        if (speech != null) speech.close();
         if (previousMascotDirectory == null) System.clearProperty("closure.workbenchMascotDirectory");
         else System.setProperty("closure.workbenchMascotDirectory", previousMascotDirectory);
     }
@@ -88,6 +102,17 @@ class WorkbenchWindowTest {
         Path unrelated = Files.writeString(temporary.resolve("outside.txt"), "outside the selected project");
         Files.createSymbolicLink(project.resolve("z-outside.txt"), unrelated);
 
+        var profiles = new VoiceProfileRegistry(Map.of(SpeechEmotion.NEUTRAL,
+                new VoiceProfile("synthetic", temporary.resolve("unused.wav"), "Synthetic", "zh")),
+                message -> {}, true);
+        speech = new ChatSpeechController(new AssistantSpeechService() {
+            @Override public CompletableFuture<Void> speak(String text, VoiceProfile profile) {
+                spoken.add(text);
+                return new CompletableFuture<>();
+            }
+            @Override public void stop() { speechStops.incrementAndGet(); }
+        }, profiles, true, message -> {});
+
         swing(() -> {
             window = new WorkbenchWindow(() -> {
                 var client = new ChatWindowLifecycleTest.Client();
@@ -95,7 +120,7 @@ class WorkbenchWindowTest {
                 clients.add(client);
                 services.add(service);
                 return service;
-            });
+            }, speech);
             window.setVisible(true);
             assertTrue(window.isShowing());
             return null;
@@ -174,6 +199,7 @@ class WorkbenchWindowTest {
         await(() -> services.getFirst().completedTurns().size() == 1);
         fx(() -> {
             assertFalse(shows(answer));
+            assertTrue(spoken.isEmpty(),"An off-screen conversation must retain text without speaking");
             sessions().getSelectionModel().select(1);
             return null;
         });
@@ -263,7 +289,11 @@ class WorkbenchWindowTest {
         assertEquals(answer, next.request().getMessages().get(2).getContent());
         next.finish("先确认工作台能正常打开。");
         await(() -> services.getFirst().completedTurns().size() == 2);
-        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS mascot=true layout=true theme=true sessions=true multiline=true restore=true preview=true");
+        assertEquals("先确认工作台能正常打开。", spoken.poll(5, TimeUnit.SECONDS));
+        int previousStops = speechStops.get();
+        swing(() -> { window.setVisible(false); return null; });
+        await(() -> speechStops.get() > previousStops);
+        System.out.println("CLOSURE_WORKBENCH_NATIVE_PASS speech=true mascot=true layout=true theme=true sessions=true multiline=true restore=true preview=true");
     }
 
     private void assertButtonGraphic(String id) {

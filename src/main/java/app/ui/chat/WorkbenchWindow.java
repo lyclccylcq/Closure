@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.service.ChatSpeechController;
 import app.ui.UiFonts;
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
@@ -23,13 +24,29 @@ public final class WorkbenchWindow extends JFrame {
     private boolean choosingProject;
     private volatile boolean windowVisible;
     private WorkbenchView view;
+    private final ChatSpeechController speech;
+    private final boolean ownsSpeech;
 
     public WorkbenchWindow() {
-        this(ChatService::new);
+        this(ChatService::new, ChatSpeechController.fromEnvironment(), true);
+    }
+
+    public WorkbenchWindow(ChatSpeechController speech) {
+        this(ChatService::new, speech, false);
     }
 
     WorkbenchWindow(Supplier<ChatService> sessions) {
+        this(sessions, null, false);
+    }
+
+    WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech) {
+        this(sessions, speech, false);
+    }
+
+    private WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech, boolean ownsSpeech) {
         super("Closure 工作台");
+        this.speech = speech;
+        this.ownsSpeech = ownsSpeech;
         UiFonts.applySwingDefaults();
         JFXPanel panel = new JFXPanel();
         setContentPane(panel);
@@ -47,7 +64,7 @@ public final class WorkbenchWindow extends JFrame {
         Platform.setImplicitExit(false);
         Platform.runLater(() -> {
             if (!disposed) {
-                view = new WorkbenchView(sessions, this::chooseProject);
+                view = new WorkbenchView(sessions, this::chooseProject, speech);
                 view.setVisible(windowVisible);
                 panel.setScene(new Scene(view));
             }
@@ -88,6 +105,7 @@ public final class WorkbenchWindow extends JFrame {
         disposed = true;
         Platform.runLater(() -> {
             if (view != null) view.close();
+            if (ownsSpeech) speech.close();
         });
         super.dispose();
     }
