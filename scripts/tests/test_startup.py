@@ -22,7 +22,7 @@ class StartupTests(unittest.TestCase):
                          "print('CLOSURE_STARTUP_SMOKE_PASS'); raise SystemExit(2)"):
                 with self.subTest(body=body), self.assertRaises(startup.StartupError):
                     startup.execute([sys.executable, "-c", body], directory, os.environ.copy(), 3)
-            result = startup.execute([sys.executable, "-c", "print('CLOSURE_STARTUP_SMOKE_PASS')"],
+            result = startup.execute([sys.executable, "-c", "print('CLOSURE_PET_STARTUP_ONLY_PASS\\nCLOSURE_STARTUP_SMOKE_PASS')"],
                                      directory, os.environ.copy(), 3)
             self.assertIn(startup.MARKER, result)
 
@@ -34,18 +34,18 @@ class StartupTests(unittest.TestCase):
                                 directory, os.environ.copy(), 0.1)
             self.assertLess(time.monotonic() - start, 4)
 
-    def test_workbench_check_rejects_model_only_success_and_wrong_order(self):
-        required = (startup.MARKER, startup.WORKBENCH_MARKER)
-        cases = [[startup.MARKER], list(reversed(startup.WORKBENCH_ORDER))]
+    def test_pet_only_check_rejects_missing_proof_or_any_workbench_open(self):
+        cases = [[startup.MARKER]] + [[startup.PET_ONLY_MARKER, marker, startup.MARKER]
+                                     for marker in startup.WORKBENCH_MARKERS]
         with tempfile.TemporaryDirectory() as directory:
             for markers in cases:
                 with self.subTest(markers=markers), self.assertRaises(startup.StartupError):
                     startup.execute([sys.executable, "-c", "print(" + repr("\n".join(markers)) + ")"],
-                                    directory, os.environ.copy(), 3, required_markers=required)
+                                    directory, os.environ.copy(), 3)
             output = startup.execute([sys.executable, "-c",
-                                      "print(" + repr("\n".join(startup.WORKBENCH_ORDER)) + ")"],
-                                     directory, os.environ.copy(), 3, required_markers=required)
-            self.assertIn(startup.WORKBENCH_MARKER, output)
+                                      "print(" + repr("\n".join((startup.PET_ONLY_MARKER, startup.MARKER))) + ")"],
+                                     directory, os.environ.copy(), 3)
+            self.assertIn(startup.PET_ONLY_MARKER, output)
 
     def test_linux_without_display_requires_xvfb(self):
         with self.assertRaisesRegex(startup.StartupError, "DISPLAY or xvfb-run"):
@@ -54,15 +54,15 @@ class StartupTests(unittest.TestCase):
                                         which=lambda _: "/usr/bin/xvfb-run")
         self.assertEqual(command[0], "/usr/bin/xvfb-run")
         self.assertIn("-Dclosure.smokeTest=true", command)
-        self.assertIn("-Dclosure.openWorkbench=true", command)
+        self.assertFalse(any("closure.openWorkbench" in argument for argument in command))
         self.assertEqual(command[-2:], ["compile", "javafx:run"])
         command = startup.smoke_command(Path("/repo"), offline=True, system="Linux", environ={"DISPLAY": ":1"})
         self.assertEqual(command[0], "/repo/mvnw")
         self.assertIn("-o", command)
 
-    def test_pet_only_verifier_sets_explicit_application_mode(self):
-        command = startup.smoke_command(Path("/repo"), system="Darwin", workbench=False)
-        self.assertIn("-Dclosure.openWorkbench=false", command)
+    def test_verifier_never_requests_an_automatic_workbench(self):
+        command = startup.smoke_command(Path("/repo"), system="Darwin")
+        self.assertFalse(any("closure.openWorkbench" in argument for argument in command))
 
     def test_explicit_jdk_must_be_version_21(self):
         with tempfile.TemporaryDirectory() as directory:
