@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0039",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "为可露保留独立右栏并统一聊天与输入区域宽度",
+  "objective": "工作台聊天记录与输入框使用同一左侧内容列，右侧从顶部到底部单独留白，可露固定在右下角，为后续侧边栏保留空间。",
+  "architecture": [
+    "Codex direct implementation；基于已交付 main 9b0b7cdd01173acf11193f5dcc2b147ce0e023a9 的独立副本，保留原工作区与已运行会话。",
+    "将工作台聊天记录和输入框置于同一个可伸缩的内容容器，统一水平边距；滚动条属于聊天列，长消息不能进入右侧保留区域。",
+    "把现有 WorkbenchPetDock 放在全高度右侧独立列的底部，上方仅留空；欢迎页、发消息、会话切换和窗口缩放沿用该布局。模型大小、单播放器订阅和互动语音生命周期保持。",
+    "独立工作台未绑定桌宠时不保留空右栏，紧凑聊天模式不变。验证实际模型的原生布局、长文本换行、溢出滚动与项目/导航面板切换；不加入未来侧边栏功能。"
+  ],
+  "non_goals": [
+    "新增右侧栏功能、调整角色美术与动画、改变字体/提示词/API/TTS、真实付费调用、公开本地美术、强制退出用户当前应用。"
+  ],
+  "allowed_paths": [
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/ui/chat/PetWorkbenchDockTest.java",
+    "docs/character/new-model.md"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "工作台内置模型上方从聊天区顶部到底部为独立保留列，聊天正文及滚动条不进入此列，模型维持右下角。",
+      "verification": "实际桌宠菜单打开工作台，原生场景几何检查与截图核验整列留白及模型位置，欢迎页和消息页均成立。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "聊天记录与输入框处于同一内容列并共享水平边界；长消息按列宽换行，短消息气泡仍按内容收缩；缩放、滚动、会话和导航/项目面板切换无重叠或溢出。",
+      "verification": "扩展既有 PetWorkbenchDockTest，覆盖普通/窄/宽窗口、超长回复与滚动条、会话草稿、导航/项目面板显示，校验列边界及消息实际换行；既有字体布局回归通过。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "启动仍只显示桌宠，工作台的单模型互动、语音、关闭/最小化恢复及独立工作台兼容；通过复核、CI和合并检查后更新原桌面启动入口。",
+      "verification": "冻结检查、既有八组原生离线替身回归、精确提交和 main CI、合并版构建/启动与原入口 smoke；正式目录和本地美术哈希保持。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "窄窗口并显示多个面板时须保持输入可用并限制消息宽度。",
+    "场景坐标检查和本机截图用于技术验证，最终视觉效果由用户验收。"
+  ],
+  "rollback": "回退本任务合并或恢复备份桌面启动入口到 9b0b7cd，保留本地资源、正式运行目录与会话。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}
