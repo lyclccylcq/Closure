@@ -36,7 +36,7 @@ cd Closure
 
 普通 Maven 启动读取本机的 AI 和语音配置。使用 Fish 朗读请配置 API key 后运行对应脚本。[Fish 配置与启动](#fish-云端语音)
 
-macOS 也可以双击 `scripts/launch-desktop.command`。已有本地配置位于其他目录时，可运行 `scripts/launch-desktop.command --runtime-directory "/原运行目录"`。它从当前工程构建应用，并在指定目录读取本机配置。加上 `--workbench` 可以在启动桌宠时直接打开工作台。
+macOS 也可以双击 `scripts/launch-desktop.command`，默认先显示工作台，模型在后台准备，期间可以输入和切换会话。已有本地配置位于其他目录时，可运行 `scripts/launch-desktop.command --runtime-directory "/原运行目录"`。它从当前工程构建应用，并在指定目录读取本机配置。`--workbench` 保持兼容，`--pet-only` 可只启动桌宠。
 
 ### 只看人物和动作
 

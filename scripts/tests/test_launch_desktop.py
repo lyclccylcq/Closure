@@ -14,7 +14,8 @@ class DesktopLauncherTest(unittest.TestCase):
         command = launch_desktop.desktop_command(Path("/checkout with spaces"),
                                                 Path("/runtime with spaces"), offline=True)
         self.assertEqual(command, ["/checkout with spaces/mvnw", "-q", "-o",
-                                  "-Djavafx.workingDirectory=/runtime with spaces", "compile", "javafx:run"])
+                                  "-Djavafx.workingDirectory=/runtime with spaces", "-Dclosure.openWorkbench=true",
+                                  "compile", "javafx:run"])
 
     def test_startup_check_uses_the_existing_smoke_flag(self):
         command = launch_desktop.desktop_command(Path("/project"), Path("/runtime"), smoke=True)
@@ -25,6 +26,18 @@ class DesktopLauncherTest(unittest.TestCase):
         command = launch_desktop.desktop_command(Path("/project"), Path("/runtime"), workbench=True)
         self.assertIn("-Dclosure.openWorkbench=true", command)
         self.assertNotIn("-Dclosure.smokeTest=true", command)
+
+    def test_desktop_defaults_to_workbench_and_pet_only_is_explicit(self):
+        self.assertIn("-Dclosure.openWorkbench=true",
+                      launch_desktop.desktop_command(Path("/project"), Path("/runtime")))
+        self.assertIn("-Dclosure.openWorkbench=false",
+                      launch_desktop.desktop_command(Path("/project"), Path("/runtime"), workbench=False))
+
+    def test_pet_only_cli_reaches_application(self):
+        with patch.object(launch_desktop, "java_home", return_value=Path("/jdk21")), \
+                patch.object(launch_desktop.subprocess, "call", return_value=0) as call:
+            self.assertEqual(launch_desktop.main(["--runtime-directory", str(SCRIPTS), "--pet-only"]), 0)
+        self.assertIn("-Dclosure.openWorkbench=false", call.call_args.args[0])
 
     def test_main_launches_current_sources_from_selected_runtime(self):
         with patch.object(launch_desktop, "java_home", return_value=Path("/jdk21")), \

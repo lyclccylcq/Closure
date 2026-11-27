@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 
 MARKER = "CLOSURE_STARTUP_SMOKE_PASS"
+WORKBENCH_MARKER = "CLOSURE_WORKBENCH_STARTUP_PASS"
+WORKBENCH_ORDER = ("CLOSURE_WORKBENCH_READY", "CLOSURE_PET_PREPARATION_STARTED",
+                   "CLOSURE_PET_PREPARATION_FINISHED", WORKBENCH_MARKER, MARKER)
 
 
 class StartupError(RuntimeError):
@@ -49,7 +52,7 @@ def java_home(explicit=None):
     raise StartupError("JDK 21 is required; set JAVA_HOME or pass --java-home to its installation")
 
 
-def smoke_command(repo, offline=False, system=None, environ=None, which=shutil.which):
+def smoke_command(repo, offline=False, system=None, environ=None, which=shutil.which, workbench=True):
     system = system or platform.system()
     environ = os.environ if environ is None else environ
     if system not in ("Darwin", "Linux"):
@@ -57,7 +60,8 @@ def smoke_command(repo, offline=False, system=None, environ=None, which=shutil.w
     command = [str(repo / "mvnw"), "-B"]
     if offline:
         command.append("-o")
-    command += ["-DskipTests", "-Dclosure.smokeTest=true", "compile", "javafx:run"]
+    command += ["-DskipTests", "-Dclosure.smokeTest=true",
+                "-Dclosure.openWorkbench=" + str(workbench).lower(), "compile", "javafx:run"]
     if system == "Linux" and not environ.get("DISPLAY"):
         xvfb = which("xvfb-run")
         if not xvfb:
@@ -66,7 +70,7 @@ def smoke_command(repo, offline=False, system=None, environ=None, which=shutil.w
     return command
 
 
-def execute(command, cwd, env, timeout):
+def execute(command, cwd, env, timeout, required_markers=(MARKER,)):
     process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, start_new_session=True)
     try:
@@ -82,8 +86,15 @@ def execute(command, cwd, env, timeout):
     text = output.decode(errors="replace")
     # A live process or Maven's own BUILD SUCCESS cannot substitute for the app's
     # marker emitted only after the actual window and image have initialized.
-    if process.returncode != 0 or MARKER not in {line.strip() for line in text.splitlines()}:
+    lines = [line.strip() for line in text.splitlines()]
+    if process.returncode != 0 or not all(marker in lines for marker in required_markers):
         raise StartupError("Desktop startup did not verify (exit=" + str(process.returncode) + ")\n" + text[-10000:])
+    if WORKBENCH_MARKER in required_markers:
+        if not all(marker in lines for marker in WORKBENCH_ORDER):
+            raise StartupError("Workbench-first startup markers are missing")
+        positions = [lines.index(marker) for marker in WORKBENCH_ORDER]
+        if positions != sorted(positions):
+            raise StartupError("Workbench must become ready before pet preparation")
     return text
 
 
@@ -91,6 +102,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--java-home")
     parser.add_argument("--offline", action="store_true", help="use only cached Maven dependencies")
+    parser.add_argument("--pet-only", action="store_true", help="verify the explicit pet-only entry")
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--log", help="optional startup output file")
     args = parser.parse_args(argv)
@@ -104,11 +116,15 @@ def main(argv=None):
                and not key.startswith(("CLOSURE_", "ANTHROPIC_", "OPENAI_", "AWS_", "AZURE_", "GOOGLE_"))}
         env["JAVA_HOME"] = str(selected_home)
         env["PATH"] = str(selected_home / "bin") + os.pathsep + env.get("PATH", "")
-        text = execute(smoke_command(repo, args.offline, environ=env), repo, env, args.timeout)
+        workbench = not args.pet_only
+        required = (MARKER, WORKBENCH_MARKER) if workbench else (MARKER,)
+        text = execute(smoke_command(repo, args.offline, environ=env, workbench=workbench),
+                       repo, env, args.timeout, required_markers=required)
         if args.log:
             Path(args.log).write_text(text)
         print(json.dumps({"status": "PASS", "marker": MARKER, "java_home": str(selected_home),
-                          "scope": "Real window/model startup; external services and user reminders skipped"}))
+                          "scope": "Real workbench-first and model startup" if workbench else "Real pet-only startup",
+                          "external_services": "skipped", "user_reminders": "skipped"}))
         return 0
     except (StartupError, OSError, subprocess.SubprocessError) as failure:
         print(json.dumps({"status": "FAIL", "reason": str(failure)}), file=sys.stderr)

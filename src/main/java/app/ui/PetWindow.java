@@ -171,6 +171,7 @@ public class PetWindow extends JFrame {
      * 这样戳一戳气泡和 AI 回复不会叠在一起播放。
      */
     private ChatSpeechController speechController;
+    private final boolean ownsSpeechController;
 
     /**
      * 如果本地配置开启了自动启动，这里保存桌宠拉起的 GPT-SoVITS 进程。
@@ -275,19 +276,30 @@ public class PetWindow extends JFrame {
      * 构造方法：创建桌宠窗口。
      */
     public PetWindow() {
-        this(false);
+        this(false, null);
+    }
+
+    public PetWindow(WorkbenchWindow workbench) {
+        this(false, java.util.Objects.requireNonNull(workbench));
     }
 
     /** Creates the real window/model without starting services, audio or user reminders. */
     public static PetWindow startupSmokeWindow() {
-        return new PetWindow(true);
+        return new PetWindow(true, null);
     }
 
-    private PetWindow(boolean startupSmoke) {
+    public static PetWindow startupSmokeWindow(WorkbenchWindow workbench) {
+        return new PetWindow(true, workbench);
+    }
+
+    private PetWindow(boolean startupSmoke, WorkbenchWindow workbench) {
         UiFonts.applySwingDefaults();
+        ownsSpeechController = workbench == null;
+        speechController = workbench == null ? null : workbench.speechController();
 
         // 初始化窗口基本属性
         initWindow();
+        if (workbench != null) attachWorkbenchWindow(workbench);
 
         // 初始化桌宠鼠标事件
         initPetMouseAdapter();
@@ -694,7 +706,7 @@ public class PetWindow extends JFrame {
     }
 
     private void initSpeechController() {
-        speechController = ChatSpeechController.fromEnvironment(
+        if (speechController == null) speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
         );
         speechController.setSpeechLifecycleListener(new SpeechLifecycleListener() {
@@ -1292,12 +1304,7 @@ public class PetWindow extends JFrame {
         pauseRoaming();
         hideSpeechBubble();
         if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
-            workbenchWindow = new WorkbenchWindow(speechController);
-            workbenchWindow.addComponentListener(new ComponentAdapter() {
-                @Override public void componentHidden(ComponentEvent event) {
-                    if (!workbenchWindow.isVisible()) restorePetAlwaysOnTop();
-                }
-            });
+            attachWorkbenchWindow(new WorkbenchWindow(speechController));
         }
         setAlwaysOnTop(false);
         workbenchWindow.setVisible(true);
@@ -1305,6 +1312,15 @@ public class PetWindow extends JFrame {
         workbenchWindow.toFront();
         workbenchWindow.requestFocus();
         System.out.println("CLOSURE_WORKBENCH_OPENED");
+    }
+
+    private void attachWorkbenchWindow(WorkbenchWindow window) {
+        workbenchWindow = window;
+        window.addComponentListener(new ComponentAdapter() {
+            @Override public void componentHidden(ComponentEvent event) {
+                if (!window.isVisible()) restorePetAlwaysOnTop();
+            }
+        });
     }
 
     /**
@@ -1428,7 +1444,7 @@ public class PetWindow extends JFrame {
         }
         if (workbenchWindow != null) workbenchWindow.dispose();
         if (chatService != null) chatService.close();
-        if (speechController != null) {
+        if (speechController != null && ownsSpeechController) {
             speechController.close();
         }
         if (eventReminderTextGenerator != null) {
