@@ -337,7 +337,8 @@ public class PetWindow extends JFrame {
         openPetModel();
         startIdleSleepTimer();
         startRoamingTimer();
-        playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
+        // Workbench-first startup may already be speaking; keep its background companion quiet.
+        if (workbench == null) playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
         startWorkBreakReminder();
         startEventReminder();
         startIdleChatterTimer();

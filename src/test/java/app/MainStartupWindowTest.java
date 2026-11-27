@@ -56,12 +56,7 @@ class MainStartupWindowTest {
                     if(!release.await(15,TimeUnit.SECONDS)) throw new IllegalStateException("fixture timeout");
                 }catch(InterruptedException failure){ throw new IllegalStateException(failure); }
                 Main.preparePetModel();
-            },() -> {
-                PetWindow window=PetWindow.startupSmokeWindow(workbench);
-                window.setAlwaysOnTop(false);
-                window.setVisible(true);
-                pet.set(window);
-            }));
+            },() -> pet.set(Main.showCompanion(workbench,true))));
             assertTrue(started.await(15,TimeUnit.SECONDS));
             assertTrue(offUiThread.get());
             swing(() -> {
@@ -85,6 +80,7 @@ class MainStartupWindowTest {
             completion.get(90,TimeUnit.SECONDS);
             swing(() -> {
                 assertTrue(pet.get().isShowing());
+                assertFalse(pet.get().isAutoRequestFocus(),"The background companion must not request editor focus");
                 var field=PetWindow.class.getDeclaredField("speechController");
                 field.setAccessible(true);
                 assertSame(speech,field.get(pet.get()));
@@ -125,7 +121,7 @@ class MainStartupWindowTest {
                 swing(() -> { closed.dispose(); return null; });
             }
             System.out.println("CLOSURE_MAIN_STARTUP_NATIVE_PASS firstWorkbench=true typingWhileLoading=true"
-                    + " sharedSpeech=true sameWindow=true sessions=true disposedGuard=true");
+                    + " sharedSpeech=true sameWindow=true sessions=true disposedGuard=true focusRequest=false");
         }finally{
             release.countDown();
             swing(() -> {

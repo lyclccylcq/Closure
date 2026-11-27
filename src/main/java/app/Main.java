@@ -23,9 +23,7 @@ public class Main {
                 try{
                     WorkbenchWindow workbench=smoke ? WorkbenchWindow.startupSmokeWindow() : new WorkbenchWindow();
                     openWorkbenchFirst(workbench,Main::preparePetModel,() -> {
-                        PetWindow pet=smoke ? PetWindow.startupSmokeWindow(workbench) : new PetWindow(workbench);
-                        pet.setAlwaysOnTop(!workbench.isVisible());
-                        pet.setVisible(true);
+                        PetWindow pet=showCompanion(workbench,smoke);
                         if(smoke) verifyStartupSmoke(pet,workbench);
                     }).exceptionally(failure -> {
                         if(smoke) failStartupSmoke(null,workbench,failure);
@@ -61,6 +59,15 @@ public class Main {
         return afterWorkbenchReady(workbench.whenReady(),preparePet,() -> {
             if(workbench.isDisplayable()) showPet.run();
         });
+    }
+
+    static PetWindow showCompanion(WorkbenchWindow workbench,boolean smoke){
+        PetWindow pet=smoke ? PetWindow.startupSmokeWindow(workbench) : new PetWindow(workbench);
+        pet.setAlwaysOnTop(!workbench.isVisible());
+        // A background companion must not take focus from an editor that is already usable.
+        pet.setAutoRequestFocus(false);
+        pet.setVisible(true);
+        return pet;
     }
 
     static CompletableFuture<Void> afterWorkbenchReady(CompletableFuture<Void> ready,Runnable preparePet,Runnable showPet){
