@@ -42,7 +42,7 @@ final class ChatView extends BorderPane {
     private final VBox messageBox;
     private final ScrollPane scrollPane;
     private final ChatInputBar composer;
-    private final BorderPane chatColumn;
+    private BorderPane chatColumn=this;
     private final ChatActivity characterActivity;
     private final Consumer<String> onUserMessage;
     private final boolean workbench;
@@ -82,12 +82,7 @@ final class ChatView extends BorderPane {
         this.chatSpeechController=chatSpeechController;
         this.onUserMessage=onUserMessage;
         workbench=onUserMessage!=null;
-        chatColumn=workbench ? new BorderPane() : this;
-        if(workbench){
-            chatColumn.setMinWidth(0);
-            chatColumn.getStyleClass().add("workbench-chat-column");
-            setCenter(chatColumn);
-        }
+        if(workbench) getStyleClass().add("workbench-chat-column");
         speechSession=workbench && chatSpeechController!=null ? chatSpeechController.createSession() : null;
         characterActivity=new ChatActivity(activityListener);
         messageBox=new VBox(18);
@@ -149,6 +144,17 @@ final class ChatView extends BorderPane {
         if (companion != null) detach(companion);
         companion = node;
         if (companion != null) {
+            if (chatColumn == this) {
+                // Keep the standalone chat structure until a desktop companion is attached.
+                Node content = getCenter(), input = getBottom();
+                setCenter(null); setBottom(null);
+                getStyleClass().remove("workbench-chat-column");
+                chatColumn = new BorderPane();
+                chatColumn.setMinWidth(0);
+                chatColumn.getStyleClass().add("workbench-chat-column");
+                chatColumn.setCenter(content); chatColumn.setBottom(input);
+                setCenter(chatColumn);
+            }
             detach(companion);
             Region space = new Region();
             VBox.setVgrow(space, Priority.ALWAYS);

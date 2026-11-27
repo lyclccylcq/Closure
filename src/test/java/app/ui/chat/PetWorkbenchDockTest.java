@@ -169,8 +169,12 @@ class PetWorkbenchDockTest {
             await(() -> fx(() -> Math.abs(view().getWidth() - 1040) < 2));
             fx(() -> {
                 assertLongTranscript(); capture("dock-conversation-compact");
-                ((ToggleButton) view().lookup("#workbench-toggle-navigation")).fire();
                 ((ToggleButton) view().lookup("#workbench-toggle-files")).fire();
+                return null;
+            });
+            fx(() -> {
+                assertLongTranscript(); capture("dock-all-panels");
+                ((ToggleButton) view().lookup("#workbench-toggle-navigation")).fire();
                 return null;
             });
             fx(() -> {
@@ -282,6 +286,7 @@ class PetWorkbenchDockTest {
             }
         }
         Bounds input = editor().localToScene(editor().getBoundsInLocal());
+        assertTrue(input.getWidth() > 100, "Input remains usable with navigation and project panels");
         assertFalse(corner.intersects(input), "Model must leave the input usable");
         Node send = view().lookup("#workbench-send");
         assertFalse(corner.intersects(send.localToScene(send.getBoundsInLocal())), "Model must leave Send usable");
