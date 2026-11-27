@@ -44,11 +44,15 @@ final class WorkbenchTheme {
     }
 
     static VBox welcome() {
+        return welcome(true);
+    }
+
+    static VBox welcome(boolean showMascot) {
         Label name = new Label(MessageRole.CLOSURE.getDisplayName());
         name.getStyleClass().add("workbench-welcome-name");
         UiFonts.applyJavaFxFont(name, 23);
 
-        VBox welcome = new VBox(9, new WorkbenchMascot(), name);
+        VBox welcome = showMascot ? new VBox(9, new WorkbenchMascot(), name) : new VBox(9, name);
         welcome.setAlignment(Pos.CENTER);
         return welcome;
     }

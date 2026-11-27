@@ -15,11 +15,15 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
 import javafx.util.Duration;
 import java.util.HashSet;
 import java.util.List;
@@ -47,6 +51,7 @@ final class ChatView extends BorderPane {
     private final Set<StreamingContentRenderer> renderers=new HashSet<>();
     private volatile boolean disposed;
     private volatile long viewEpoch;
+    private Node companion;
 
     ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController){
         this(chatService,soundPlayer,chatSpeechController,CharacterActivityListener.NONE);
@@ -123,20 +128,46 @@ final class ChatView extends BorderPane {
 
     private void showEmptyWorkbench(){
         setBottom(null);
-        VBox start=new VBox(12,WorkbenchTheme.welcome(),composer);
+        detach(composer);
+        VBox start=new VBox(12,WorkbenchTheme.welcome(companion == null),composer);
         start.setAlignment(Pos.CENTER);
         start.setMaxHeight(Region.USE_PREF_SIZE);
         start.setMaxWidth(900);
         StackPane welcome=new StackPane(start);
         welcome.getStyleClass().add("workbench-welcome");
         setCenter(welcome);
+        if (companion != null) {
+            detach(companion);
+            Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
+            HBox row = new HBox(spacer, companion); row.setAlignment(Pos.BOTTOM_RIGHT);
+            row.getStyleClass().add("workbench-pet-footer"); setBottom(row);
+        }
+    }
+
+    void setCompanion(Node node) {
+        if (companion != null) detach(companion);
+        companion = node;
+        if (getCenter() != scrollPane) showEmptyWorkbench(); else showComposer();
+    }
+
+    private void showComposer() {
+        setBottom(null); detach(composer);
+        if (companion == null) { setBottom(composer); return; }
+        detach(companion);
+        HBox row = new HBox(8, composer, companion);
+        row.setAlignment(Pos.BOTTOM_RIGHT); HBox.setHgrow(composer, Priority.ALWAYS);
+        row.getStyleClass().add("workbench-pet-footer"); setBottom(row);
+    }
+
+    private static void detach(Node node) {
+        if (node.getParent() instanceof Pane pane) pane.getChildren().remove(node);
     }
 
     private void handleUserMessage(String userText){
         if(disposed) return;
         if(workbench && getCenter()!=scrollPane){
             setCenter(scrollPane);
-            setBottom(composer);
+            showComposer();
             composer.focusInput();
         }
         if(onUserMessage!=null) onUserMessage.accept(userText);

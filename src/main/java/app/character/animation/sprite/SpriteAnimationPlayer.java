@@ -28,13 +28,14 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
     private boolean oneShot;
     private ScheduledFuture<?> timer;
     private int interactionVariant;
+    private long phaseOrigin;
     private record Publication(long token, Icon icon, BufferedImage raw, String clip, Runnable completion) { }
 
     public SpriteAnimationPlayer(JLabel label, int width, int height, SpriteModel model) {
         this.label = Objects.requireNonNull(label);
         this.width = width; this.height = height; this.model = Objects.requireNonNull(model);
         visibleFrame = model.frame("idle", 0);
-        label.setIcon(new FrameIcon(visibleFrame, null, 1, 0, 0));
+        label.setIcon(new FrameIcon(visibleFrame, 0, 0));
         executor = Executors.newSingleThreadScheduledExecutor(task -> {
             Thread worker = new Thread(task, "closure-sprite-render"); worker.setDaemon(true); return worker;
         });
@@ -51,6 +52,9 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
         Objects.requireNonNull(animation);
         if (closed || (!once && !oneShot && playing && requested == animation)) return;
         long token = generation.incrementAndGet();
+        boolean keepPhase = !once && !oneShot && idlePose(requested) && idlePose(animation) && currentClip.equals("idle");
+        long started = keepPhase ? phaseOrigin : System.nanoTime();
+        phaseOrigin = started;
         int variant = animation == AnimationType.TAP ? interactionVariant++ : 0;
         SpriteSequence sequence = new SpriteSequence(model, requested, animation, once, variant);
         requested = animation; oneShot = once; playing = true;
@@ -58,7 +62,6 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
         executor.execute(() -> {
             cancelTimer();
             if (closed || token != generation.get()) return;
-            long started = System.nanoTime();
             Runnable tick = () -> {
                 if (closed || token != generation.get()) return;
                 long elapsed = System.nanoTime() - started;
@@ -66,14 +69,15 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
                 try {
                     BufferedImage frame = model.frame(sample.clip(), sample.frame());
                     float fade = Math.min(1, elapsed / 160_000_000f);
+                    BufferedImage composed = SpriteFrameBlend.mix(previous, frame, fade);
                     float angle = animation == AnimationType.DRAGGING ? dragMotion * .045f : 0;
                     float bounce = animation == AnimationType.LANDING
                             ? (float) (-4 * Math.sin(Math.min(1, elapsed / 200_000_000.0) * Math.PI)) : 0;
                     Runnable finished = sample.finished() ? completion : null;
                     synchronized (SpriteAnimationPlayer.this) {
                         if (closed || token != generation.get()) return;
-                        latest.set(new Publication(token, new FrameIcon(frame, fade < 1 ? previous : null, fade, angle, bounce),
-                                frame, sample.clip(), finished));
+                        latest.set(new Publication(token, new FrameIcon(composed, angle, bounce),
+                                composed, sample.clip(), finished));
                         if (sample.finished()) { cancelTimer(); playing = false; }
                     }
                     publish();
@@ -107,6 +111,10 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
     }
 
     private void cancelTimer() { if (timer != null) { timer.cancel(false); timer = null; } }
+    private static boolean idlePose(AnimationType type) {
+        return type == AnimationType.IDLE || type == AnimationType.PRESSED || type == AnimationType.DRAGGING
+                || type == AnimationType.SLEEP;
+    }
     @Override public synchronized void stop() {
         if (closed) return;
         generation.incrementAndGet(); playing = false; latest.set(null); executor.execute(this::cancelTimer);
@@ -128,10 +136,10 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
     }
 
     private final class FrameIcon implements Icon {
-        private final BufferedImage frame, previous;
-        private final float fade, angle, bounce;
-        FrameIcon(BufferedImage frame, BufferedImage previous, float fade, float angle, float bounce) {
-            this.frame = frame; this.previous = previous; this.fade = fade; this.angle = angle; this.bounce = bounce;
+        private final BufferedImage frame;
+        private final float angle, bounce;
+        FrameIcon(BufferedImage frame, float angle, float bounce) {
+            this.frame = frame; this.angle = angle; this.bounce = bounce;
         }
         public int getIconWidth() { return width; }
         public int getIconHeight() { return height; }
@@ -140,14 +148,13 @@ public final class SpriteAnimationPlayer implements AnimationPlayer {
             try {
                 g.translate(x, y + bounce); g.rotate(angle, width / 2.0, height / 2.0);
                 g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-                if (previous != null) draw(g, previous, 1 - fade);
-                draw(g, frame, previous == null ? 1 : fade);
+                draw(g, frame);
             } finally { g.dispose(); }
         }
-        private void draw(Graphics2D g, BufferedImage image, float opacity) {
+        private void draw(Graphics2D g, BufferedImage image) {
             double scale = Math.min((double) width / image.getWidth(), (double) height / image.getHeight());
             int w = (int) Math.round(image.getWidth() * scale), h = (int) Math.round(image.getHeight() * scale);
-            g.setComposite(AlphaComposite.SrcOver.derive(opacity));
+            g.setComposite(AlphaComposite.SrcOver);
             g.drawImage(image, (width - w) / 2, (height - h) / 2, w, h, null);
         }
     }

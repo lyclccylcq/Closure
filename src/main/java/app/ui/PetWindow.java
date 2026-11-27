@@ -76,6 +76,7 @@ import java.util.function.Supplier;
 public class PetWindow extends JFrame {
 
     private final TranslucentWindowPainter windowPainter = new TranslucentWindowPainter();
+    private long bufferedPaintCount;
 
     @Override
     public void paint(Graphics graphics) {
@@ -87,6 +88,7 @@ public class PetWindow extends JFrame {
         // Window.paint clears a translucent native surface before Swing buffers its children.
         // Compose that clearing and the children together, then present the completed image.
         windowPainter.paint(destination, getWidth(), getHeight(), super::paint);
+        bufferedPaintCount++;
     }
 
     /**
@@ -166,6 +168,10 @@ public class PetWindow extends JFrame {
     private ChatWindow chatWindow;
     private WorkbenchWindow workbenchWindow;
     private final Supplier<WorkbenchWindow> workbenchFactory;
+    private boolean workbenchDocked;
+    private boolean disposing;
+    private Runnable releaseWorkbenchFrames = () -> { };
+    private JMenuItem returnToDesktopItem;
     private ChatService chatService;
 
     /**
@@ -587,7 +593,13 @@ public class PetWindow extends JFrame {
     }
 
     private void showSpeechBubble(String text, javafx.util.Duration autoHideDelay) {
+        if (disposing) return;
         registerDesktopActivity();
+
+        if (workbenchDocked && workbenchWindow != null) {
+            workbenchWindow.showPetBubble(text, autoHideDelay);
+            return;
+        }
 
         if (speechBubbleWindow == null) {
             speechBubbleWindow = new PetSpeechBubbleWindow();
@@ -1234,6 +1246,14 @@ public class PetWindow extends JFrame {
         // 把“通讯”加入菜单
         popupMenu.add(workbenchItem);
         popupMenu.add(chatItem);
+        returnToDesktopItem = new JMenuItem("回到桌面");
+        returnToDesktopItem.setFont(menuFont);
+        returnToDesktopItem.setVisible(false);
+        returnToDesktopItem.addActionListener(event -> {
+            if (workbenchWindow != null) workbenchWindow.setVisible(false);
+            restoreDesktopPet();
+        });
+        popupMenu.add(returnToDesktopItem);
         popupMenu.addSeparator();
 
         JMenu characterActions = new JMenu("动作");
@@ -1294,6 +1314,7 @@ public class PetWindow extends JFrame {
      */
     private void showPopupMenu(MouseEvent event) {
         registerUserActivity();
+        if (returnToDesktopItem != null) returnToDesktopItem.setVisible(false);
         if (walkAction != null) walkAction.setEnabled(chatWindow == null || !chatWindow.isVisible());
         /*
          * 在鼠标点击的位置显示菜单。
@@ -1312,14 +1333,16 @@ public class PetWindow extends JFrame {
     }
 
     public void openWorkbenchWindow() {
+        if (disposing) return;
         pauseRoaming();
         hideSpeechBubble();
         if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
             attachWorkbenchWindow(workbenchFactory.get());
         }
         setAlwaysOnTop(false);
-        workbenchWindow.setVisible(true);
         workbenchWindow.setExtendedState(workbenchWindow.getExtendedState() & ~JFrame.ICONIFIED);
+        workbenchWindow.setVisible(true);
+        dockPetInWorkbench();
         workbenchWindow.toFront();
         workbenchWindow.requestFocus();
         System.out.println("CLOSURE_WORKBENCH_OPENED");
@@ -1327,11 +1350,58 @@ public class PetWindow extends JFrame {
 
     private void attachWorkbenchWindow(WorkbenchWindow window) {
         workbenchWindow = window;
+        window.setPetActions(() -> {
+            if (!disposing && workbenchDocked) showInteractionSpeechBubble();
+        }, this::showWorkbenchPetMenu);
         window.addComponentListener(new ComponentAdapter() {
+            @Override public void componentShown(ComponentEvent event) { dockPetInWorkbench(); }
             @Override public void componentHidden(ComponentEvent event) {
-                if (!window.isVisible()) restorePetAlwaysOnTop();
+                if (!window.isVisible()) restoreDesktopPet();
             }
         });
+        window.addWindowStateListener(event -> {
+            if ((event.getNewState() & JFrame.ICONIFIED) != 0) restoreDesktopPet();
+            else if (window.isVisible()) dockPetInWorkbench();
+        });
+        window.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent event) { restoreDesktopPet(); }
+        });
+        window.whenReady().whenComplete((ready, failure) -> {
+            if (failure != null) SwingUtilities.invokeLater(() -> {
+                if (!disposing && workbenchWindow == window && window.isVisible()) {
+                    window.setVisible(false); restoreDesktopPet();
+                    System.err.println("工作台未能显示，已恢复桌面模型：" + failure.getMessage());
+                }
+            });
+        });
+    }
+
+    private void dockPetInWorkbench() {
+        if (disposing || workbenchDocked || petAnimationPanel == null || workbenchWindow == null
+                || !workbenchWindow.isVisible() || (workbenchWindow.getExtendedState() & JFrame.ICONIFIED) != 0) return;
+        workbenchDocked = true;
+        hideSpeechBubble();
+        cancelInteractionBubble();
+        releaseWorkbenchFrames = petAnimationPanel.observeFrames(workbenchWindow::showPetFrame);
+        setVisible(false);
+    }
+
+    private void restoreDesktopPet() {
+        releaseWorkbenchFrames.run(); releaseWorkbenchFrames = () -> { };
+        if (workbenchWindow != null) workbenchWindow.clearPetFrames();
+        workbenchDocked = false;
+        if (disposing || !isDisplayable()) return;
+        setVisible(true);
+        restorePetAlwaysOnTop();
+    }
+
+    private void showWorkbenchPetMenu(int screenX, int screenY) {
+        if (!workbenchDocked || workbenchWindow == null || !workbenchWindow.isShowing() || popupMenu == null) return;
+        registerUserActivity();
+        returnToDesktopItem.setVisible(true);
+        Component content = workbenchWindow.getContentPane();
+        Point location = content.getLocationOnScreen();
+        popupMenu.show(content, screenX - location.x, screenY - location.y);
     }
 
     /**
@@ -1400,6 +1470,7 @@ public class PetWindow extends JFrame {
      * 当聊天窗口关闭或隐藏时调用。
      */
     private void restorePetAlwaysOnTop() {
+        if (disposing || workbenchDocked) return;
         // 让桌宠重新保持在最前面
         setAlwaysOnTop(true);
 
@@ -1416,12 +1487,15 @@ public class PetWindow extends JFrame {
     }
 
     private void hideSpeechBubble() {
+        if (workbenchWindow != null) workbenchWindow.hidePetBubble();
         if (speechBubbleWindow != null) {
             speechBubbleWindow.hide();
         }
     }
 
     private void exitApplication() {
+        disposing = true;
+        releaseWorkbenchFrames.run();
         closeRoaming();
         cancelInteractionBubble();
         if (characterController != null) characterController.close();
@@ -1475,6 +1549,8 @@ public class PetWindow extends JFrame {
 
     @Override
     public void dispose() {
+        disposing = true;
+        releaseWorkbenchFrames.run();
         closeRoaming();
         if (idleSleepTimer != null) idleSleepTimer.stop();
         if (chatWindow != null) chatWindow.dispose();

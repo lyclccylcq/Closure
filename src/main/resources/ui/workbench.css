@@ -97,6 +97,20 @@
     -fx-text-fill: #f4eefe;
 }
 
+.workbench-pet-footer {
+    -fx-padding: 0 12 6 0;
+}
+
+.workbench-pet-bubble {
+    -fx-background-color: #29223e;
+    -fx-border-color: #786295;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-text-fill: #eee7fa;
+    -fx-font-size: 13px;
+    -fx-padding: 7 10;
+}
+
 .workbench-messages, .workbench-messages > .viewport {
     -fx-background-color: transparent;
     -fx-background-insets: 0;

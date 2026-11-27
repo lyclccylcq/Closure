@@ -15,6 +15,7 @@ import javax.swing.SwingUtilities;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.nio.file.Path;
@@ -22,6 +23,10 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 public final class WorkbenchWindow extends JFrame {
     private volatile boolean disposed;
@@ -32,6 +37,12 @@ public final class WorkbenchWindow extends JFrame {
     private final boolean ownsSpeech;
     private final CompletableFuture<Void> ready = new CompletableFuture<>();
     private AnimationTimer firstFrame;
+    private final AtomicLong petEpoch = new AtomicLong();
+    private final AtomicReference<PetFrame> petFrame = new AtomicReference<>();
+    private final AtomicBoolean petFrameQueued = new AtomicBoolean();
+    private Runnable petInteraction = () -> { };
+    private BiConsumer<Integer, Integer> petMenu = (x, y) -> { };
+    private record PetFrame(long epoch, BufferedImage image) { }
 
     public WorkbenchWindow() {
         this(ChatService::new, ChatSpeechController.fromEnvironment(), true);
@@ -96,6 +107,7 @@ public final class WorkbenchWindow extends JFrame {
             @Override public void componentShown(ComponentEvent event) { updateVisibility(true); }
             @Override public void componentHidden(ComponentEvent event) { updateVisibility(false); }
         });
+        addWindowStateListener(event -> updateVisibility(isVisible() && (getExtendedState() & ICONIFIED) == 0));
 
         Platform.setImplicitExit(false);
         Platform.runLater(() -> {
@@ -104,6 +116,7 @@ public final class WorkbenchWindow extends JFrame {
                     view = new WorkbenchView(sessions, this::chooseProject, speech, activity);
                     view.setVisible(windowVisible);
                     panel.setScene(new Scene(view));
+                    publishPetFrame();
                     firstFrame = new AnimationTimer() {
                         @Override public void handle(long now) {
                             if (!windowVisible || view.getWidth() <= 0 || view.getHeight() <= 0) return;
@@ -128,10 +141,51 @@ public final class WorkbenchWindow extends JFrame {
     }
 
     private void updateVisibility(boolean visible) {
-        windowVisible = visible;
+        windowVisible = visible && (getExtendedState() & ICONIFIED) == 0;
         Platform.runLater(() -> {
             if (view != null) view.setVisible(windowVisible);
         });
+    }
+
+    /** The owner's existing renderer supplies immutable, completed frames on the EDT. */
+    public void showPetFrame(BufferedImage image) {
+        if (disposed) return;
+        petFrame.set(new PetFrame(petEpoch.get(), image));
+        publishPetFrame();
+    }
+
+    private void publishPetFrame() {
+        if (disposed || !petFrameQueued.compareAndSet(false, true)) return;
+        Platform.runLater(() -> {
+            petFrameQueued.set(false);
+            if (disposed || view == null) return;
+            PetFrame frame = petFrame.getAndSet(null);
+            if (frame != null && frame.epoch() == petEpoch.get() && windowVisible) {
+                view.showPetFrame(frame.image(), () -> SwingUtilities.invokeLater(() -> {
+                    if (!disposed && windowVisible) petInteraction.run();
+                }), (x, y) -> SwingUtilities.invokeLater(() -> {
+                    if (!disposed && windowVisible) petMenu.accept(x, y);
+                }));
+            }
+        });
+    }
+
+    public void setPetActions(Runnable interact, BiConsumer<Integer, Integer> menu) {
+        petInteraction = interact; petMenu = menu;
+    }
+
+    public void clearPetFrames() {
+        petEpoch.incrementAndGet(); petFrame.set(null); hidePetBubble();
+    }
+
+    public void showPetBubble(String text, javafx.util.Duration duration) {
+        if (!disposed) Platform.runLater(() -> {
+            if (view != null && windowVisible) view.showPetBubble(text, duration);
+        });
+    }
+
+    public void hidePetBubble() {
+        if (!disposed) Platform.runLater(() -> { if (view != null) view.hidePetBubble(); });
     }
 
     private void chooseProject(Consumer<Path> onSelected) {
@@ -159,6 +213,7 @@ public final class WorkbenchWindow extends JFrame {
     public void dispose() {
         if (disposed) return;
         disposed = true;
+        petEpoch.incrementAndGet(); petFrame.set(null);
         ready.completeExceptionally(new CancellationException("Workbench disposed before startup completed"));
         Platform.runLater(() -> {
             if (firstFrame != null) firstFrame.stop();
