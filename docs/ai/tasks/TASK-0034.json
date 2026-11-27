@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0034",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "修复工作台简中字形、气泡尺寸和宽屏布局",
+  "objective": "让聊天中的简体中文和标点使用确定的正确字形，短消息气泡按文字收缩，聊天记录及输入框充分使用窗口空间，在放大和较窄窗口下都清晰易读。",
+  "architecture": [
+    "Codex 基于已验证的最新 origin/main 在独立工作副本直接实现，保留用户原工作区未提交内容与正式运行配置。",
+    "JavaFX 正文与通用界面控件统一使用随应用分发、来源和许可可追溯的静态简体中文常规与粗体字体，保留英语 Closure 标志美术。避免从系统 TTC 中误选区域字形，保持文本内容原样。",
+    "消息布局按测量所得首选宽度收缩短气泡，长文本随实际可用宽度换行。工作台正文和输入框共享随窗口变化的边距，不再受原固定窄列限制。",
+    "以合成内容在真实 JavaFX 窗口复现用户截图的短中文、全角半角标点、混合英文和长回复，覆盖窄、常规和宽屏以及流式更新后的布局。既有会话、项目预览和共享 TTS 行为继续有效。",
+    "字体为两个固定上游版本的完整静态字库，二进制补丁体积约 19 MB。审查包保留完整补丁并限制总量为 20 MB，可读文本仍限制为 100 KB。逐个字体按上游 Git blob、SHA256、许可与原生渲染核对，完整补丁进行 Git 反向 dry-run 校验，可读改动全量阅读；不将二进制内容截断后当作已复核代码。"
+  ],
+  "non_goals": [
+    "重构模型 prompt、修改或转简模型回复文本、增加 Markdown 渲染、改变 API/TTS 配置、读取私人数据或调用付费服务、改变桌宠美术资源。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/ui/UiFonts.java",
+    "src/main/java/app/ui/chat/MessageBubble.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/java/app/ui/chat/ChatInputBar.java",
+    "src/main/java/app/ui/chat/WorkbenchTheme.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/resources/ui/workbench.css",
+    "src/main/resources/ui/fonts/*",
+    "src/test/java/app/ui/UiFontsTest.java",
+    "src/test/java/app/ui/chat/WorkbenchWindowTest.java",
+    "src/test/java/app/ui/chat/ChatTypographyLayoutTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "聊天正文、输入框、会话标题与中文导航使用一致的简中字体。常规和粗体显示常见中文、全角半角标点，不因字体集合或系统回退选成其他地区字形，不改写文本。",
+      "verification": "记录原有实际 JavaFX 字体解析，核对新增字体来源许可和字体字符映射，在真实窗口确认正文、粗体、输入框、会话列表及导航解析到同一 SC 字族，并查看常用字与标点样张。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "短用户消息气泡贴合内容，长消息在可用空间内自然换行。流式增长、缩短和窗口缩放后不出现大面积空气泡或裁切。",
+      "verification": "真实窗口测量短气泡与单行文字、长内容换行和消息边界，检查动态修改及窄/常规/宽屏截图。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "聊天正文和输入框随可用聊天区域扩宽，左右边距保持合理，不再固定为窄列。助手长文本有效使用聊天区域，输入框不占过多垂直空间。",
+      "verification": "测量常规/宽屏的有效正文与输入框宽度占比及边距，窗口缩小时验证无横向溢出，查看对比截图，保留侧栏与文件面板交互。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "候选通过范围校验、可信测试、打包和离线启动，并在合并、正式安装后保持桌宠入口、会话与语音生命周期正常。",
+      "verification": "运行冻结宿主检查和必要原生窗口回归，绑定证据进行技术复核。按已有授权完成 PR、精确提交合并、main CI 和合并版交付检查，更新原桌面启动入口。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "JavaFX CSS 可能在控件字体设置后重新解析字重，需验证实际布局后的字体和字形。",
+    "不同窗口尺寸与 DPI 会影响换行和测量，需同时检查布局边界与实际渲染。"
+  ],
+  "rollback": "通过常规 PR 回退本任务合并，并将桌面启动器恢复到本轮备份的已验证版本。",
+  "review_budget": {
+    "max_diff_bytes": 20000000,
+    "max_text_diff_bytes": 100000,
+    "binary_assets": [
+      "src/main/resources/ui/fonts/NotoSansSC-Regular.otf",
+      "src/main/resources/ui/fonts/NotoSansSC-Bold.otf"
+    ]
+  }
+}
