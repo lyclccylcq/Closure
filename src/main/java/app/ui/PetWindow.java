@@ -1336,6 +1336,10 @@ public class PetWindow extends JFrame {
         if (disposing) return;
         pauseRoaming();
         hideSpeechBubble();
+        if (workbenchWindow != null && workbenchWindow.whenReady().isCompletedExceptionally()) {
+            workbenchWindow.dispose();
+            workbenchWindow = null;
+        }
         if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
             attachWorkbenchWindow(workbenchFactory.get());
         }
@@ -1354,17 +1358,22 @@ public class PetWindow extends JFrame {
             if (!disposing && workbenchDocked) showInteractionSpeechBubble();
         }, this::showWorkbenchPetMenu);
         window.addComponentListener(new ComponentAdapter() {
-            @Override public void componentShown(ComponentEvent event) { dockPetInWorkbench(); }
+            @Override public void componentShown(ComponentEvent event) {
+                if (workbenchWindow == window) dockPetInWorkbench();
+            }
             @Override public void componentHidden(ComponentEvent event) {
-                if (!window.isVisible()) restoreDesktopPet();
+                if (workbenchWindow == window && !window.isVisible()) restoreDesktopPet();
             }
         });
         window.addWindowStateListener(event -> {
+            if (workbenchWindow != window) return;
             if ((event.getNewState() & JFrame.ICONIFIED) != 0) restoreDesktopPet();
             else if (window.isVisible()) dockPetInWorkbench();
         });
         window.addWindowListener(new WindowAdapter() {
-            @Override public void windowClosed(WindowEvent event) { restoreDesktopPet(); }
+            @Override public void windowClosed(WindowEvent event) {
+                if (workbenchWindow == window) restoreDesktopPet();
+            }
         });
         window.whenReady().whenComplete((ready, failure) -> {
             if (failure != null) SwingUtilities.invokeLater(() -> {
@@ -1382,6 +1391,10 @@ public class PetWindow extends JFrame {
         workbenchDocked = true;
         hideSpeechBubble();
         cancelInteractionBubble();
+        petMousePressed = false;
+        if (leftPointerDown && characterController != null) characterController.pointerReleased();
+        leftPointerDown = false;
+        dragOccurred = false;
         releaseWorkbenchFrames = petAnimationPanel.observeFrames(workbenchWindow::showPetFrame);
         setVisible(false);
     }

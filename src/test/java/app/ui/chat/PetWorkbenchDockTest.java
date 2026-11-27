@@ -79,6 +79,7 @@ class PetWorkbenchDockTest {
             public void onSpeechFinished() { character.get().setTalking(false); }
         });
         AtomicInteger factories = new AtomicInteger();
+        AtomicBoolean failNextWindow = new AtomicBoolean();
         PetWindow pet = null;
         SpriteAnimationPlayer renderer = null;
         try {
@@ -87,6 +88,11 @@ class PetWorkbenchDockTest {
                 workbench = new WorkbenchWindow(() -> {
                     var client = new ChatWindowLifecycleTest.Client(); clients.add(client); return new ChatService(client);
                 }, speech, character.get());
+                if (failNextWindow.getAndSet(false)) {
+                    @SuppressWarnings("unchecked")
+                    CompletableFuture<Void> ready = (CompletableFuture<Void>) field(workbench, "ready");
+                    ready.completeExceptionally(new IllegalStateException("Synthetic workbench startup failure"));
+                }
                 return workbench;
             }));
             PetWindow owner = pet;
@@ -100,11 +106,11 @@ class PetWorkbenchDockTest {
             swing(() -> { owner.setVisible(true); character.get().play(AnimationType.IDLE); return null; });
             CountDownLatch samples = new CountDownLatch(12);
             PropertyChangeListener sample = event -> samples.countDown();
-            long paints = (long) field(owner, "bufferedPaintCount");
+            long paints = swing(() -> (long) field(owner, "bufferedPaintCount"));
             swing(() -> { label.addPropertyChangeListener("icon", sample); return null; });
             assertTrue(samples.await(4, TimeUnit.SECONDS));
             swing(() -> { label.removePropertyChangeListener("icon", sample); return null; });
-            await(() -> (long) field(owner, "bufferedPaintCount") - paints >= 4);
+            await(() -> swing(() -> (long) field(owner, "bufferedPaintCount") - paints >= 4));
             int observers = swing(() -> label.getPropertyChangeListeners("icon").length);
 
             openFromMenu(owner, panel);
@@ -113,6 +119,7 @@ class PetWorkbenchDockTest {
             await(() -> fx(() -> view().lookup("#workbench-pet-dock") != null));
             assertSame(player, panel.animationPlayer()); assertEquals(1, factories.get());
             assertEquals(observers + 1, swing(() -> label.getPropertyChangeListeners("icon").length));
+            assertFalse(swing(() -> (boolean) field(owner, "petMousePressed")), "Docking ends the originating menu gesture");
             CountDownLatch fxBlocked = new CountDownLatch(1), resumeFx = new CountDownLatch(1);
             Platform.runLater(() -> {
                 fxBlocked.countDown();
@@ -182,13 +189,23 @@ class PetWorkbenchDockTest {
             }
             swing(() -> { workbench.dispatchEvent(new WindowEvent(workbench, WindowEvent.WINDOW_CLOSING)); return null; });
             await(owner::isVisible);
+            swing(() -> { workbench.dispose(); return null; });
+            failNextWindow.set(true);
+            openFromMenu(owner, panel);
+            await(() -> owner.isVisible() && !workbench.isVisible());
+            WorkbenchWindow failed = workbench;
+            assertTrue(failed.whenReady().isCompletedExceptionally());
             openFromMenu(owner, panel); await(() -> !owner.isVisible());
+            workbench.whenReady().get(10, TimeUnit.SECONDS);
+            assertNotSame(failed, workbench);
+            swing(() -> { failed.dispatchEvent(new WindowEvent(failed, WindowEvent.WINDOW_CLOSED)); return null; });
+            assertFalse(swing(owner::isVisible), "Old window events must not restore the pet over its new workbench");
             swing(() -> { owner.dispose(); return null; });
             fx(() -> null); swing(() -> null);
             assertFalse(owner.isVisible()); assertFalse(owner.isDisplayable());
             assertTrue(player.awaitClosed(2000));
             System.out.println("CLOSURE_PET_DOCK_NATIVE_PASS synthetic=" + player.model().synthetic()
-                    + " oneRenderer=true corner=true controlsClear=true speech=true click=true menu=true sessions=true restore=true shutdown=true minimize=" + minimized + " bufferedPaints="
+                    + " oneRenderer=true corner=true controlsClear=true speech=true click=true menu=true sessions=true restore=true failureRecovery=true shutdown=true minimize=" + minimized + " bufferedPaints="
                     + ((long) field(owner, "bufferedPaintCount") - paints));
         } finally {
             if (pet != null) { PetWindow owner = pet; swing(() -> { owner.dispose(); return null; }); }

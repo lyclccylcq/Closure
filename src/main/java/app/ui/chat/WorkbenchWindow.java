@@ -119,6 +119,7 @@ public final class WorkbenchWindow extends JFrame {
                     publishPetFrame();
                     firstFrame = new AnimationTimer() {
                         @Override public void handle(long now) {
+                            if (ready.isCompletedExceptionally()) { stop(); return; }
                             if (!windowVisible || view.getWidth() <= 0 || view.getHeight() <= 0) return;
                             stop();
                             try {
