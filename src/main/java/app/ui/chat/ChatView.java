@@ -21,7 +21,6 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.util.Duration;
@@ -43,6 +42,7 @@ final class ChatView extends BorderPane {
     private final VBox messageBox;
     private final ScrollPane scrollPane;
     private final ChatInputBar composer;
+    private final BorderPane chatColumn;
     private final ChatActivity characterActivity;
     private final Consumer<String> onUserMessage;
     private final boolean workbench;
@@ -82,6 +82,12 @@ final class ChatView extends BorderPane {
         this.chatSpeechController=chatSpeechController;
         this.onUserMessage=onUserMessage;
         workbench=onUserMessage!=null;
+        chatColumn=workbench ? new BorderPane() : this;
+        if(workbench){
+            chatColumn.setMinWidth(0);
+            chatColumn.getStyleClass().add("workbench-chat-column");
+            setCenter(chatColumn);
+        }
         speechSession=workbench && chatSpeechController!=null ? chatSpeechController.createSession() : null;
         characterActivity=new ChatActivity(activityListener);
         messageBox=new VBox(18);
@@ -92,10 +98,10 @@ final class ChatView extends BorderPane {
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         messageBox.heightProperty().addListener((observable,oldHeight,newHeight) -> scrollToLatestMessage());
-        setCenter(scrollPane);
+        chatColumn.setCenter(scrollPane);
         composer=new ChatInputBar(this::handleUserMessage,this::cancelReplies,
                 workbench ? null : this::startNewConversation);
-        setBottom(composer);
+        chatColumn.setBottom(composer);
         if(workbench){
             getStyleClass().add("workbench-chat");
             scrollPane.getStyleClass().add("workbench-messages");
@@ -127,36 +133,37 @@ final class ChatView extends BorderPane {
     }
 
     private void showEmptyWorkbench(){
-        setBottom(null);
+        chatColumn.setBottom(null);
         detach(composer);
         VBox start=new VBox(12,WorkbenchTheme.welcome(companion == null),composer);
         start.setAlignment(Pos.CENTER);
         start.setMaxHeight(Region.USE_PREF_SIZE);
-        start.setMaxWidth(900);
+        start.setMaxWidth(companion == null ? 900 : Double.MAX_VALUE);
         StackPane welcome=new StackPane(start);
         welcome.getStyleClass().add("workbench-welcome");
-        setCenter(welcome);
-        if (companion != null) {
-            detach(companion);
-            Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
-            HBox row = new HBox(spacer, companion); row.setAlignment(Pos.BOTTOM_RIGHT);
-            row.getStyleClass().add("workbench-pet-footer"); setBottom(row);
-        }
+        chatColumn.setCenter(welcome);
     }
 
     void setCompanion(Node node) {
+        setRight(null);
         if (companion != null) detach(companion);
         companion = node;
-        if (getCenter() != scrollPane) showEmptyWorkbench(); else showComposer();
+        if (companion != null) {
+            detach(companion);
+            Region space = new Region();
+            VBox.setVgrow(space, Priority.ALWAYS);
+            VBox column = new VBox(space, companion);
+            column.setAlignment(Pos.BOTTOM_RIGHT);
+            column.getStyleClass().add("workbench-companion-column");
+            setRight(column);
+        }
+        if (chatColumn.getCenter() != scrollPane) showEmptyWorkbench(); else showComposer();
     }
 
     private void showComposer() {
-        setBottom(null); detach(composer);
-        if (companion == null) { setBottom(composer); return; }
-        detach(companion);
-        HBox row = new HBox(8, composer, companion);
-        row.setAlignment(Pos.BOTTOM_RIGHT); HBox.setHgrow(composer, Priority.ALWAYS);
-        row.getStyleClass().add("workbench-pet-footer"); setBottom(row);
+        chatColumn.setBottom(null);
+        detach(composer);
+        chatColumn.setBottom(composer);
     }
 
     private static void detach(Node node) {
@@ -165,8 +172,8 @@ final class ChatView extends BorderPane {
 
     private void handleUserMessage(String userText){
         if(disposed) return;
-        if(workbench && getCenter()!=scrollPane){
-            setCenter(scrollPane);
+        if(workbench && chatColumn.getCenter()!=scrollPane){
+            chatColumn.setCenter(scrollPane);
             showComposer();
             composer.focusInput();
         }

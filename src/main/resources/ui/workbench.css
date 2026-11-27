@@ -97,7 +97,11 @@
     -fx-text-fill: #f4eefe;
 }
 
-.workbench-pet-footer {
+.workbench-chat-column {
+    -fx-padding: 0 24 0 24;
+}
+
+.workbench-companion-column {
     -fx-padding: 0 12 6 0;
 }
 
@@ -118,7 +122,7 @@
 }
 
 .workbench-transcript {
-    -fx-padding: 18 24 18 24;
+    -fx-padding: 18 0 18 0;
     -fx-spacing: 20;
 }
 
@@ -227,7 +231,7 @@
 }
 
 .workbench-composer {
-    -fx-padding: 8 24 14 24;
+    -fx-padding: 8 0 14 0;
 }
 
 .workbench-composer-surface {
