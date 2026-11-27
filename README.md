@@ -67,6 +67,8 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 工作台使用深靛色和像素美术。新会话居中输入，开始对话后输入框移到窗口下方。Enter 发送，Shift+Enter 换行。[主题素材来源与授权](src/main/resources/ui/workbench/NOTICE.md)
 
+聊天和中文界面随应用分发 Noto Sans SC 常规、粗体，避免依赖系统字体集合的字形回退。英语标志保留主题字体。聊天记录与输入框随窗口扩宽，短消息气泡按内容收缩。[字体来源与许可](src/main/resources/ui/fonts/source-manifest.json)
+
 正式启动时，工作台使用运行目录中的 AI 配置，并共享桌宠已有的朗读服务。当前会话回复完成后朗读 `speechText`。切换会话或隐藏工作台会停止该会话的语音，后台完成的回复保留文字。每个会话的「停止」只取消自己正在持有的语音。
 
 工作台的可露形象支持本地透明动画。安装 FFmpeg 后，使用 `python3 scripts/import_workbench_mascot.py "/本机资源包/assets/video/idle.webm"` 导入。动画存放于 `~/.closure/assets/workbench/`，随工作台显示播放、隐藏暂停。桌宠右键的「工作台」可直接进入，菜单与工作台共用深靛配色。

@@ -1,0 +1,34 @@
+{
+  "family": "Noto Sans SC",
+  "upstream": "https://github.com/notofonts/noto-cjk",
+  "revision": "523d033d6cb47f4a80c58a35753646f5c3608a78",
+  "release": "Sans2.004",
+  "license": "SIL Open Font License 1.1",
+  "modifications": "None. Unmodified static Simplified Chinese regular and bold fonts.",
+  "files": [
+    {
+      "file": "NotoSansSC-Regular.otf",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+      "upstream_path": "Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+      "git_blob": "fc0fda9394367c16c1af7555a2ae4d5e2e6a6f02",
+      "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+      "bytes": 8331336
+    },
+    {
+      "file": "NotoSansSC-Bold.otf",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/SubsetOTF/SC/NotoSansSC-Bold.otf",
+      "upstream_path": "Sans/SubsetOTF/SC/NotoSansSC-Bold.otf",
+      "git_blob": "bcc11bc30e65b69b9e5a508c3e2138197c5543cf",
+      "sha256": "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0",
+      "bytes": 8543168
+    },
+    {
+      "file": "OFL.txt",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/LICENSE",
+      "upstream_path": "LICENSE",
+      "git_blob": "d952d62c065f3f35fb83a173496e90b21525aef3",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      "bytes": 4301
+    }
+  ]
+}

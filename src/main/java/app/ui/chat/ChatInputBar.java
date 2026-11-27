@@ -29,7 +29,7 @@ final class ChatInputBar extends HBox {
         if(workbench){
             TextArea editor=new TextArea();
             editor.setWrapText(true);
-            editor.setPrefRowCount(3);
+            editor.setPrefRowCount(2);
             editor.setId("workbench-editor");
             editor.setPromptText("发消息给可露希尔");
             editor.setTooltip(new Tooltip("Enter 发送，Shift+Enter 换行"));

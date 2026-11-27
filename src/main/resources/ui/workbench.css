@@ -103,6 +103,11 @@
     -fx-padding: 0;
 }
 
+.workbench-transcript {
+    -fx-padding: 18 24 18 24;
+    -fx-spacing: 20;
+}
+
 .workbench-panels, .workbench-browser {
     -fx-background-color: #2e2948;
     -fx-padding: 0;
@@ -208,7 +213,7 @@
 }
 
 .workbench-composer {
-    -fx-padding: 7 19 16 19;
+    -fx-padding: 8 24 14 24;
 }
 
 .workbench-composer-surface {

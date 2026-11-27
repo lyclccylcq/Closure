@@ -14,7 +14,6 @@ import java.util.Objects;
 final class WorkbenchTheme {
     private static final String ASSETS = "/ui/workbench/";
     private static final Font DISPLAY = loadFont("closure-display.ttf", 20);
-    private static final Font PIXEL = loadFont("closure-pixel.ttf", 13);
     static final Image NEW_SESSION = loadImage(ASSETS + "plus-pixel.png");
     static final Image OPEN_DIRECTORY = loadImage(ASSETS + "folder-open-glow.png");
     static final Image DIRECTORY = loadImage(ASSETS + "folder-closed-glow.png");
@@ -30,7 +29,7 @@ final class WorkbenchTheme {
 
     static Label heading(String text) {
         Label label = new Label(text);
-        label.setFont(PIXEL);
+        UiFonts.applyJavaFxFont(label, 13);
         label.getStyleClass().add("workbench-heading");
         return label;
     }
