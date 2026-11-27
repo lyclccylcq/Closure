@@ -21,9 +21,11 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.nio.file.Path;
+import java.awt.image.BufferedImage;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.function.BiConsumer;
 
 final class WorkbenchView extends BorderPane {
     private final Supplier<ChatService> services;
@@ -36,6 +38,7 @@ final class WorkbenchView extends BorderPane {
     private final SplitPane content = new SplitPane();
     private final ToggleButton showFiles = new ToggleButton("项目文件", WorkbenchTheme.icon(WorkbenchTheme.DIRECTORY));
     private double projectWidth = 306;
+    private WorkbenchPetDock petDock;
 
     WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
                   ChatSpeechController speech) {
@@ -97,7 +100,10 @@ final class WorkbenchView extends BorderPane {
             }
         });
         sessions.getSelectionModel().selectedItemProperty().addListener((property, oldValue, selected) -> {
-            if (oldValue != null) oldValue.chat.setSpeechActive(false);
+            if (oldValue != null) {
+                oldValue.chat.setSpeechActive(false);
+                if (petDock != null) oldValue.chat.setCompanion(null);
+            }
             conversationTitle.textProperty().unbind();
             if (selected == null) {
                 conversationTitle.setText("");
@@ -105,6 +111,7 @@ final class WorkbenchView extends BorderPane {
             } else {
                 conversationTitle.textProperty().bind(selected.title);
                 conversation.setCenter(selected.chat);
+                if (petDock != null) selected.chat.setCompanion(petDock);
                 selected.chat.setSpeechActive(isVisible());
                 selected.chat.scrollToLatestMessage();
             }
@@ -178,7 +185,23 @@ final class WorkbenchView extends BorderPane {
         project.openProject(directory);
     }
 
+    void showPetFrame(BufferedImage image, Runnable interact, BiConsumer<Integer, Integer> menu) {
+        if (petDock == null) {
+            petDock = new WorkbenchPetDock(interact, menu);
+            Session selected = sessions.getSelectionModel().getSelectedItem();
+            if (selected != null) selected.chat.setCompanion(petDock);
+        }
+        petDock.showFrame(image);
+    }
+
+    void showPetBubble(String text, javafx.util.Duration duration) {
+        if (petDock != null) petDock.showBubble(text, duration);
+    }
+
+    void hidePetBubble() { if (petDock != null) petDock.hideBubble(); }
+
     void close() {
+        if (petDock != null) petDock.close();
         project.close();
         for (Session session : sessions.getItems()) {
             session.chat.dispose();

@@ -7,12 +7,17 @@ import app.character.animation.spine.SpineAnimationPlayer;
 import app.character.animation.spine.SpineModel;
 import app.character.animation.sprite.SpriteAnimationPlayer;
 import app.character.animation.sprite.SpriteModel;
+import app.ui.PetWindow;
 
 import javax.swing.*;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.beans.PropertyChangeListener;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 public final class PetAnimationPanel extends JPanel {
     private final JLabel frameLabel;
@@ -86,11 +91,53 @@ public final class PetAnimationPanel extends JPanel {
     public String rendererName() { return rendererName; }
     public boolean supportsWalking() { return animationPlayer.supportsWalking(); }
 
+    /** Single-renderer frame feed, observed only while the workbench is visible. Call on the EDT. */
+    public Runnable observeFrames(Consumer<BufferedImage> observer) {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Observe frames on EDT");
+        AtomicBoolean active = new AtomicBoolean(true);
+        Runnable emit = () -> {
+            if (!active.get()) return;
+            Icon icon = frameLabel.getIcon();
+            if (icon == null) return;
+            int width = icon.getIconWidth(), height = icon.getIconHeight();
+            BufferedImage frame = new BufferedImage(width * 2, height * 2, BufferedImage.TYPE_INT_ARGB_PRE);
+            Graphics2D graphics = frame.createGraphics();
+            try {
+                graphics.scale(2, 2);
+                if (facingLeft) { graphics.translate(width, 0); graphics.scale(-1, 1); }
+                icon.paintIcon(frameLabel, graphics, 0, 0);
+            } finally { graphics.dispose(); }
+            observer.accept(frame);
+        };
+        PropertyChangeListener changed = event -> emit.run();
+        frameLabel.addPropertyChangeListener("icon", changed);
+        addPropertyChangeListener("facingLeft", changed);
+        emit.run();
+        return () -> {
+            if (!active.getAndSet(false)) return;
+            Runnable detach = () -> {
+                frameLabel.removePropertyChangeListener("icon", changed);
+                removePropertyChangeListener("facingLeft", changed);
+            };
+            if (SwingUtilities.isEventDispatchThread()) detach.run(); else SwingUtilities.invokeLater(detach);
+        };
+    }
+
+    @Override protected boolean isPaintingOrigin() { return true; }
+
+    @Override public void paintImmediately(int x, int y, int width, int height) {
+        java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+        if (window instanceof PetWindow && !window.isOpaque()) window.repaint();
+        else super.paintImmediately(x, y, width, height);
+    }
+
     public boolean isFacingLeft() { return facingLeft; }
 
     public void setFacingLeft(boolean facingLeft) {
         if (this.facingLeft == facingLeft) return;
+        boolean previous = this.facingLeft;
         this.facingLeft = facingLeft;
+        firePropertyChange("facingLeft", previous, facingLeft);
         repaint();
     }
 

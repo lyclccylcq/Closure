@@ -6,6 +6,7 @@ import app.character.animation.AnimationType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import javax.swing.*;
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -15,6 +16,31 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SpritePlayerTest {
     @TempDir Path root;
+    @Test void transitionsDoNotDimTheCharactersUnchangedCoverage() throws Exception {
+        JLabel label = new JLabel();
+        var player = new SpriteAnimationPlayer(label, 220, 220, SpriteModel.load(SpriteFixtures.create(root)));
+        AtomicInteger minimum = new AtomicInteger(255);
+        CountDownLatch samples = new CountDownLatch(9);
+        SwingUtilities.invokeAndWait(() -> label.addPropertyChangeListener("icon", event -> {
+            var image = new BufferedImage(220, 220, BufferedImage.TYPE_INT_ARGB_PRE);
+            var graphics = image.createGraphics();
+            try { label.getIcon().paintIcon(label, graphics, 0, 0); } finally { graphics.dispose(); }
+            minimum.accumulateAndGet(image.getRGB(110, 110) >>> 24, Math::min);
+            samples.countDown();
+        }));
+        try {
+            player.play(AnimationType.IDLE);
+            assertTrue(samples.await(3, TimeUnit.SECONDS));
+            for (int i = 0; i < 6; i++) {
+                player.playOnce(AnimationType.TAP, () -> { }); Thread.sleep(40);
+                player.play(AnimationType.PRESSED); Thread.sleep(25);
+                player.play(AnimationType.IDLE); Thread.sleep(25);
+            }
+            SwingUtilities.invokeAndWait(() -> { });
+            assertTrue(minimum.get() >= 127, "The same 128-alpha character must retain coverage during a fade; min=" + minimum.get());
+        } finally { player.close(); }
+        assertTrue(player.awaitClosed(1500));
+    }
     @Test void activityAndSpeechRecoverAfterAnInteractionAndDisposeTerminatesWorker() throws Exception {
         var player = new SpriteAnimationPlayer(new JLabel(), 220, 220, SpriteModel.load(SpriteFixtures.create(root)));
         var character = new CharacterController(new AnimationController(player));
