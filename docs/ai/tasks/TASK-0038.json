@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0038",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "修复触摸闪烁并将可露接入工作台右下角",
+  "objective": "点击和触摸新版模型时保持透明度与画面稳定；工作台打开后右下角显示同一角色的实时动作，桌面模型隐藏，关闭/隐藏/最小化工作台后恢复桌面模型，保留共享聊天与语音状态。",
+  "architecture": [
+    "Codex direct implementation；基于已交付 main 024c670fc8e496d2d03a08dc2fab73e7e5f2872b 的独立副本。继续使用现有本机资源，不改动旧版保存分支、用户未提交内容、正式 API/TTS 配置。",
+    "修正当前转场中两张透明图分别 SrcOver 淡化导致的整体 alpha 下陷。后台在线性预乘 RGBA 空间合成完整帧，再一次绘制；快速抢占从最后实际显示的合成帧开始，IDLE/PRESSED/DRAGGING 等共用待机画面时保留动画相位。",
+    "透明桌面窗口的子组件动画重绘统一经已有整窗离屏合成路径呈现，避免点击时子组件局部绘制绕开透明缓冲。单个后台播放器、四页缓存、受限 EDT 更新及过期回调门禁继续成立。",
+    "工作台使用 JavaFX 内置图片面板显示现有 PetAnimationPanel 的完整帧快照。单一 AnimationPlayer/CharacterController/TTS 保留，桌面窗口隐藏而不退出进程。订阅及跨线程帧发布有界，隐藏、最小化、关闭或失败时释放订阅并恢复桌面入口。",
+    "真实模型绑定后移除欢迎区重复模型，在选中会话的底部将输入区和模型面板并排，模型固定右下角，正文继续利用完整宽度；保留草稿、新建/切换会话、项目面板、字体及输入快捷键。无桌宠绑定的独立工作台检查保持兼容。",
+    "内置模型支持点击互动、同风格右键菜单和回到桌面，触碰台词/提醒在工作台内显示，不在隐藏桌面坐标产生悬浮气泡。关闭窗口不关闭共享服务，应用真正退出时不复活隐藏模型。"
+  ],
+  "non_goals": [
+    "修改提示词、API/语音端点和密钥、引入 DSH 逻辑、公开角色美术、添加行走或骨骼、真实付费生成、强制关闭用户当前实例。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "docs/character/new-model.md",
+    "src/main/java/app/character/animation/sprite/**",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/pet/PetAnimationPanel.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/WorkbenchPetDock.java",
+    "src/main/java/app/ui/chat/WorkbenchTheme.java",
+    "src/main/java/app/ui/chat/ChatView.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/character/animation/sprite/**",
+    "src/test/java/app/ui/pet/**",
+    "src/test/java/app/ui/chat/**",
+    "src/test/java/app/MainStartupWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "触摸、单击、快速再次点击、拖动和说话切换时不因透明帧合成产生整体 alpha 闪烁，继续保留透明边缘和正确恢复。",
+      "verification": "重现旧转场 alpha 下陷；预乘合成像素及快速抢占测试验证稳定 alpha/颜色，实际透明窗口连续事件采样无空帧并验证整窗缓冲路径；说明原生屏幕视觉验收边界。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "从模型菜单打开工作台后，工作台右下角默认显示同一角色的实时动作，桌面模型隐藏，输入和发送按钮不被遮挡，欢迎区不重复显示第二个模型。",
+      "verification": "实际菜单及工作台原生回归，检查仅一个角色控制器/播放器、右下角布局、输入区域不重叠、窗口扩大缩小及会话切换后的锚定与动画。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "工作台中角色跟随思考、TTS、互动状态；点击、右键及文字气泡在工作台可用；关闭、隐藏或最小化工作台后恢复桌面模型，重开保留会话。",
+      "verification": "本机替身服务验证实时帧、请求/语音/点击、右键回到桌面、隐藏/重开/最小化/恢复；订阅关闭和应用退出无旧回调或模型意外复活，不调用真实付费服务。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "启动仍只显示模型，既有字体、聊天布局、菜单和旧模式兼容性保持；经复核、CI 和合并后更新原启动入口并验证可运行。",
+      "verification": "冻结检查、七组既有原生回归及新增工作台内置/闪烁回归；精确提交 CI/main CI、合并版检查和原入口启动，核验资源及正式运行目录保持。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "帧级 alpha 和原生绘制路径回归不等同于用户屏幕录像；最终视觉效果仍由用户验收。",
+    "Swing 与 JavaFX 的帧传递和可见性事件须避免积压、死锁、重复订阅和关闭后复活窗口。",
+    "桌宠进程需保留以维持语音、提醒和控制器；隐藏桌面模型不代表退出整个应用。"
+  ],
+  "rollback": "回退本任务合并或恢复备份桌面入口到 024c670；本机动画、正式配置、会话和旧版分支保留。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}
