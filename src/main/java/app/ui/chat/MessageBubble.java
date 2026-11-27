@@ -3,6 +3,7 @@ package app.ui.chat;
 import app.chat.model.ChatMessage;
 import app.chat.model.MessageRole;
 import app.ui.UiFonts;
+import javafx.beans.binding.Bindings;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
@@ -21,12 +22,19 @@ final class MessageBubble extends HBox {
         boolean isUser=message.getRole().isUser();
 
         setMaxWidth(Double.MAX_VALUE);
+        setMinWidth(0);
+        getStyleClass().add(isUser ? "user-message-row" : "assistant-message-row");
         setAlignment(isUser ? Pos.TOP_RIGHT : Pos.TOP_LEFT);
 
         ImageView avatarView=createAvatarView(message.getRole());
         bubbleLabel=createBubbleLabel(message.getContent(),workbench,isUser);
+        if(workbench){
+            // The row grows with the viewport. The label uses its natural width up to this limit.
+            bubbleLabel.maxWidthProperty().bind(Bindings.max(0, widthProperty()
+                    .subtract(ChatStyles.AVATAR_SIZE+getSpacing()).multiply(isUser ? 0.85 : 1)));
+        }
         VBox contentColumn=createContentColumn(message,isUser);
-        HBox.setHgrow(contentColumn,Priority.SOMETIMES);
+        HBox.setHgrow(contentColumn,Priority.ALWAYS);
 
         if(isUser){
             getChildren().addAll(contentColumn,avatarView);
@@ -37,6 +45,8 @@ final class MessageBubble extends HBox {
 
     private VBox createContentColumn(ChatMessage message,boolean isUser){
         VBox contentColumn=new VBox(4);
+        contentColumn.setMinWidth(0);
+        contentColumn.setFillWidth(false);
         contentColumn.setAlignment(isUser ? Pos.TOP_RIGHT : Pos.TOP_LEFT);
 
         Label nameLabel=new Label(message.getRole().getDisplayName());
@@ -55,7 +65,8 @@ final class MessageBubble extends HBox {
         Label label=new Label(content);
         // JavaFX 自己处理文本测量和换行，避免 Swing JTextArea 手算尺寸的问题。
         label.setWrapText(true);
-        label.setMaxWidth(workbench ? 540 : ChatStyles.BUBBLE_MAX_WIDTH);
+        label.setMinWidth(0);
+        label.setMaxWidth(workbench ? Double.MAX_VALUE : ChatStyles.BUBBLE_MAX_WIDTH);
         if(workbench){
             label.getStyleClass().add(isUser ? "workbench-user-message" : "workbench-assistant-message");
         }else{

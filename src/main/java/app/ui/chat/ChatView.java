@@ -31,7 +31,6 @@ import java.util.function.Consumer;
 final class ChatView extends BorderPane {
     private static final Duration REPLY_STREAM_INTERVAL=Duration.millis(95);
     private static final String OPENING="我在，想聊点什么？";
-    private static final double WORKBENCH_CONTENT_WIDTH=780;
 
     private final ChatService chatService;
     private final SoundPlayer soundPlayer;
@@ -91,12 +90,11 @@ final class ChatView extends BorderPane {
             getStyleClass().add("workbench-chat");
             scrollPane.getStyleClass().add("workbench-messages");
             messageBox.setMinWidth(0);
-            messageBox.setMaxWidth(WORKBENCH_CONTENT_WIDTH);
+            messageBox.getStyleClass().add("workbench-transcript");
             StackPane transcript=new StackPane(messageBox);
             transcript.setMinWidth(0);
             transcript.setAlignment(Pos.TOP_CENTER);
             scrollPane.setContent(transcript);
-            composer.setMaxWidth(WORKBENCH_CONTENT_WIDTH);
             BorderPane.setAlignment(composer,Pos.CENTER);
         }else{
             scrollPane.setContent(messageBox);
@@ -123,7 +121,7 @@ final class ChatView extends BorderPane {
         VBox start=new VBox(12,WorkbenchTheme.welcome(),composer);
         start.setAlignment(Pos.CENTER);
         start.setMaxHeight(Region.USE_PREF_SIZE);
-        start.setMaxWidth(WORKBENCH_CONTENT_WIDTH);
+        start.setMaxWidth(900);
         StackPane welcome=new StackPane(start);
         welcome.getStyleClass().add("workbench-welcome");
         setCenter(welcome);

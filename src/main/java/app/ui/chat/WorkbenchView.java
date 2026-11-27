@@ -2,6 +2,7 @@ package app.ui.chat;
 
 import app.service.ChatService;
 import app.service.ChatSpeechController;
+import app.ui.UiFonts;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.geometry.Pos;
@@ -40,6 +41,7 @@ final class WorkbenchView extends BorderPane {
         this.speech = speech;
         project = new WorkbenchProjectPane(chooseProject);
         getStyleClass().add("workbench");
+        setStyle(UiFonts.fxStyle(""));
         getStylesheets().add(Objects.requireNonNull(getClass().getResource("/ui/workbench.css")).toExternalForm());
 
         Label title = WorkbenchTheme.heading("工作台");

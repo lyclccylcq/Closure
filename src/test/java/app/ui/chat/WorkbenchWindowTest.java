@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.ui.UiFonts;
 import app.service.AssistantSpeechService;
 import app.service.ChatSpeechController;
 import app.voice.VoiceProfileRegistry;
@@ -143,7 +144,7 @@ class WorkbenchWindowTest {
             var brand = (Label) view().lookup(".workbench-brand");
             assertEquals("Closure Display", brand.getFont().getFamily());
             var section = (Label) view().lookup(".workbench-title");
-            assertEquals("Closure Pixel", section.getFont().getFamily());
+            assertEquals(UiFonts.DEFAULT_FAMILY, section.getFont().getFamily());
             assertNotNull(view().lookup(".workbench-welcome"));
             assertButtonGraphic("workbench-new-session");
             assertButtonGraphic("workbench-project-entry");
