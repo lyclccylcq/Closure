@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0035",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "启动时优先显示工作台并后台准备桌宠",
+  "objective": "双击启动可露后先出现可输入的工作台，模型预热不阻塞工作台；模型准备完成后复用同一工作台和已有语音服务。",
+  "architecture": [
+    "Codex 在最新已验证 main 的独立副本中直接实现。保留桌面原仓库的未提交内容、运行配置及当前会话进程。",
+    "工作台在实际 JavaFX 首帧布局就绪后发出 ready 信号，随后才在后台线程预热 Spine。桌宠窗口在 EDT 创建，接入启动时已有的工作台和共享语音控制器，不新建第二个工作台。",
+    "桌面启动脚本默认进入工作台，保留显式的仅桌宠启动方式。正常运行和离线启动检查使用相同的工作台先行调度路径；离线检查使用空模型服务和禁用语音、提醒等外部服务的桌宠构造。",
+    "增加可观察的启动顺序标记，检查工作台 ready 先于模型准备。原生回归使用可控的模型加载阻塞，证明工作台在模型准备期间可输入和切换会话，并验证后续菜单恢复的是同一窗口。"
+  ],
+  "non_goals": [
+    "改变模型美术、字体和现有聊天布局，调整模型 prompt，变更正式 API/TTS 配置或云部署，读取私密配置或调用付费服务，强制结束现有聊天进程。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/Main.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java",
+    "scripts/launch_desktop.py",
+    "scripts/verify_startup.py",
+    "scripts/tests/test_launch_desktop.py",
+    "scripts/tests/test_startup.py",
+    "src/test/java/app/MainTest.java",
+    "src/test/java/app/MainStartupWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "桌面启动默认直接显示实际工作台，工作台 ready 先于桌宠模型预热。模型准备期间输入框和会话操作可用。",
+      "verification": "检查默认启动参数与异步调度。使用真实窗口和模型准备屏障，验证工作台可见、输入/新会话可操作且桌宠尚未出现。验证 ready、模型准备及完成标记的严格顺序。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "后台模型完成或预热失败后，桌宠路径仍可继续；桌宠接入并复用同一工作台与语音控制器，模型完成不丢失已输入文本或会话。已释放的工作台不被后台完成重新打开。",
+      "verification": "异步单元回归检查线程、失败回退和 ready 失败；真实窗口检查模型完成、菜单打开与窗口身份、会话及输入保留，核对共享控制器和释放保护。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "离线启动检查覆盖真实工作台先行路径，并拒绝仅桌宠成功或顺序错误的结果。默认桌面入口及显式仅桌宠模式均可启动。",
+      "verification": "检查假后端边界和启动器参数；运行工作台和仅桌宠的离线实际启动，检查新的工作台标记及先后顺序，运行 verifier 的负向单元测试。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "修复通过可信检查、打包、完整复核与 CI。合并后的可运行版安装到用户原桌面入口，保留原有运行目录和当前会话。",
+      "verification": "执行冻结宿主检查和相关原生回归。按既有授权完成精确提交发布、合并、main CI 及合并版检查，安装后从原入口运行不调用外部服务的启动验证。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "Swing 和 JavaFX 使用不同事件线程，首屏就绪信号必须在实际显示后产生，后台完成必须回到 EDT。",
+    "共享工作台在模型预热期间可能被隐藏或释放，需要保留用户会话并避免完成回调重新打开已释放窗口。"
+  ],
+  "rollback": "通过常规 PR 回退本任务合并，并恢复保存的桌面入口；保持原运行配置和美术资源不变。",
+  "review_budget": {
+    "max_diff_bytes": 100000
+  }
+}

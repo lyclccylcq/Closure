@@ -9,15 +9,14 @@ import sys
 from verify_startup import StartupError, java_home
 
 
-def desktop_command(checkout, runtime, offline=False, smoke=False, workbench=False):
+def desktop_command(checkout, runtime, offline=False, smoke=False, workbench=True):
     command = [str(checkout / "mvnw"), "-q"]
     if offline:
         command.append("-o")
     command.append("-Djavafx.workingDirectory=" + str(runtime))
     if smoke:
         command.append("-Dclosure.smokeTest=true")
-    if workbench:
-        command.append("-Dclosure.openWorkbench=true")
+    command.append("-Dclosure.openWorkbench=" + str(workbench).lower())
     command.extend(["compile", "javafx:run"])
     return command
 
@@ -28,7 +27,10 @@ def main(argv=None):
                         default=Path(os.environ.get("CLOSURE_RUNTIME_DIRECTORY", Path(__file__).resolve().parents[1])))
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="run the existing window startup self-check")
-    parser.add_argument("--workbench", action="store_true", help="open the workbench with the pet")
+    entry = parser.add_mutually_exclusive_group()
+    entry.add_argument("--workbench", dest="workbench", action="store_true", default=True,
+                       help="show the workbench first (default); prepare the pet in the background")
+    entry.add_argument("--pet-only", dest="workbench", action="store_false", help="open only the desktop pet")
     args = parser.parse_args(argv)
     checkout = Path(__file__).resolve().parents[1]
     try:

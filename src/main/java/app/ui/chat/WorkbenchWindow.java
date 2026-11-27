@@ -4,6 +4,7 @@ import app.service.ChatService;
 import app.service.ChatSpeechController;
 import app.ui.UiFonts;
 import javafx.application.Platform;
+import javafx.animation.AnimationTimer;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.Scene;
 
@@ -18,6 +19,8 @@ import java.awt.event.ComponentEvent;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 
 public final class WorkbenchWindow extends JFrame {
     private volatile boolean disposed;
@@ -26,6 +29,8 @@ public final class WorkbenchWindow extends JFrame {
     private WorkbenchView view;
     private final ChatSpeechController speech;
     private final boolean ownsSpeech;
+    private final CompletableFuture<Void> ready = new CompletableFuture<>();
+    private AnimationTimer firstFrame;
 
     public WorkbenchWindow() {
         this(ChatService::new, ChatSpeechController.fromEnvironment(), true);
@@ -33,6 +38,23 @@ public final class WorkbenchWindow extends JFrame {
 
     public WorkbenchWindow(ChatSpeechController speech) {
         this(ChatService::new, speech, false);
+    }
+
+    /** Real workbench UI with no user configuration or external model/voice services. */
+    public static WorkbenchWindow startupSmokeWindow() {
+        return startupSmokeWindow(null);
+    }
+
+    public static WorkbenchWindow startupSmokeWindow(ChatSpeechController speech) {
+        return new WorkbenchWindow(() -> new ChatService((app.ai.AiModelClient) null), speech, false);
+    }
+
+    public ChatSpeechController speechController() {
+        return speech;
+    }
+
+    public CompletableFuture<Void> whenReady() {
+        return ready.copy();
     }
 
     WorkbenchWindow(Supplier<ChatService> sessions) {
@@ -64,9 +86,29 @@ public final class WorkbenchWindow extends JFrame {
         Platform.setImplicitExit(false);
         Platform.runLater(() -> {
             if (!disposed) {
-                view = new WorkbenchView(sessions, this::chooseProject, speech);
-                view.setVisible(windowVisible);
-                panel.setScene(new Scene(view));
+                try {
+                    view = new WorkbenchView(sessions, this::chooseProject, speech);
+                    view.setVisible(windowVisible);
+                    panel.setScene(new Scene(view));
+                    firstFrame = new AnimationTimer() {
+                        @Override public void handle(long now) {
+                            if (!windowVisible || view.getWidth() <= 0 || view.getHeight() <= 0) return;
+                            stop();
+                            try {
+                                view.applyCss();
+                                view.layout();
+                                System.out.println("CLOSURE_WORKBENCH_READY");
+                                System.out.println("CLOSURE_WORKBENCH_OPENED");
+                                ready.complete(null);
+                            } catch (RuntimeException | LinkageError failure) {
+                                ready.completeExceptionally(failure);
+                            }
+                        }
+                    };
+                    firstFrame.start();
+                } catch (RuntimeException | LinkageError failure) {
+                    ready.completeExceptionally(failure);
+                }
             }
         });
     }
@@ -103,7 +145,9 @@ public final class WorkbenchWindow extends JFrame {
     public void dispose() {
         if (disposed) return;
         disposed = true;
+        ready.completeExceptionally(new CancellationException("Workbench disposed before startup completed"));
         Platform.runLater(() -> {
+            if (firstFrame != null) firstFrame.stop();
             if (view != null) view.close();
             if (ownsSpeech) speech.close();
         });
