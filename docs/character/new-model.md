@@ -1,0 +1,47 @@
+# 新版可露模型
+
+桌宠默认使用新版透明动画。工作台仍只从模型右键菜单打开，聊天与语音使用原运行目录中的正式配置。工作台内部原有的本地待机动画无需重新导入。
+
+## 本机安装
+
+素材来自 [dsh-closure-pet](https://github.com/fengshiyangrouguan/dsh-closure-pet) 的固定提交 `e1008aae230eeb65917593dae7de602d4c8e6204`。这里只使用十二段角色动画，不安装 DSH 插件。先取得该提交的 `assets/video` 目录，安装支持 `libvpx-vp9` 的 FFmpeg，然后运行：
+
+```sh
+python3 scripts/import_pet_model.py "/本机资源包/assets/video"
+./mvnw javafx:run
+```
+
+导入器核对每个源文件的 Git blob、分辨率、帧率和透明标记，将 30fps 素材转换为 444×374 的透明帧，四列四行一页，保存到 `~/.closure/assets/pet/`。新版本全部完成后才原子切换 `model.properties`；失败保留原安装。各次导入的资源子目录会保留，便于回退。来源记录与限制说明也保存在本机。运行时不联网取素材，不需要 FFmpeg。
+
+自选资源目录可用 `--output` 导入，并在启动环境设置 `CLOSURE_PET_ASSETS_DIRECTORY`。Java 测试也支持 `-Dclosure.petAssetsDirectory`。没有本地新版素材时控制台明确报告并临时显示原 PNG 帧，不能将这种回退认定为新版已成功启动。
+
+## 动作与交互
+
+| 触发 | 新版表现 |
+| --- | --- |
+| 待机 | `idle` 循环 |
+| 请求处理中／通讯窗口可见 | `think_begin` → `think_idle`；回到普通待机播放 `think_exit` |
+| TTS 开始／结束 | 立即切入 `talk` 循环；实际朗读结束或停止后恢复当前思考或待机状态 |
+| 点击 | 交替播放 `interact_1` / `interact_2`，结束恢复当前状态 |
+| 打招呼／开心 | `celebrate` / `happy`，结束恢复当前状态 |
+| 难过 | `sad_begin` → 一轮 `sad_idle` → `sad_exit`，结束恢复当前状态 |
+| 拖动 | 保留窗口拖动和方向翻转，整幅角色轻微倾斜；松手整幅图像小幅回弹 |
+| 安静待机／长时间未交互 | 使用待机画面并暂停闲聊；没有作者制作的睡眠姿态 |
+
+新版视频没有行走、提起四肢或睡眠素材，也没有提供骨骼工程。新版菜单不提供行走及自主走动，不复用旧版骨骼姿态；说话视频按语音生命周期播放，不是音素级口型同步。快速切换、取消、拖动和关闭会使旧动作的结束回调失效。
+
+帧图按需在单个后台线程解码，缓存至多四页，Swing 最多积压一次帧更新。绘制保留比例，444 像素源帧供约 220 逻辑像素的高分屏显示；不会预先展开全部 852 帧。思考进出场之外的抢占使用短暂淡化。
+
+## 检查与旧版
+
+```sh
+python3 scripts/verify_startup.py --assets-directory "$HOME/.closure/assets/pet"
+```
+
+该命令打开真实桌面窗口，确认新版播放器和模型单独启动，跳过后端、语音、天气与提醒。未安装角色资源的公共 CI 使用明确标注的合成透明图形检查同一播放器；合成检查不代表角色美术已安装或验收。本机交付另检查真实动画、菜单和朗读状态恢复。
+
+更换前的完整版本保存在 [codex/legacy-spine-pet-20261127](https://github.com/lyclccylcq/Closure/tree/codex/legacy-spine-pet-20261127)，提交 `e24bc071dbca95193fd902b8441078ac59e6cdaa`。当前代码也保留显式 `./mvnw -Dclosure.animation=spine javafx:run` 兼容入口及旧版回归检查。原工作区和正式 API/TTS 配置不随模型导入修改。
+
+## 素材使用范围
+
+上游 [NOTICE](https://github.com/fengshiyangrouguan/dsh-closure-pet/blob/e1008aae230eeb65917593dae7de602d4c8e6204/NOTICE.md) 将角色动画限定为个人本机娱乐使用，并明确其不属于 MIT 美术授权。角色形象权利仍归原权利人，再分发前需取得相应权利。因此本仓库只提交导入器、播放器和合成测试，不提交视频或角色衍生帧。

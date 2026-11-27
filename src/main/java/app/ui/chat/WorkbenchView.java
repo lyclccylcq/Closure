@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.character.CharacterActivityListener;
 import app.service.ChatSpeechController;
 import app.ui.UiFonts;
 import javafx.beans.property.SimpleStringProperty;
@@ -27,6 +28,7 @@ import java.util.function.Supplier;
 final class WorkbenchView extends BorderPane {
     private final Supplier<ChatService> services;
     private final ChatSpeechController speech;
+    private final CharacterActivityListener activity;
     private final WorkbenchProjectPane project;
     private final ListView<Session> sessions = new ListView<>();
     private final BorderPane conversation = new BorderPane();
@@ -37,8 +39,14 @@ final class WorkbenchView extends BorderPane {
 
     WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
                   ChatSpeechController speech) {
+        this(services, chooseProject, speech, CharacterActivityListener.NONE);
+    }
+
+    WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
+                  ChatSpeechController speech, CharacterActivityListener activity) {
         this.services = services;
         this.speech = speech;
+        this.activity = Objects.requireNonNull(activity);
         project = new WorkbenchProjectPane(chooseProject);
         getStyleClass().add("workbench");
         setStyle(UiFonts.fxStyle(""));
@@ -160,7 +168,7 @@ final class WorkbenchView extends BorderPane {
     }
 
     private void newSession() {
-        Session session = new Session(services.get(), speech);
+        Session session = new Session(services.get(), speech, activity);
         sessions.getItems().addFirst(session);
         sessions.getSelectionModel().select(session);
     }
@@ -185,9 +193,9 @@ final class WorkbenchView extends BorderPane {
         private final StringProperty title = new SimpleStringProperty("新会话");
         private boolean named;
 
-        private Session(ChatService service, ChatSpeechController speech) {
+        private Session(ChatService service, ChatSpeechController speech, CharacterActivityListener activity) {
             this.service = service;
-            chat = new ChatView(service, this::nameFromMessage, speech);
+            chat = new ChatView(service, this::nameFromMessage, speech, activity);
         }
 
         private void nameFromMessage(String message) {

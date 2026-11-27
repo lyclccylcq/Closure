@@ -16,7 +16,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <javafx.version>21.0.6</javafx.version>
         <closure.smokeTest>false</closure.smokeTest>
-        <closure.animation>spine</closure.animation>
+        <closure.animation>sprite</closure.animation>
         <javafx.workingDirectory>${project.basedir}</javafx.workingDirectory>
     </properties>
 

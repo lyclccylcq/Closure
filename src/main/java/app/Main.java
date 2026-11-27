@@ -5,6 +5,7 @@ import app.ui.UiFonts;
 import app.ui.chat.WorkbenchWindow;
 import app.character.animation.spine.SpineModel;
 import app.character.animation.spine.SpineRenderer;
+import app.character.animation.sprite.SpriteModel;
 
 import javax.swing.*;
 import java.awt.Component;
@@ -40,7 +41,9 @@ public class Main {
     }
 
     static void preparePetModel(){
-        if(!"frames".equals(System.getProperty("closure.animation","spine"))){
+        if("sprite".equals(System.getProperty("closure.animation","sprite"))){
+            SpriteModel.local();
+        }else if("spine".equals(System.getProperty("closure.animation","sprite"))){
             new SpineRenderer(SpineModel.bundled());
         }
     }

@@ -65,6 +65,11 @@ final class ChatView extends BorderPane {
         this(chatService,null,speech,CharacterActivityListener.NONE,onUserMessage);
     }
 
+    ChatView(ChatService chatService,Consumer<String> onUserMessage,ChatSpeechController speech,
+             CharacterActivityListener activity){
+        this(chatService,null,speech,activity,onUserMessage);
+    }
+
     private ChatView(ChatService chatService,SoundPlayer soundPlayer,ChatSpeechController chatSpeechController,
                      CharacterActivityListener activityListener,Consumer<String> onUserMessage){
         this.chatService=chatService;

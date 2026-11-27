@@ -10,6 +10,7 @@ public enum AnimationType {
     TAP,
     GREETING,
     HAPPY,
+    SAD,
     THINKING,
     THINKING_TALK,
     SLEEP

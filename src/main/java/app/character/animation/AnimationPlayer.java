@@ -12,6 +12,9 @@ public interface AnimationPlayer extends AutoCloseable {
 
     boolean isPlaying();
 
+    /** Authored locomotion is optional for prerecorded character skins. */
+    default boolean supportsWalking() { return true; }
+
     /** Bounded horizontal pointer motion; renderers without procedural bones can ignore it. */
     default void setDragMotion(float horizontal) { }
 

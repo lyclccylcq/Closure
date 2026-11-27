@@ -33,7 +33,7 @@ public final class SpineRenderer {
 
     public static String sourceAction(AnimationType type) {
         return switch (type) {
-            case IDLE, TALK, PRESSED, DRAGGING, LANDING -> "Relax";
+            case IDLE, TALK, PRESSED, DRAGGING, LANDING, SAD -> "Relax";
             case WALK -> "Move";
             case TAP, GREETING, HAPPY -> "Interact";
             case THINKING, THINKING_TALK -> "Sit";
