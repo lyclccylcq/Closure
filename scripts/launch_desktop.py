@@ -9,14 +9,13 @@ import sys
 from verify_startup import StartupError, java_home
 
 
-def desktop_command(checkout, runtime, offline=False, smoke=False, workbench=True):
+def desktop_command(checkout, runtime, offline=False, smoke=False):
     command = [str(checkout / "mvnw"), "-q"]
     if offline:
         command.append("-o")
     command.append("-Djavafx.workingDirectory=" + str(runtime))
     if smoke:
         command.append("-Dclosure.smokeTest=true")
-    command.append("-Dclosure.openWorkbench=" + str(workbench).lower())
     command.extend(["compile", "javafx:run"])
     return command
 
@@ -27,10 +26,7 @@ def main(argv=None):
                         default=Path(os.environ.get("CLOSURE_RUNTIME_DIRECTORY", Path(__file__).resolve().parents[1])))
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="run the existing window startup self-check")
-    entry = parser.add_mutually_exclusive_group()
-    entry.add_argument("--workbench", dest="workbench", action="store_true", default=True,
-                       help="show the workbench first (default); prepare the pet in the background")
-    entry.add_argument("--pet-only", dest="workbench", action="store_false", help="open only the desktop pet")
+    parser.add_argument("--pet-only", action="store_true", help="compatibility option; startup always shows only the pet")
     args = parser.parse_args(argv)
     checkout = Path(__file__).resolve().parents[1]
     try:
@@ -40,7 +36,7 @@ def main(argv=None):
         environment = dict(os.environ)
         environment["JAVA_HOME"] = str(java_home())
         print(f"CLOSURE_DESKTOP_LAUNCH source={checkout} runtime={runtime}", flush=True)
-        return subprocess.call(desktop_command(checkout, runtime, args.offline, args.smoke, args.workbench),
+        return subprocess.call(desktop_command(checkout, runtime, args.offline, args.smoke),
                                cwd=checkout, env=environment)
     except (OSError, StartupError) as error:
         print(str(error), file=sys.stderr)

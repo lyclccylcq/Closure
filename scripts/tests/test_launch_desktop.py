@@ -1,5 +1,7 @@
 from pathlib import Path
 import unittest
+import contextlib
+import io
 from unittest.mock import patch
 
 import sys
@@ -14,30 +16,27 @@ class DesktopLauncherTest(unittest.TestCase):
         command = launch_desktop.desktop_command(Path("/checkout with spaces"),
                                                 Path("/runtime with spaces"), offline=True)
         self.assertEqual(command, ["/checkout with spaces/mvnw", "-q", "-o",
-                                  "-Djavafx.workingDirectory=/runtime with spaces", "-Dclosure.openWorkbench=true",
-                                  "compile", "javafx:run"])
+                                  "-Djavafx.workingDirectory=/runtime with spaces", "compile", "javafx:run"])
 
     def test_startup_check_uses_the_existing_smoke_flag(self):
         command = launch_desktop.desktop_command(Path("/project"), Path("/runtime"), smoke=True)
         self.assertIn("-Dclosure.smokeTest=true", command)
         self.assertNotIn("-o", command)
 
-    def test_workbench_option_reaches_the_application_entry_point(self):
-        command = launch_desktop.desktop_command(Path("/project"), Path("/runtime"), workbench=True)
-        self.assertIn("-Dclosure.openWorkbench=true", command)
-        self.assertNotIn("-Dclosure.smokeTest=true", command)
+    def test_direct_workbench_option_is_rejected(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            launch_desktop.main(["--workbench"])
+        self.assertEqual(error.exception.code, 2)
 
-    def test_desktop_defaults_to_workbench_and_pet_only_is_explicit(self):
-        self.assertIn("-Dclosure.openWorkbench=true",
-                      launch_desktop.desktop_command(Path("/project"), Path("/runtime")))
-        self.assertIn("-Dclosure.openWorkbench=false",
-                      launch_desktop.desktop_command(Path("/project"), Path("/runtime"), workbench=False))
+    def test_desktop_command_does_not_override_workbench_startup(self):
+        command = launch_desktop.desktop_command(Path("/project"), Path("/runtime"))
+        self.assertFalse(any("closure.openWorkbench" in argument for argument in command))
 
     def test_pet_only_cli_reaches_application(self):
         with patch.object(launch_desktop, "java_home", return_value=Path("/jdk21")), \
                 patch.object(launch_desktop.subprocess, "call", return_value=0) as call:
             self.assertEqual(launch_desktop.main(["--runtime-directory", str(SCRIPTS), "--pet-only"]), 0)
-        self.assertIn("-Dclosure.openWorkbench=false", call.call_args.args[0])
+        self.assertFalse(any("closure.openWorkbench" in argument for argument in call.call_args.args[0]))
 
     def test_main_launches_current_sources_from_selected_runtime(self):
         with patch.object(launch_desktop, "java_home", return_value=Path("/jdk21")), \

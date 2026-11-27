@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0036",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "恢复模型单独启动并限定工作台从右键菜单打开",
+  "objective": "双击启动可露只显示桌宠模型，启动期间不创建或显示工作台；用户右键模型点击工作台后才创建窗口，再次打开复用原会话及配置。",
+  "architecture": [
+    "按用户最新明确说明修正上一轮误解。Codex 基于最新已安装 main，在独立工作副本直接实现，保留用户原目录未提交内容和现有会话进程。",
+    "Main 仅执行模型准备与桌宠启动，移除工作台自动启动分支和对应启动参数。工作台继续由 PetWindow 的右键菜单延迟创建，复用桌宠语音控制器与原运行目录中的 API 配置。",
+    "离线检查验证实际模型窗口，并确认没有创建工作台窗口。原生菜单回归使用延迟工作台工厂和静音服务替身，检查右键前未创建、点击后可输入、隐藏后菜单重新打开保留同一窗口与会话。",
+    "移除仅服务于自动打开工作台的无效启动测试，按用户修正后的启动契约检查 CLI、旧参数防护和桌面入口。"
+  ],
+  "non_goals": [
+    "修改字体、聊天布局、美术和模型 prompt，变更真实 API/TTS 端点或密钥，调用付费服务，强制结束当前应用进程或清空会话。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "pom.xml",
+    "src/main/java/app/Main.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "scripts/launch_desktop.py",
+    "scripts/verify_startup.py",
+    "scripts/tests/test_launch_desktop.py",
+    "scripts/tests/test_startup.py",
+    "src/test/java/app/MainTest.java",
+    "src/test/java/app/MainStartupWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "默认桌面入口和普通应用启动只创建桌宠模型，不自动创建、显示或唤起工作台，旧的自动打开参数不再提供该行为。",
+      "verification": "检查 Main、Maven 和启动器配置；实际启动检测没有 WorkbenchWindow，启动检查拒绝意外工作台标记。CLI 单元测试拒绝自动工作台选项。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "工作台由模型右键菜单中的工作台条目首次创建并显示。再次从菜单打开复用同一窗口，保留会话和未发送输入。",
+      "verification": "真实模型窗口回归检查延迟工厂未被启动调用，显示实际右键菜单并触发工作台项，验证窗口创建次数、可输入、隐藏/重开和会话恢复。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "菜单打开的工作台继续共享桌宠语音服务和原 API 配置路径，现有字体、布局、通讯、菜单和动作正常。",
+      "verification": "核对正常运行的依赖传递与工作目录，执行共享 TTS、工作台会话和相关原生窗口回归；不读取私密配置或请求付费生成。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "修复通过可信检查、完整复核和 CI；实际合并版本安装到原启动可露入口，并验证从该入口只启动模型。",
+      "verification": "运行冻结检查、构建和实际模型启动。完成精确提交合并、main CI 与合并版回归，更新桌面入口并核验安装文件、运行目录和模型单独启动标记。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "必须同时更新应用启动和桌面脚本，避免旧启动参数继续自动打开工作台。",
+    "模型单独启动的检查与菜单功能检查分别提供证据，不能把未显示窗口误判为尚未创建。"
+  ],
+  "rollback": "通过常规 PR 回退本任务合并，并恢复备份桌面入口；不改动运行配置和用户会话。",
+  "review_budget": {
+    "max_diff_bytes": 100000
+  }
+}

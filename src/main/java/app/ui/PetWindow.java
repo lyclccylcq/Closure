@@ -59,6 +59,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
  * PetWindow 表示桌面上的桌宠窗口。
@@ -164,6 +165,7 @@ public class PetWindow extends JFrame {
      */
     private ChatWindow chatWindow;
     private WorkbenchWindow workbenchWindow;
+    private final Supplier<WorkbenchWindow> workbenchFactory;
     private ChatService chatService;
 
     /**
@@ -171,7 +173,6 @@ public class PetWindow extends JFrame {
      * 这样戳一戳气泡和 AI 回复不会叠在一起播放。
      */
     private ChatSpeechController speechController;
-    private final boolean ownsSpeechController;
 
     /**
      * 如果本地配置开启了自动启动，这里保存桌宠拉起的 GPT-SoVITS 进程。
@@ -279,33 +280,28 @@ public class PetWindow extends JFrame {
         this(false, null);
     }
 
-    public PetWindow(WorkbenchWindow workbench) {
-        this(false, java.util.Objects.requireNonNull(workbench));
-    }
-
     /** Creates the real window/model without starting services, audio or user reminders. */
     public static PetWindow startupSmokeWindow() {
         return new PetWindow(true, null);
     }
 
-    public static PetWindow startupSmokeWindow(WorkbenchWindow workbench) {
-        return new PetWindow(true, workbench);
+    public static PetWindow startupSmokeWindow(Supplier<WorkbenchWindow> workbenches) {
+        return new PetWindow(true, java.util.Objects.requireNonNull(workbenches));
     }
 
-    private PetWindow(boolean startupSmoke, WorkbenchWindow workbench) {
+    private PetWindow(boolean startupSmoke, Supplier<WorkbenchWindow> workbenches) {
         UiFonts.applySwingDefaults();
-        ownsSpeechController = workbench == null;
-        speechController = workbench == null ? null : workbench.speechController();
+        workbenchFactory = workbenches == null ? () -> new WorkbenchWindow(speechController) : workbenches;
 
         // 初始化窗口基本属性
         initWindow();
-        if (workbench != null) attachWorkbenchWindow(workbench);
 
         // 初始化桌宠鼠标事件
         initPetMouseAdapter();
 
         if (startupSmoke) {
             openPetModel();
+            if (workbenches != null) initPopupMenu();
             return;
         }
 
@@ -337,8 +333,7 @@ public class PetWindow extends JFrame {
         openPetModel();
         startIdleSleepTimer();
         startRoamingTimer();
-        // Workbench-first startup may already be speaking; keep its background companion quiet.
-        if (workbench == null) playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
+        playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
         startWorkBreakReminder();
         startEventReminder();
         startIdleChatterTimer();
@@ -707,7 +702,7 @@ public class PetWindow extends JFrame {
     }
 
     private void initSpeechController() {
-        if (speechController == null) speechController = ChatSpeechController.fromEnvironment(
+        speechController = ChatSpeechController.fromEnvironment(
                 message -> System.out.println("语音朗读警告：" + message)
         );
         speechController.setSpeechLifecycleListener(new SpeechLifecycleListener() {
@@ -1305,7 +1300,7 @@ public class PetWindow extends JFrame {
         pauseRoaming();
         hideSpeechBubble();
         if (workbenchWindow == null || !workbenchWindow.isDisplayable()) {
-            attachWorkbenchWindow(new WorkbenchWindow(speechController));
+            attachWorkbenchWindow(workbenchFactory.get());
         }
         setAlwaysOnTop(false);
         workbenchWindow.setVisible(true);
@@ -1445,7 +1440,7 @@ public class PetWindow extends JFrame {
         }
         if (workbenchWindow != null) workbenchWindow.dispose();
         if (chatService != null) chatService.close();
-        if (speechController != null && ownsSpeechController) {
+        if (speechController != null) {
             speechController.close();
         }
         if (eventReminderTextGenerator != null) {

@@ -10,6 +10,8 @@ import javax.swing.*;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Toolkit;
+import java.awt.Window;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 public class Main {
@@ -17,70 +19,24 @@ public class Main {
 
     public static void main(String[] args){
         UiFonts.applySwingDefaults();
-        boolean smoke=Boolean.getBoolean("closure.smokeTest");
-        if(Boolean.getBoolean("closure.openWorkbench")){
-            SwingUtilities.invokeLater(() -> {
-                try{
-                    WorkbenchWindow workbench=smoke ? WorkbenchWindow.startupSmokeWindow() : new WorkbenchWindow();
-                    openWorkbenchFirst(workbench,Main::preparePetModel,() -> {
-                        PetWindow pet=showCompanion(workbench,smoke);
-                        if(smoke) verifyStartupSmoke(pet,workbench);
-                    }).exceptionally(failure -> {
-                        if(smoke) failStartupSmoke(null,workbench,failure);
-                        else failure.printStackTrace();
-                        return null;
-                    });
-                }catch(Throwable failure){
-                    if(smoke) failStartupSmoke(null,null,failure);
-                    else failure.printStackTrace();
-                }
-            });
-            return;
-        }
-        // The explicit pet-only path retains its original preparation before showing the model.
         CompletableFuture.runAsync(Main::preparePetModel).handle((ready,error) -> {
             SwingUtilities.invokeLater(() -> {
+                PetWindow pet=null;
                 try{
-                    PetWindow pet=smoke ? PetWindow.startupSmokeWindow() : new PetWindow();
+                    boolean smoke=Boolean.getBoolean("closure.smokeTest");
+                    pet=smoke ? PetWindow.startupSmokeWindow() : new PetWindow();
                     pet.setVisible(true);
-                    if(smoke) verifyStartupSmoke(pet,null);
+                    if(smoke) verifyStartupSmoke(pet);
                 }catch(Throwable failure){
-                    if(smoke) failStartupSmoke(null,null,failure);
-                    else failure.printStackTrace();
+                    failure.printStackTrace();
+                    if(Boolean.getBoolean("closure.smokeTest")){
+                        if(pet!=null) pet.dispose();
+                        System.exit(1);
+                    }
                 }
             });
             return null;
         }).join();
-    }
-
-    static CompletableFuture<Void> openWorkbenchFirst(WorkbenchWindow workbench,Runnable preparePet,Runnable showPet){
-        workbench.setVisible(true);
-        workbench.toFront();
-        return afterWorkbenchReady(workbench.whenReady(),preparePet,() -> {
-            if(workbench.isDisplayable()) showPet.run();
-        });
-    }
-
-    static PetWindow showCompanion(WorkbenchWindow workbench,boolean smoke){
-        PetWindow pet=smoke ? PetWindow.startupSmokeWindow(workbench) : new PetWindow(workbench);
-        pet.setAlwaysOnTop(!workbench.isVisible());
-        // A background companion must not take focus from an editor that is already usable.
-        pet.setAutoRequestFocus(false);
-        pet.setVisible(true);
-        return pet;
-    }
-
-    static CompletableFuture<Void> afterWorkbenchReady(CompletableFuture<Void> ready,Runnable preparePet,Runnable showPet){
-        return ready.thenRunAsync(() -> {
-            System.out.println("CLOSURE_PET_PREPARATION_STARTED");
-            try{
-                preparePet.run();
-            }catch(RuntimeException | LinkageError failure){
-                // PetAnimationPanel retains its PNG fallback; the existing workbench stays usable.
-                System.err.println("桌宠模型预加载失败，继续使用动画回退：" + failure.getClass().getSimpleName());
-            }
-            System.out.println("CLOSURE_PET_PREPARATION_FINISHED");
-        }).thenRunAsync(showPet,SwingUtilities::invokeLater);
     }
 
     static void preparePetModel(){
@@ -90,47 +46,38 @@ public class Main {
     }
 
     private static boolean hasImage(Component component) {
-        if (component instanceof JLabel label && label.getIcon() != null
-                && label.getIcon().getIconWidth() > 0 && label.getIcon().getIconHeight() > 0) {
+        if(component instanceof JLabel label && label.getIcon()!=null
+                && label.getIcon().getIconWidth()>0 && label.getIcon().getIconHeight()>0){
             return true;
         }
-        if (component instanceof Container container) {
-            for (Component child : container.getComponents()) {
-                if (hasImage(child)) return true;
+        if(component instanceof Container container){
+            for(Component child:container.getComponents()){
+                if(hasImage(child)) return true;
             }
         }
         return false;
     }
 
-    private static void verifyStartupSmoke(PetWindow pet,WorkbenchWindow workbench){
+    private static void verifyStartupSmoke(PetWindow pet){
         SwingUtilities.invokeLater(() -> {
             try{
                 pet.validate();
                 if(!pet.isShowing() || !pet.isDisplayable() || !hasImage(pet.getContentPane())){
                     throw new IllegalStateException("Closure window/model did not initialize");
                 }
-                if(workbench!=null){
-                    if(!workbench.isShowing() || !workbench.whenReady().isDone()
-                            || workbench.whenReady().isCompletedExceptionally()){
-                        throw new IllegalStateException("Workbench did not become ready before the pet");
-                    }
-                    System.out.println("CLOSURE_WORKBENCH_STARTUP_PASS");
+                if(Arrays.stream(Window.getWindows()).anyMatch(WorkbenchWindow.class::isInstance)){
+                    throw new IllegalStateException("Workbench must only be created from the pet menu");
                 }
                 Toolkit.getDefaultToolkit().sync();
+                System.out.println("CLOSURE_PET_STARTUP_ONLY_PASS");
                 System.out.println(STARTUP_SMOKE_MARKER);
                 pet.dispose();
-                if(workbench!=null) workbench.dispose();
                 System.exit(0);
             }catch(Throwable failure){
-                failStartupSmoke(pet,workbench,failure);
+                failure.printStackTrace();
+                pet.dispose();
+                System.exit(1);
             }
         });
-    }
-
-    private static void failStartupSmoke(PetWindow pet,WorkbenchWindow workbench,Throwable failure){
-        failure.printStackTrace();
-        if(pet!=null) pet.dispose();
-        if(workbench!=null) workbench.dispose();
-        System.exit(1);
     }
 }
