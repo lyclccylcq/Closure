@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0044",
+  "spec_version": 2,
+  "status": "READY",
+  "title": "使用 macOS 钥匙串持久保存 OpenAI Admin key",
+  "objective": "管理密钥只需在工作台填写一次，macOS 后续运行自动读取保存的凭据；支持替换和明确删除，并保留现有账户、余额估算、聊天与桌宠行为。",
+  "architecture": [
+    "Codex direct implementation；从实际交付 main b4de868dfab76eaa02cd4b7e12f1ffcd51bd99c4 创建独立副本，保留原工作区、现有会话、正式配置和美术。",
+    "macOS 使用系统 security 工具保存 Generic Password 条目，固定 Closure 服务/账户命名。写入采用交互命令的私有标准输入，读取后校验保存结果；不依赖额外包或开发工具链，密钥不放入进程参数、环境变量、临时文件、日志、报告、LLM 或 TTS。",
+    "当前输入/会话值优先，其次已保存的钥匙串值，再次启动环境变量。仅在显式账户操作需要时后台读取，无启动自动查询；读取失败明确提示，不静默保存明文。非 macOS 保持明确标注的会话模式。",
+    "保存/替换/删除使用串行后台操作，钥匙串 IO 不占用界面线程或服务状态锁。关闭服务只清内存和待处理请求，不删除成功保存的凭据；清除管理密钥才删除钥匙串条目，并停止本次运行回退环境变量。",
+    "密码输入框始终隐藏且不回填已保存值，提交后立即清空含撤销记录；显示持久化说明、保存/清除进度与失败结果。关闭/隐藏期间迟到结果不重开界面、查询或抢占语音；后续清除不会被较早保存操作恢复。",
+    "通过注入凭据存储验证跨服务重启、优先级、替换、清除、错误和竞态；通过实际 macOS 钥匙串只对临时唯一命名的合成测试项完成新增/更新/关闭重开/读取/删除验证并清理。工程工具不读取用户已有钥匙串条目、实际密钥、账单或私有配置，不进行付费生成/TTS。"
+  ],
+  "non_goals": [
+    "其他平台的系统凭据后端、账户密钥自动创建/轮换、提取当前运行实例的真实密钥、修改对话/语音凭据、浏览器登录态、明文文件保存密钥、自动充值或后台账单轮询。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/billing/**",
+    "src/main/java/app/ui/chat/WorkbenchBalancePane.java",
+    "src/main/resources/macos/**",
+    "src/test/java/app/billing/**",
+    "src/test/java/app/ui/chat/**"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "macOS 工作台保存的 Admin key 可在新运行实例中自动读取，支持更新/删除，普通退出不删除；现有环境变量及普通对话密钥仍分离。",
+      "verification": "凭据存储/运行服务测试覆盖跨实例恢复、保存值优先级、更新、清除后的缺密钥提示、关闭保留、非官方目标不读取/转发 Admin key；本机钥匙串以唯一合成测试项验证真实读写与删除。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "密钥不通过命令行、环境变量、临时脚本、日志、报告或界面明文暴露，不写入普通配置/余额记录，失败不伪称保存/删除成功。",
+      "verification": "进程桥接测试核对固定命令与标准输入、输出处理、临时文件只含静态脚本、超时/拒绝访问/格式错误提示无凭据；真实测试仅使用临时合成项，已有余额存储仍只含指纹。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "界面可异步保存/清除、立即清空密码输入及撤销记录，新服务重开可直接查询；并发、取消/隐藏/关闭不会卡住界面、恢复已清除凭据或抢占后来语音。",
+      "verification": "运行服务竞态和失败替身覆盖保存后清除、IO 等待期间取消、关闭/迟到结果；实际工作台验证隐藏输入、保存/重开自动查询、清除后提示、普通聊天及原有语音归属。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "既有消费短报、余额同步/5 美元提醒、模型启动和工作台菜单入口保持正确；通过精确提交及 main CI 和合并版检查后更新原桌面入口。",
+      "verification": "冻结六项检查、既有及新增原生窗口/钥匙串回归、默认/兼容启动 smoke；核验真实合并版安装源文件、原入口、美术及正式运行目录。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "系统钥匙串锁定、授权拒绝或不可用时，需要用户在系统中解锁后重试，应用只报告固定错误，不降级明文存储。",
+    "现有版本仅在内存中的密钥不由工程工具提取；升级后需在本地再填写保存一次。",
+    "非 macOS 当前保持会话模式，并在界面/文档明确标注。"
+  ],
+  "rollback": "回退本任务合并或恢复原入口至 b4de868d；原有对话/语音与余额记录保持完整。钥匙串凭据由用户清除操作管理。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}

@@ -77,7 +77,9 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 点击工作台右上角「API 账户」查询当前模型连接的账户数据，可露会播报结果；「查询并播报」刷新，「再报一次」重播。结果列出平台、币种或额度单位和查询时间。不查询 Fish 语音余额，不把账户数据交给聊天模型，也不在应用启动时自动查询。
 
-OpenAI 官方连接使用独立 **Admin API key** 查询组织费用与用量。首次查询会显示管理密钥输入框：在本地粘贴后点「应用并查询」，或点击「管理密钥」修改/清除。输入以密码形式显示，应用后清空；界面填写的密钥仅在本次运行内存保存，退出后需重新填写，不覆盖普通对话 key。也可以在启动应用的终端设置 `CLOSURE_OPENAI_ADMIN_KEY` 环境变量提供密钥；点击清除会停止本次运行使用该管理密钥，包括环境变量提供的值。密钥不要发送到聊天或提交到仓库。
+OpenAI 官方连接使用独立 **Admin API key**。首次查询会显示管理密钥输入框：在本地粘贴后点「保存并查询」，或点击「管理密钥」修改/清除。macOS 会保存到**系统钥匙串**，退出后保留，下次打开账户工具自动读取；输入以密码形式显示，提交后立即清空，已保存的密钥不回填。保存、读取与清除在后台完成，钥匙串不可用时会明确提示，不降级为明文文件。非 macOS 当前保留会话模式，界面会标注。
+
+密钥读取顺序为当前会话、已保存的钥匙串值、`CLOSURE_OPENAI_ADMIN_KEY` 启动环境变量。点击「清除管理密钥」会删除保存的凭据并停止本次运行回退环境变量；外部设置的环境变量仍由启动环境管理。普通退出只清内存，不删除钥匙串条目，也不覆盖普通对话 key。密钥通过私有标准输入传给系统钥匙串工具，不写入配置、余额记录、临时脚本、命令参数或日志，也不送入聊天/语音。升级前仅在内存中的密钥需在本地再保存一次；不要把密钥发送到聊天或提交到仓库。
 
 OpenAI 日常只显示和播报**今日消耗**，金额保留一位小数，内部计算仍保留精度。消费按所配置 Admin key 的**组织**汇总，包含其他应用的调用；日期以 UTC 划分，官方数据可能延迟。不再朗读月统计、tokens、请求数和整段说明。查询只读取官方 Costs 接口；管理密钥不会用于对话、TTS 或兼容中转。
 
@@ -85,7 +87,7 @@ OpenAI 日常只显示和播报**今日消耗**，金额保留一位小数，内
 
 估算余额低于 5 美元时，可露会在消费短报后追加“采购费不足”等台词；耗尽时使用不同提醒。判断使用未舍入数值，其他币种和令牌额度不会套用美元阈值。这里只在用户查询/重播时汇报，不自动充值或后台轮询。
 
-同步记录保存在本机 `~/.closure/billing/openai-funds.json`，只含余额、消费基准、时间和不可逆账户指纹，不保存密钥。重启后沿用相同管理密钥即可继续估算；更换密钥需重新同步。「清除同步」删除当前记录。管理密钥仍仅本次运行保存。
+同步记录保存在本机 `~/.closure/billing/openai-funds.json`，只含余额、消费基准、时间和不可逆账户指纹，不保存密钥。重启后沿用相同管理密钥即可继续估算；更换密钥需重新同步。「清除同步」删除当前余额记录，与删除钥匙串凭据分别管理。
 
 [创建 Admin API key](https://platform.openai.com/settings/organization/admin-keys)需相应组织权限；接口参考：[Costs](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/costs)、[Completions usage](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/completions)、[Administration](https://developers.openai.com/api/reference/administration/overview)。
 

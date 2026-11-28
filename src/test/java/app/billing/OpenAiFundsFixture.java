@@ -25,6 +25,15 @@ public final class OpenAiFundsFixture implements AutoCloseable {
     private volatile boolean incomplete;
     private final List<HttpRequest> requests = new CopyOnWriteArrayList<>();
     private final RuntimeBalanceService service;
+    private final java.util.function.Function<String,BalanceService> adminClients;
+    private final OpenAiBalanceStore funds;
+    private final AdminKeyStore persistentKeys = new AdminKeyStore() {
+        private volatile String value;
+        public String load() { return value; }
+        public void save(String key) { value = key; }
+        public void clear() { value = null; }
+        public boolean persistent() { return true; }
+    };
 
     public OpenAiFundsFixture(Path file) throws Exception {
         setCost("1.234567");
@@ -44,12 +53,19 @@ public final class OpenAiFundsFixture implements AutoCloseable {
             public ZoneId getZone() { return ZoneOffset.UTC; }
             public Clock withZone(ZoneId zone) { return this; }
         };
+        adminClients = key -> new OpenAiAdminClient(key, routed, clock);
+        funds = new OpenAiBalanceStore(file);
         service = new RuntimeBalanceService(() -> new AiModelConfig(URI.create("https://api.openai.com/v1/chat/completions"),
                 "synthetic-chat-key", "fixture-model", Duration.ofSeconds(1), Duration.ofSeconds(1)),
-                () -> "synthetic-admin-funds", key -> new OpenAiAdminClient(key, routed, clock),
-                config -> { throw new AssertionError("No provider fallback expected"); }, new OpenAiBalanceStore(file));
+                () -> "synthetic-admin-funds", adminClients,
+                config -> { throw new AssertionError("No provider fallback expected"); }, funds);
     }
     public BalanceService service() { return service; }
+    public BalanceService persistentService() {
+        return new RuntimeBalanceService(() -> new AiModelConfig(URI.create("https://api.openai.com/v1/chat/completions"),
+                "synthetic-chat-key", "fixture-model", Duration.ofSeconds(1), Duration.ofSeconds(1)), () -> null,
+                adminClients, config -> { throw new AssertionError(); }, funds, persistentKeys);
+    }
     public void setNow(Instant value) { now = value; }
     public void setCost(String amount) { buckets = bucket(now.atZone(ZoneOffset.UTC).toLocalDate().toString(), amount, "usd"); }
     public void setBuckets(String value) { buckets = value; }

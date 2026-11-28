@@ -41,12 +41,14 @@ final class WorkbenchBalancePane extends VBox {
     private final PasswordField adminInput = new PasswordField();
     private final VBox adminForm = new VBox(6);
     private final Button adminSettings = new Button("管理密钥");
+    private final Button applyAdmin = new Button("保存并查询");
+    private final Button clearAdmin = new Button("清除管理密钥");
     private final Hyperlink billingPage = new Hyperlink("OpenAI 账单");
     private final TextField balanceInput = new TextField();
     private final VBox fundsForm = new VBox(6);
     private final Button syncFunds = new Button("同步余额");
     private final Button clearFunds = new Button("清除同步");
-    private CompletableFuture<BalanceReport> pending;
+    private CompletableFuture<?> pending;
     private ChatActivity.Request thinking;
     private BalanceReport report;
     private boolean closed;
@@ -71,20 +73,18 @@ final class WorkbenchBalancePane extends VBox {
         adminInput.setId("workbench-admin-key");
         adminInput.getStyleClass().add("workbench-admin-input");
         adminInput.setPromptText("粘贴 OpenAI Admin API key"); adminInput.setMinWidth(0);
-        Button apply = new Button("应用并查询"); apply.setId("workbench-admin-apply");
-        Button clear = new Button("清除管理密钥"); clear.setId("workbench-admin-clear");
-        for (Button button : new Button[]{adminSettings, apply, clear}) button.getStyleClass().add("workbench-action");
-        Label hint = new Label("仅本次运行使用，退出后需重新填写。只用于 OpenAI 官方费用与用量。");
+        applyAdmin.setId("workbench-admin-apply"); clearAdmin.setId("workbench-admin-clear");
+        for (Button button : new Button[]{adminSettings, applyAdmin, clearAdmin}) button.getStyleClass().add("workbench-action");
+        Label hint = new Label(balances.persistsOpenAiAdminKey()
+                ? "保存到 macOS 钥匙串，之后自动读取。仅用于 OpenAI 官方费用查询。"
+                : "当前系统仅本次运行使用，退出后需重新填写。仅用于 OpenAI 官方费用查询。");
+        hint.setId("workbench-admin-storage");
         hint.setWrapText(true); hint.getStyleClass().add("workbench-path");
-        HBox keyActions = new HBox(8, apply, clear);
+        HBox keyActions = new HBox(8, applyAdmin, clearAdmin);
         adminForm.getChildren().addAll(adminInput, keyActions, hint);
         adminForm.setVisible(false); adminForm.managedProperty().bind(adminForm.visibleProperty());
-        apply.setOnAction(event -> applyAdminKey()); adminInput.setOnAction(event -> applyAdminKey());
-        clear.setOnAction(event -> {
-            cancel(); balances.clearOpenAiAdminKey(); adminInput.setText(""); resetReport();
-            result.setText("本次运行的管理密钥已清除，普通对话连接保持可用。");
-            adminForm.setVisible(true);
-        });
+        applyAdmin.setOnAction(event -> changeAdminKey(false)); adminInput.setOnAction(event -> changeAdminKey(false));
+        clearAdmin.setOnAction(event -> changeAdminKey(true));
         adminSettings.setId("workbench-admin-settings"); adminSettings.setVisible(false);
         adminSettings.managedProperty().bind(adminSettings.visibleProperty());
         adminSettings.setOnAction(event -> {
@@ -129,17 +129,20 @@ final class WorkbenchBalancePane extends VBox {
         catch (NumberFormatException invalid) { updated.setText("请填写官方账单中的当前美元余额。"); balanceInput.requestFocus(); }
     }
 
-    private void request(BigDecimal calibration) {
+    private void request(BigDecimal calibration) { request(calibration, speech == null ? 0 : speech.speechRequestVersion()); }
+
+    private void request(BigDecimal calibration, long speechVersion) {
         if (closed || pending != null) return;
         long version = ++epoch;
-        long speechVersion = speech == null ? 0 : speech.speechRequestVersion();
         report = null; working(true); read.setDisable(true);
         title.setText("当前对话 API");
         result.setText("博士，等我翻一下今天的账本。"); updated.setText(calibration == null ? "正在查询…" : "正在同步余额…");
         thinking = activity.start();
-        try { pending = calibration == null ? balances.query() : balances.syncOpenAiBalance(calibration); }
-        catch (RuntimeException invalid) { pending = CompletableFuture.failedFuture(invalid); }
-        pending.whenComplete((value, error) -> Platform.runLater(() -> {
+        CompletableFuture<BalanceReport> operation;
+        try { operation = calibration == null ? balances.query() : balances.syncOpenAiBalance(calibration); }
+        catch (RuntimeException invalid) { operation = CompletableFuture.failedFuture(invalid); }
+        pending = operation;
+        operation.whenComplete((value, error) -> Platform.runLater(() -> {
             if (closed || version != epoch) return;
             pending = null;
             if (thinking != null) { thinking.close(); thinking = null; }
@@ -183,16 +186,35 @@ final class WorkbenchBalancePane extends VBox {
         if (pending != null) { pending.cancel(true); pending = null; updated.setText("查询已取消"); }
         if (thinking != null) { thinking.close(); thinking = null; }
         working(false);
+        editingCredential(false);
         if (speechSession != null) speechSession.stop();
     }
 
-    private void applyAdminKey() {
+    private void changeAdminKey(boolean clear) {
         if (closed || !balances.canConfigureOpenAiAdminKey()) return;
+        String key = clear ? null : adminInput.getText();
+        adminInput.setText("");
         cancel(); resetReport();
-        try {
-            balances.configureOpenAiAdminKey(adminInput.getText());
-            adminInput.setText(""); adminForm.setVisible(false); query();
-        } catch (BalanceException invalid) { result.setText(invalid.getMessage()); }
+        long version = ++epoch;
+        long speechVersion = speech == null ? 0 : speech.speechRequestVersion();
+        working(true); editingCredential(true);
+        result.setText(clear ? "正在清除管理密钥…" : "正在保存管理密钥…"); updated.setText("正在处理…");
+        CompletableFuture<Void> operation;
+        try { operation = clear ? balances.clearOpenAiAdminKeyAsync() : balances.configureOpenAiAdminKeyAsync(key); }
+        catch (RuntimeException invalid) { operation = CompletableFuture.failedFuture(invalid); }
+        pending = operation;
+        operation.whenComplete((value, error) -> Platform.runLater(() -> {
+            if (closed || version != epoch) return;
+            pending = null; working(false); editingCredential(false);
+            if (error != null) {
+                result.setText(message(error)); updated.setText(clear ? "管理密钥未能清除" : "管理密钥未能保存");
+                adminForm.setVisible(true); return;
+            }
+            if (clear) {
+                result.setText("保存的管理密钥已清除，普通对话连接保持可用。"); updated.setText("管理密钥已清除");
+                adminForm.setVisible(true);
+            } else { adminForm.setVisible(false); request(null, speechVersion); }
+        }));
     }
 
     private void showAdminConfiguration() {
@@ -207,6 +229,9 @@ final class WorkbenchBalancePane extends VBox {
 
     private void working(boolean value) {
         refresh.setDisable(value); syncFunds.setDisable(value); clearFunds.setDisable(value); balanceInput.setDisable(value);
+    }
+    private void editingCredential(boolean value) {
+        applyAdmin.setDisable(value); clearAdmin.setDisable(value); adminSettings.setDisable(value); adminInput.setDisable(value);
     }
 
     void close() {

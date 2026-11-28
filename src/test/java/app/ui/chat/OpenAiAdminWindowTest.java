@@ -106,8 +106,12 @@ class OpenAiAdminWindowTest {
             assertTrue(chat.calls.isEmpty(), "Admin results must not enter the language model");
             fx(() -> {
                 button("workbench-admin-settings").fire(); assertTrue(input().isVisible());
-                button("workbench-admin-clear").fire(); assertNull(configured);
+                button("workbench-admin-clear").fire();
                 assertTrue(input().getText().isEmpty()); assertTrue(button("workbench-balance-read").isDisabled());
+                return null;
+            });
+            await(() -> configured == null && fx(() -> !button("workbench-admin-clear").isDisabled()));
+            fx(() -> {
                 button("workbench-admin-settings").fire();
                 ((TextArea) view().lookup("#workbench-editor")).setText("管理密钥清除后正常聊天。");
                 button("workbench-send").fire(); return null;
