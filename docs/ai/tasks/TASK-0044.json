@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "task_id": "TASK-0044",
-  "spec_version": 1,
+  "spec_version": 2,
   "status": "READY",
   "title": "使用 macOS 钥匙串持久保存 OpenAI Admin key",
   "objective": "管理密钥只需在工作台填写一次，macOS 后续运行自动读取保存的凭据；支持替换和明确删除，并保留现有账户、余额估算、聊天与桌宠行为。",
   "architecture": [
     "Codex direct implementation；从实际交付 main b4de868dfab76eaa02cd4b7e12f1ffcd51bd99c4 创建独立副本，保留原工作区、现有会话、正式配置和美术。",
-    "macOS 使用系统 Security 框架的 Generic Password 条目，固定 Closure 服务/账户命名。通过系统 JXA 桥接调用 SecItemAdd/Update/CopyMatching/Delete，不依赖额外包或开发工具链；密钥仅从标准输入传入，读回值只进入应用内存，不放入命令行、环境变量、脚本文件、日志、报告、LLM 或 TTS。",
+    "macOS 使用系统 security 工具保存 Generic Password 条目，固定 Closure 服务/账户命名。写入采用交互命令的私有标准输入，读取后校验保存结果；不依赖额外包或开发工具链，密钥不放入进程参数、环境变量、临时文件、日志、报告、LLM 或 TTS。",
     "当前输入/会话值优先，其次已保存的钥匙串值，再次启动环境变量。仅在显式账户操作需要时后台读取，无启动自动查询；读取失败明确提示，不静默保存明文。非 macOS 保持明确标注的会话模式。",
     "保存/替换/删除使用串行后台操作，钥匙串 IO 不占用界面线程或服务状态锁。关闭服务只清内存和待处理请求，不删除成功保存的凭据；清除管理密钥才删除钥匙串条目，并停止本次运行回退环境变量。",
     "密码输入框始终隐藏且不回填已保存值，提交后立即清空含撤销记录；显示持久化说明、保存/清除进度与失败结果。关闭/隐藏期间迟到结果不重开界面、查询或抢占语音；后续清除不会被较早保存操作恢复。",
