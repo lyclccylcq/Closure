@@ -139,7 +139,12 @@ public final class OpenAiAdminClient implements BalanceService {
                 if (status == 401 || status == 403) throw configuration("OpenAI 未允许此管理密钥读取费用和用量，请检查密钥与组织权限。");
                 if (status == 429) throw new BalanceException("OpenAI 查询有点频繁，稍后再试一下吧。");
                 if (status != 200) throw new BalanceException("OpenAI 费用与用量暂时没查到（HTTP " + status + "），请稍后重试。");
-                Map<String,Object> json = BalanceJson.read(reply.body());
+                Map<String,Object> json;
+                try { json = BalanceJson.read(reply.body()); }
+                catch (BalanceException invalid) {
+                    throw new BalanceException("OpenAI " + (resource.equals("costs") ? "费用数据" : "模型用量数据")
+                            + "暂时无法解析，请稍后重试。");
+                }
                 if (!"page".equals(json.get("object")) || !(json.get("data") instanceof List<?> buckets)) throw BalanceJson.invalid();
                 for (Object raw : buckets) {
                     Map<String,Object> bucket = BalanceJson.object(raw);

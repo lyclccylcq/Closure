@@ -106,6 +106,44 @@ class OpenAiAdminClientTest {
         assertTrue(report.lines().getFirst().scope().contains("费用记录"));
     }
 
+    @Test void preciseNumericAndStringCostsKeepAllDigitsIncludingScientificRefunds() {
+        String precise = "0.123456789012345678901234567890123456789012345678901234567890123456789";
+        String refund = "-1.2345678901234567890123456789e-40";
+        response = uri -> uri.getPath().endsWith("costs")
+                ? page(bucket(DAY, cost(precise, "usd") + "," + cost("\"" + refund + "\"", "usd")), false, null)
+                : page(bucket(DAY, usage(100, 20, 2)), false, null);
+        BalanceReport report = client().query().join();
+        BigDecimal total = new BigDecimal(precise).add(new BigDecimal(refund));
+        assertEquals(total, report.lines().get(0).amount());
+        assertEquals(total, report.lines().get(1).amount());
+        assertTrue(report.lines().getFirst().text().contains(total.stripTrailingZeros().toPlainString()));
+        assertFalse(report.speechText().contains("剩余"));
+    }
+
+    @Test void optionalFineGrainedNumbersDoNotInvalidateAnOtherwiseCompleteReport() {
+        response = uri -> uri.getPath().endsWith("costs")
+                ? page(bucket(DAY, cost("1.25", "usd").replace("}}", "},\"quantity\":1e-100}")), false, null)
+                : page(bucket(DAY, usage(5, 2, 1)), false, null);
+        BalanceReport report = client().query().join();
+        assertEquals(new BigDecimal("1.25"), report.lines().getFirst().amount());
+        assertEquals(new BigDecimal("5"), report.lines().get(2).amount());
+    }
+
+    @Test void invalidJsonIdentifiesTheReaderWithoutExposingItsResponseBody() {
+        for (String resource : List.of("costs", "usage/completions")) {
+            response = uri -> uri.getPath().endsWith(resource) ? "private-response synthetic-admin-key" : page("", false, null);
+            var failure = assertThrows(java.util.concurrent.CompletionException.class, () -> client().query().join());
+            String message = failure.getCause().getMessage();
+            assertTrue(message.contains(resource.equals("costs") ? "OpenAI 费用数据" : "OpenAI 模型用量数据"));
+            assertFalse(message.contains("private-response")); assertFalse(message.contains("synthetic-admin-key"));
+        }
+        for (String invalid : List.of("1e99999", "1e-99999", "{\"unexpected\":1}", "null")) {
+            response = uri -> uri.getPath().endsWith("costs")
+                    ? page(bucket(DAY, cost(invalid, "usd")), false, null) : page("", false, null);
+            assertThrows(java.util.concurrent.CompletionException.class, () -> client().query().join());
+        }
+    }
+
     @Test void refundsRemainNegativeCostsAndMonthRolloverUsesTheNewMonth() {
         response = uri -> uri.getPath().endsWith("costs") ? page(bucket(DAY, cost("-0.12", "usd")), false, null) : page("", false, null);
         assertEquals(new BigDecimal("-0.12"), client().query().join().lines().getFirst().amount());

@@ -30,7 +30,8 @@ final class BalanceJson {
     static BigDecimal number(Object value) {
         try {
             BigDecimal number = value instanceof BigDecimal b ? b : new BigDecimal((String) value);
-            if (number.precision() > 50 || Math.abs((long) number.scale()) > 24) throw invalid();
+            // Cover finite floating-point values and exact decimal strings, while keeping formatting bounded.
+            if (number.precision() > 512 || Math.abs((long) number.scale()) > 512) throw invalid();
             return number;
         } catch (RuntimeException invalid) { throw invalid(); }
     }
