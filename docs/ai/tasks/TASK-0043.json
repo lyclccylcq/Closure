@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0043",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "精简日常消费播报并同步充值后余额与采购费提醒",
+  "objective": "日常只简短播报一位小数的今日消耗；用户充值后同步官方账单中的当前余额，按新增美元消耗估算剩余资金，低于 5 美元时由可露追加人格化采购费提醒。",
+  "architecture": [
+    "Codex direct implementation；从已交付 main fc74a7636d8f2a3b63828586cd6edcdb813fa6f8 创建独立副本，保留原工作区、当前会话、模型和正式配置。",
+    "依据用户后续确认：OpenAI 日常只报今日消费，费用显示/播报保留一位小数，内部 BigDecimal 计算保持精确；不再自动朗读月消费、token、请求数与说明。",
+    "工作台增加充值后余额同步、清除与同步时间。用户输入官方账单显示的当前 USD 余额；先取得完整费用快照再以该金额校准，随后用同一统计起点的新增费用估算余额，覆盖 UTC 日期/月切换。明确估算与官方延迟，未同步、币种不匹配、失败或不完整响应不能伪造余额或警报。",
+    "仅显式同步/清除写入本机 ~/.closure/billing/openai-funds.json，原子替换并限制权限；仅含余额、费用基准、时间与不可逆账户指纹，不含 Admin key。切换管理密钥不会串用旧账户记录，输入与查询数据不进入 LLM、日志或 TTS 配置。",
+    "按未舍入的估算值判断小于 5 USD，零/负值与低余额使用不同的可露风格短句，正常查询只报消耗；同一结果重播保持一致。继续使用共享 TTS/模型与前台语音归属，不主动后台轮询或充值。",
+    "OpenAI 仅需 Costs 只读接口；成本查询窗口可从同步月延续到后续月份，完整分页后再估算。保留非 OpenAI 余额、管理密钥会话隔离和取消机制。使用本地 HTTP、临时文件与合成密钥验证，工程阶段不读取真实密钥、账单、配置或触发实际生成/TTS。"
+  ],
+  "non_goals": [
+    "查询未经公开文档支持的充值余额端点、抓取浏览器登录态、自动充值、汇率猜测、按消耗假装官方实时余额、持久保存密钥、修改其他配置或模型美术、定时后台播报。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/billing/**",
+    "src/main/java/app/ui/chat/WorkbenchBalancePane.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/billing/**",
+    "src/test/java/app/ui/chat/**"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "OpenAI 日常只简短展示并播报今日消耗，金额保留一位小数且计算精度不变，不读月统计、tokens 或请求数；台词符合可露人格且重播稳定。",
+      "verification": "报告单元测试覆盖高精度、零/微小消费、舍入、无消费记录、多币种及无余额记录；实际面板/共享 TTS 验证摘要、重播、保留最新前台语音。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "充值后可本地同步与清除当前 USD 余额，记录跨运行保留，后续按新增费用估算；跨 UTC 日/月、再充值校准、换密钥与存储/网络失败不能串账或误报余额。",
+      "verification": "本地 HTTP 加临时文件覆盖完整快照、基准差额、月切换、重启读取、重新同步/清除、账户隔离、错误/取消及部分数据拒绝；输入缺失/非法有明确提示。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "估算余额严格低于 5 USD 时追加采购费不足提醒，耗尽与正常状态分别处理；舍入后的金额不改变判断，不拿其他币种/令牌额度冒充 USD 余额。",
+      "verification": "边界测试覆盖 5.0、4.99、4.9、微小正值、零/负值；未同步或未知币种不触发警报，实际窗口验证同步后随消费触发短提醒和可露动作/TTS。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "通过冻结检查、真实窗口回归、精确提交与 main CI、合并版检查后更新原桌面入口，保留启动仅模型、工作台菜单入口、语音与美术。",
+      "verification": "六项冻结检查、既有原生回归及新增完整同步窗口用例、默认/兼容启动 smoke；核验真实合并安装文件、原入口、模型美术和正式运行目录。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "同步后的余额是估算，官方费用延迟、退款、赠款/过期或其他余额变动可能产生偏差；充值后以官方当前余额重新校准。",
+    "账户采用管理密钥不可逆指纹隔离，换密钥需重新同步，即使属于同一组织。",
+    "工程测试仅使用临时文件和合成数据，不验收用户实际充值或真实账单。"
+  ],
+  "rollback": "回退本任务合并或将原启动入口恢复到 fc74a763；保留模型、正式配置与余额文件，旧版本忽略余额记录。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}

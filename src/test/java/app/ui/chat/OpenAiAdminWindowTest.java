@@ -92,7 +92,8 @@ class OpenAiAdminWindowTest {
             var first = audio.poll(3, TimeUnit.SECONDS); assertNotNull(first);
             await(() -> character.get().state() == CharacterState.TALKING);
             fx(() -> {
-                assertTrue(result().getText().contains("本月费用")); assertTrue(result().getText().contains("1.23 USD"));
+                assertTrue(result().getText().contains("今日消耗")); assertTrue(result().getText().contains("0.1 USD"));
+                assertFalse(result().getText().contains("tokens")); assertFalse(result().getText().contains("本月"));
                 assertFalse(result().getText().contains("剩余")); assertTrue(view().lookup("#workbench-openai-billing").isVisible());
                 for (var node : view().lookupAll(".label")) assertFalse(((Label) node).getText().contains("synthetic-admin-local-only"));
                 view().applyCss(); view().layout(); capture("admin-report");
@@ -100,7 +101,8 @@ class OpenAiAdminWindowTest {
             });
             var repeat = audio.poll(3, TimeUnit.SECONDS); assertNotNull(repeat);
             assertEquals(2, spoken.size()); assertFalse(spoken.getFirst().contains("剩余"));
-            assertTrue(spoken.getFirst().contains("费用和用量")); repeat.complete(null); first.complete(null);
+            assertTrue(spoken.getFirst().contains("0.1美元")); assertFalse(spoken.getFirst().contains("tokens"));
+            assertEquals(spoken.getFirst(), spoken.getLast()); repeat.complete(null); first.complete(null);
             assertTrue(chat.calls.isEmpty(), "Admin results must not enter the language model");
             fx(() -> {
                 button("workbench-admin-settings").fire(); assertTrue(input().isVisible());
