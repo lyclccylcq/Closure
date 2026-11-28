@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0040",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "恢复时段天气启动问候并增加工作台 API 余额播报",
+  "objective": "启动可露时按系统本地时间问候，简报当天当地天气且不念地名，并给出简短关心；在工作台新增真实 API 余额查询与可露播报，沿用正式运行目录与共享语音。",
+  "architecture": [
+    "Codex direct implementation；基于已交付 main 72c80129f3842bf52070a6ec6901f6498c66b3f5 的独立副本，保留原工作区及本机正式配置。",
+    "使用现有系统时钟、定位与 Open-Meteo 当天预报，模板输出时段问候、简短天气和关心，不含地名。不调用 LLM 改写天气事实。失败时明确没有取得天气，不报旧城市或臆造天气。",
+    "恢复 Fish 等当前语音后端的单次启动朗读，替换旧固定开场；遵守静音与启动播报抢占门禁，暖机失败仍可显示文字；迟到、关闭后不产生意外播报。",
+    "工作台增加余额查询入口、加载/结果/失败与重试和朗读操作。余额服务在后台请求当前平台的只读余额接口，精确保留币种、可用余额与更新时间，使用共享 TTS 让可露汇报，不把账户数据交给 LLM。",
+    "平台接口遵循对应官方文档及用户确认，账户配置在应用运行时解析，沿用当前凭据，不从开发工具读取密钥或私有配置，不猜跨域地址或伪造余额。不支持的服务明确说明，不把充值额度或消耗量冒充剩余额度。",
+    "以本地 HTTP 替身验证请求、认证、精度、超时/错误/取消和原生工作台行为；真实付费模型/TTS 不用于工程测试。独立烟雾启动不启动天气或余额查询。"
+  ],
+  "non_goals": [
+    "修改模型美术、改动真实密钥/私有配置、消费真实付费生成、自动充值或任何写账操作、替换现有聊天提示词、无关后端或工作流重构。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "docs/character/new-model.md",
+    "config/local-ai.example.properties",
+    "src/main/java/app/ai/AiModelConfig.java",
+    "src/main/java/app/billing/**",
+    "src/main/java/app/weather/WeatherGreetingService.java",
+    "src/main/java/app/service/ChatSpeechController.java",
+    "src/main/java/app/ui/PetWindow.java",
+    "src/main/java/app/ui/chat/WorkbenchWindow.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/java/app/ui/chat/WorkbenchBalancePane.java",
+    "src/main/java/app/ui/chat/WorkbenchPetDock.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/billing/**",
+    "src/test/java/app/weather/WeatherGreetingServiceTest.java",
+    "src/test/java/app/service/ChatSpeechControllerTest.java",
+    "src/test/java/app/ui/chat/**",
+    "src/test/java/app/MainStartupWindowTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "启动问候使用系统本地时间，简报当日当地天气与简短关心，不含地名，语气符合可露人格；天气失败不臆造信息。",
+      "verification": "固定时钟覆盖时段边界与跨时区，冷热晴雨雪雾等和失败样例；断言不含地点、使用当天温度范围、关心与天气/时段相符、字数简短。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "正式启动通过现有语音后端朗读一次新问候，Fish 可用，静音/关闭/已开始对话时不迟到抢占；不再播放旧固定开场。",
+      "verification": "语音替身覆盖 Fish 启动合成路由、单次和前台抢占/静音；实际模型窗口注入天气及语音替身检查显示和朗读、暖机失败与关闭门禁。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "工作台可发起真实余额查询并由可露汇报；结果有平台、币种和时间，错误、加载及重试清楚且不卡界面，不把账户结果传给 LLM。",
+      "verification": "按确认平台官方文档的本地 HTTP 替身验证余额请求/响应与认证、精度和失败；原生窗口验证点击查询/朗读、模型状态、重复请求、会话/隐藏/关闭取消、既有对话无干扰。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "既有启动只显示模型、工作台分栏、字体、聊天/语音与关闭恢复保持；完成精确受审 CI、合并 main CI 和原桌面启动入口的可运行交付。",
+      "verification": "冻结六项检查及既有八组和相关新增原生回归，合并版构建/离线启动及原入口实际 smoke，核验正式目录和本地资源保持。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "余额接口依平台与账号权限而异，需用户提供平台名称或官网后才能绑定具体接口。",
+    "定位或天气失败只能提供明确降级问候；真实云语音听感和产品体验由用户验收。",
+    "异步天气/余额完成与共享语音竞争须有关闭/隐藏和前台请求门禁。"
+  ],
+  "rollback": "回退本任务合并并将桌面入口恢复到 72c8012；保留正式运行目录、密钥和本地美术。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}
