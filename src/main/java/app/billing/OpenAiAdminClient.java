@@ -121,7 +121,8 @@ public final class OpenAiAdminClient implements BalanceService {
             pending.add(response); if (cancelled) response.cancel(true);
             return response.thenCompose(reply -> {
                 int status = reply.statusCode();
-                if (status == 401 || status == 403) throw configuration("OpenAI 未允许此管理密钥读取费用和用量，请检查密钥与组织权限。");
+                if (status == 401 || status == 403) throw new BalanceException("OpenAI 未允许此管理密钥读取组织费用，请检查密钥有效性与组织权限后重试。",
+                        BalanceException.Action.REVIEW_OPENAI_ADMIN);
                 if (status == 429) throw new BalanceException("OpenAI 查询有点频繁，稍后再试一下吧。");
                 if (status != 200) throw new BalanceException("OpenAI 费用与用量暂时没查到（HTTP " + status + "），请稍后重试。");
                 Map<String,Object> json;

@@ -174,7 +174,7 @@ class OpenAiAdminClientTest {
             status = code; response = uri -> "synthetic-admin-key private-response-body";
             var failure = assertThrows(java.util.concurrent.CompletionException.class, () -> client().query().join());
             assertTrue(failure.getCause() instanceof BalanceException); assertFalse(failure.toString().contains("synthetic-admin-key"));
-            if (code == 401 || code == 403) assertEquals(BalanceException.Action.CONFIGURE_OPENAI_ADMIN, ((BalanceException) failure.getCause()).action());
+            if (code == 401 || code == 403) assertEquals(BalanceException.Action.REVIEW_OPENAI_ADMIN, ((BalanceException) failure.getCause()).action());
         }
         assertTrue(requests.stream().noneMatch(request -> request.uri().getPath().contains("steal")));
     }

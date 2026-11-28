@@ -23,13 +23,18 @@ public final class OpenAiFundsFixture implements AutoCloseable {
     private volatile String buckets;
     private volatile int status = 200;
     private volatile boolean incomplete;
+    private volatile boolean storedReadFailure;
     private final List<HttpRequest> requests = new CopyOnWriteArrayList<>();
     private final RuntimeBalanceService service;
     private final java.util.function.Function<String,BalanceService> adminClients;
     private final OpenAiBalanceStore funds;
     private final AdminKeyStore persistentKeys = new AdminKeyStore() {
         private volatile String value;
-        public String load() { return value; }
+        public String load() {
+            if (storedReadFailure) throw new BalanceException("系统钥匙串暂时无法访问，请解锁后重试。", BalanceException.Action.ACCESS_OPENAI_ADMIN);
+            return value;
+        }
+        public boolean contains() { return value != null; }
         public void save(String key) { value = key; }
         public void clear() { value = null; }
         public boolean persistent() { return true; }
@@ -62,10 +67,26 @@ public final class OpenAiFundsFixture implements AutoCloseable {
     }
     public BalanceService service() { return service; }
     public BalanceService persistentService() {
+        return persistentService(persistentKeys);
+    }
+    public BalanceService keychainService(String namespace) {
+        testNamespace(namespace);
+        return persistentService(new MacOsAdminKeyStore(namespace, "test-only"));
+    }
+    public static void clearSyntheticKeychain(String namespace) {
+        testNamespace(namespace);
+        try (var store = new MacOsAdminKeyStore(namespace, "test-only")) { store.clear(); }
+    }
+    private static void testNamespace(String value) {
+        if (value == null || !value.matches("com\\.closure\\.tests\\.restart\\.[a-f0-9]{32}"))
+            throw new IllegalArgumentException("Only unique synthetic restart namespaces are permitted");
+    }
+    private BalanceService persistentService(AdminKeyStore keys) {
         return new RuntimeBalanceService(() -> new AiModelConfig(URI.create("https://api.openai.com/v1/chat/completions"),
                 "synthetic-chat-key", "fixture-model", Duration.ofSeconds(1), Duration.ofSeconds(1)), () -> null,
-                adminClients, config -> { throw new AssertionError(); }, funds, persistentKeys);
+                adminClients, config -> { throw new AssertionError(); }, funds, keys);
     }
+    public void setStoredReadFailure(boolean value) { storedReadFailure = value; }
     public void setNow(Instant value) { now = value; }
     public void setCost(String amount) { buckets = bucket(now.atZone(ZoneOffset.UTC).toLocalDate().toString(), amount, "usd"); }
     public void setBuckets(String value) { buckets = value; }

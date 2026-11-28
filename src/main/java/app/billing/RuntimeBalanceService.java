@@ -27,7 +27,7 @@ final class RuntimeBalanceService implements BalanceService {
     private final ExecutorService credentialExecutor = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "closure-admin-key-store"); thread.setDaemon(true); return thread;
     });
-    private final Set<CompletableFuture<Void>> credentialTasks = ConcurrentHashMap.newKeySet();
+    private final Set<CompletableFuture<?>> credentialTasks = ConcurrentHashMap.newKeySet();
     private String sessionAdminKey;
     private boolean environmentDisabled;
     private boolean closed;
@@ -60,6 +60,22 @@ final class RuntimeBalanceService implements BalanceService {
 
     @Override public boolean canConfigureOpenAiAdminKey() { return true; }
     @Override public boolean persistsOpenAiAdminKey() { return keys.persistent(); }
+    @Override public CompletableFuture<AdminKeyState> openAiAdminKeyStateAsync() {
+        return credentialTask(() -> {
+            if (!officialOpenAi(connections.get().getEndpoint())) return AdminKeyState.UNKNOWN;
+            synchronized (credentialLock) {
+                synchronized (this) { if (closed) throw new BalanceException("账户查询已关闭。"); }
+                boolean saved = keys.contains();
+                synchronized (this) {
+                    if (closed) throw new BalanceException("账户查询已关闭。");
+                    if (saved) return keys.persistent() ? AdminKeyState.SAVED : AdminKeyState.SESSION;
+                    String environment = environmentDisabled ? null : environmentAdminKey.get();
+                    return sessionAdminKey != null || (environment != null && !environment.isBlank())
+                            ? AdminKeyState.SESSION : AdminKeyState.MISSING;
+                }
+            }
+        });
+    }
 
     @Override public void configureOpenAiAdminKey(String key) {
         String normalized = OpenAiAdminClient.normalizeKey(key);
@@ -114,12 +130,16 @@ final class RuntimeBalanceService implements BalanceService {
             return resolved;
         }
     }
-    @Override public CompletableFuture<Void> configureOpenAiAdminKeyAsync(String key) { return credentialTask(() -> configureOpenAiAdminKey(key)); }
-    @Override public CompletableFuture<Void> clearOpenAiAdminKeyAsync() { return credentialTask(this::clearOpenAiAdminKey); }
-    private synchronized CompletableFuture<Void> credentialTask(Runnable action) {
+    @Override public CompletableFuture<Void> configureOpenAiAdminKeyAsync(String key) {
+        return credentialTask(() -> { configureOpenAiAdminKey(key); return null; });
+    }
+    @Override public CompletableFuture<Void> clearOpenAiAdminKeyAsync() {
+        return credentialTask(() -> { clearOpenAiAdminKey(); return null; });
+    }
+    private synchronized <T> CompletableFuture<T> credentialTask(Supplier<T> action) {
         if (closed) return CompletableFuture.failedFuture(new BalanceException("账户查询已关闭。"));
         try {
-            CompletableFuture<Void> task = CompletableFuture.runAsync(action, credentialExecutor);
+            CompletableFuture<T> task = CompletableFuture.supplyAsync(action, credentialExecutor);
             credentialTasks.add(task); task.whenComplete((value, error) -> credentialTasks.remove(task)); return task;
         } catch (RejectedExecutionException unavailable) { return CompletableFuture.failedFuture(new BalanceException("账户查询已关闭。")); }
     }

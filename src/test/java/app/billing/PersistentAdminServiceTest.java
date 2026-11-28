@@ -30,6 +30,8 @@ class PersistentAdminServiceTest {
         volatile String value;
         boolean failSave, failClear;
         final AtomicInteger reads = new AtomicInteger();
+        final AtomicInteger probes = new AtomicInteger();
+        public boolean contains() { probes.incrementAndGet(); return value != null; }
         public String load() { reads.incrementAndGet(); return value; }
         public void save(String key) { if (failSave) throw new BalanceException("模拟保存失败"); value = key; }
         public void clear() { if (failClear) throw new BalanceException("模拟删除失败"); value = null; }
@@ -97,6 +99,50 @@ class PersistentAdminServiceTest {
         var service = new RuntimeBalanceService(() -> new AiModelConfig(URI.create("https://proxy.example/v1/chat/completions"),
                 "ordinary-chat-key", "fixture", Duration.ofSeconds(1), Duration.ofSeconds(1)), () -> "environment-admin-key",
                 key -> { throw new AssertionError(); }, config -> () -> CompletableFuture.completedFuture(report()), new OpenAiBalanceStore(null), store);
-        service.query().join(); assertEquals(0, store.reads.get()); service.close();
+        service.query().join(); assertEquals(AdminKeyState.UNKNOWN, service.openAiAdminKeyStateAsync().join());
+        assertEquals(0, store.reads.get()); assertEquals(0, store.probes.get()); service.close();
+    }
+    @Test void stateDistinguishesSavedEnvironmentAndMissingWithoutReadingPasswords() {
+        var store = new Store(); var service = service(store, new OpenAiBalanceStore(null), new CopyOnWriteArrayList<>());
+        assertEquals(AdminKeyState.SESSION, service.openAiAdminKeyStateAsync().join());
+        service.configureOpenAiAdminKeyAsync("synthetic-saved-admin").join();
+        assertEquals(AdminKeyState.SAVED, service.openAiAdminKeyStateAsync().join());
+        assertEquals(0, store.reads.get());
+        service.clearOpenAiAdminKeyAsync().join();
+        assertEquals(AdminKeyState.MISSING, service.openAiAdminKeyStateAsync().join()); service.close();
+        assertThrows(CompletionException.class, () -> service.openAiAdminKeyStateAsync().join());
+    }
+    @Test void stateLookupsAreSerializedBeforeAQueuedClear() throws Exception {
+        var started = new CountDownLatch(1); var release = new CountDownLatch(1);
+        var store = new Store() {
+            public boolean contains() {
+                started.countDown();
+                try { assertTrue(release.await(3, TimeUnit.SECONDS)); } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+                return value != null;
+            }
+        };
+        store.value = "synthetic-saved-admin";
+        var service = service(store, new OpenAiBalanceStore(null), new CopyOnWriteArrayList<>());
+        var state = service.openAiAdminKeyStateAsync(); assertTrue(started.await(2, TimeUnit.SECONDS));
+        var clear = service.clearOpenAiAdminKeyAsync(); release.countDown();
+        assertEquals(AdminKeyState.SAVED, state.get(2, TimeUnit.SECONDS)); clear.get(2, TimeUnit.SECONDS);
+        assertNull(store.value); assertEquals(AdminKeyState.MISSING, service.openAiAdminKeyStateAsync().join());
+        assertTimeout(Duration.ofMillis(300), service::close);
+    }
+    @Test void closeCancelsAStateLookupWhileTheStoreIsBlocked() throws Exception {
+        var started = new CountDownLatch(1); var release = new CountDownLatch(1);
+        var store = new Store() {
+            public boolean contains() {
+                started.countDown();
+                try { release.await(3, TimeUnit.SECONDS); } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+                return true;
+            }
+        };
+        var service = service(store, new OpenAiBalanceStore(null), new CopyOnWriteArrayList<>());
+        var state = service.openAiAdminKeyStateAsync();
+        try {
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            assertTimeout(Duration.ofMillis(300), service::close); assertTrue(state.isCancelled());
+        } finally { release.countDown(); service.close(); }
     }
 }
