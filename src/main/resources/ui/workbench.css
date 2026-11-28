@@ -97,6 +97,19 @@
     -fx-text-fill: #f4eefe;
 }
 
+.workbench-balance {
+    -fx-background-color: #211a33;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-color: #594775;
+    -fx-padding: 12 16;
+    -fx-spacing: 6;
+}
+
+.workbench-balance .label {
+    -fx-text-fill: #e7e0f2;
+}
+
 .workbench-chat-column {
     -fx-padding: 0 24 0 24;
 }

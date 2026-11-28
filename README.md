@@ -8,7 +8,7 @@
 
 ## 当前进度
 
-**更新于 2026-11-27。** 主分支已包含多轮对话、Fish 语音、固定触碰台词缓存和新版桌面动作，可从本页的启动入口使用。
+**更新于 2026-11-28。** 主分支已包含多轮对话、Fish 语音、时段天气启动问候、工作台 API 余额查询和新版桌面动作，可从本页的启动入口使用。
 
 | 能力 | 已实现的内容 |
 | --- | --- |
@@ -75,6 +75,12 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 正式启动时，工作台使用运行目录中的 AI 配置，并共享桌宠已有的朗读服务。当前会话回复完成后朗读 `speechText`。切换会话或隐藏工作台会停止该会话的语音，后台完成的回复保留文字。每个会话的「停止」只取消自己正在持有的语音。
 
+点击工作台右上角「API 余额」查询当前对话模型连接的余额，可露会播报结果；「查询并播报」刷新，「再报一次」重播。结果列出平台、币种或额度单位和查询时间。不查询 Fish 语音余额，不把账户数据交给聊天模型，也不在应用启动时自动查询。
+
+当前支持 DeepSeek 官方余额接口、SiliconFlow 账户接口及 New API / One API 兼容额度接口。平台识别依据当前 API 地址和同一站点的实际接口响应，不能仅凭 token 格式识别。令牌额度与账户余额分别标明；令牌未设上限不表示账户资金无限，未提供币种时保留原始额度单位。未开放余额接口、权限不足或网络失败会明确提示，不能把查询失败当作零余额。
+
+协议参考：[DeepSeek 余额](https://api-docs.deepseek.com/zh-cn/api/get-user-balance/)、[New API 令牌额度](https://doc.newapi.pro/en/api/token-usage/)、[New API 兼容接口](https://github.com/QuantumNous/new-api/blob/main/controller/billing.go)、[SiliconFlow 账户信息](https://github.com/siliconflow/siliconcloud/blob/main/openapi.yaml)。
+
 工作台的可露形象支持本地透明动画。安装 FFmpeg 后，使用 `python3 scripts/import_workbench_mascot.py "/本机资源包/assets/video/idle.webm"` 导入。动画存放于 `~/.closure/assets/workbench/`，随工作台显示播放、隐藏暂停。桌宠右键的「工作台」可直接进入，菜单与工作台共用深靛配色。
 
 ## AI 对话与记忆
@@ -133,7 +139,7 @@ bash deploy/tts/start-fish-preview.sh
 
 可通过 `CLOSURE_FISH_MODEL=drama-3` 显式选择 Drama3。型号、环境变量、错误处理和本地语音入口见 [Fish 接入说明](deploy/tts/FISH.md)。
 
-Fish 路径保留内置开场录音，后台闲聊、天气和提醒只显示文字；主动聊天及未缓存的固定触碰台词才触发云端合成。六条固定触碰台词首次成功生成后保存在被 Git 忽略的 `.runtime/fish-voice/fixed-lines/`，之后复用同一份音频。普通聊天仍实时合成，不写入这个缓存；相同文字重新合成时可能有不同读法。
+Fish 路径会朗读一次时段天气启动问候，替换旧固定开场录音；后台闲聊和提醒仍只显示文字。主动聊天、余额汇报及未缓存的固定触碰台词使用当前语音服务。六条固定触碰台词首次成功生成后保存在被 Git 忽略的 `.runtime/fish-voice/fixed-lines/`，之后复用同一份音频。普通聊天、天气问候与余额汇报实时合成，不写入固定台词缓存；相同文字重新合成时可能有不同读法。
 
 ### GPT-SoVITS 与本地 Qwen
 
@@ -147,7 +153,7 @@ GPT-SoVITS 需要配置服务地址、权重路径和参考音频／文本；服
 
 ## 天气与日常提醒
 
-- **天气**：macOS 默认通过系统定位获取当前位置，再向 Open-Meteo 查询天气；只在启动时查询，不持续跟踪或保存定位历史。定位不可用时明确提示，不继续播报旧城市天气。
+- **天气**：macOS 默认通过系统定位获取当前位置，再向 Open-Meteo 查询当天预报；只在启动时查询，不持续跟踪或保存定位历史。启动时按系统本地时间问候，简报天气和当天温度范围，接一句关心，不念地名。定位不可用时明确说明天气未取得，不继续播报旧城市天气。静音时不朗读；天气回来前若已发起其他语音，启动问候不再打断它。
 - **工作休息**：右键 `定时提醒...` 可开启、暂停、重置及调整工作提醒间隔，也可添加当天定时事项。
 - **课程与 Deadline**：右键 `课程表提醒...` 导入 `.csv`、`.txt`、`.tsv`、`.ics`、`.ical` 或 `.xlsx`。默认上课前 15 分钟、Deadline 前 24 小时提醒，课程保存在 `~/.closure/course-schedule.csv`。
 

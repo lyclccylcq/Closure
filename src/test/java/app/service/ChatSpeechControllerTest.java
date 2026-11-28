@@ -61,7 +61,7 @@ class ChatSpeechControllerTest {
         settings.setProperty("fish.apiKey", "synthetic-test-key");
         FishAudioConfig config = FishAudioConfig.fromProperties(settings);
         List<TtsRequest> requests = new ArrayList<>();
-        CompletableFuture<Void> download = new CompletableFuture<>();
+        List<CompletableFuture<Void>> downloads = new ArrayList<>();
         VoiceSynthesisClient client = new VoiceSynthesisClient() {
             public CompletableFuture<Void> checkAvailable() {
                 throw new AssertionError("Hosted readiness must not call the provider");
@@ -72,7 +72,7 @@ class ChatSpeechControllerTest {
             }
             public CompletableFuture<Void> synthesizeStream(TtsRequest request, Consumer<TtsAudioResult> sink) {
                 requests.add(request);
-                return download;
+                var pending = new CompletableFuture<Void>(); downloads.add(pending); return pending;
             }
         };
         VoiceAudioPlayer silentPlayer = new VoiceAudioPlayer() {
@@ -85,18 +85,21 @@ class ChatSpeechControllerTest {
         var controller = ChatSpeechController.fromFishConfig(config, client, silentPlayer, message -> { });
         controller.readyForSpeechFuture().join();
         assertTrue(requests.isEmpty());
-        controller.speakStartupGreetingIfIdle("自动问候。").join();
+        controller.speakStartupGreetingIfIdle("自动问候。");
+        controller.speakStartupGreetingIfIdle("重复问候。").join();
         controller.speakBackgroundText("自动闲聊。");
-        assertTrue(requests.isEmpty());
+        assertEquals(1, requests.size());
+        assertEquals("自动问候。", requests.getFirst().getText());
 
         controller.speakAssistantReply(new AssistantReply("找到了？这回算它输啦。",
                 "找到了？这回算它输啦。", SpeechEmotion.TEASING));
-        assertEquals(1, requests.size());
-        assertEquals("找到了？这回算它输啦。", requests.getFirst().getText());
+        assertEquals(2, requests.size());
+        assertTrue(downloads.getFirst().isCancelled());
+        assertEquals("找到了？这回算它输啦。", requests.getLast().getText());
         assertEquals(config.getVoiceProfile().getReferenceAudioPath(),
-                requests.getFirst().getVoiceProfile().getReferenceAudioPath());
+                requests.getLast().getVoiceProfile().getReferenceAudioPath());
         controller.stop();
-        assertTrue(download.isCancelled());
+        assertTrue(downloads.getLast().isCancelled());
     }
 
     @Test
@@ -129,14 +132,14 @@ class ChatSpeechControllerTest {
 
         assertTrue(controller.usesHostedVoice());
         assertFalse(controller.usesLocalQwen());
-        controller.speakStartupGreetingIfIdle("自动启动问候。").join();
+        controller.speakStartupGreetingIfIdle("自动启动问候。");
         controller.speakBackgroundText("自动闲聊或提醒。");
-        assertTrue(service.spokenTexts.isEmpty());
+        assertEquals(List.of("自动启动问候。"), service.spokenTexts);
 
         controller.speakAssistantReply(new AssistantReply("找到啦？", "找到啦？", SpeechEmotion.QUESTION));
         controller.speakFullText("再看一眼。");
-        assertEquals(List.of("找到啦？", "再看一眼。"), service.spokenTexts);
-        assertEquals(List.of(hosted, hosted), service.spokenProfiles);
+        assertEquals(List.of("自动启动问候。", "找到啦？", "再看一眼。"), service.spokenTexts);
+        assertEquals(List.of(hosted, hosted, hosted), service.spokenProfiles);
     }
 
     @Test
