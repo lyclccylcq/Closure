@@ -41,7 +41,7 @@ final class WorkbenchView extends BorderPane {
     private double projectWidth = 306;
     private WorkbenchPetDock petDock;
     private final WorkbenchBalancePane balancePane;
-    private final ToggleButton showBalance = new ToggleButton("API 余额");
+    private final ToggleButton showBalance = new ToggleButton("API 账户");
 
     WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
                   ChatSpeechController speech) {
@@ -163,7 +163,7 @@ final class WorkbenchView extends BorderPane {
         showFiles.selectedProperty().addListener((property, oldValue, visible) -> setFilesVisible(visible));
         showBalance.setId("workbench-toggle-balance");
         showBalance.getStyleClass().add("workbench-panel-toggle");
-        showBalance.setTooltip(new Tooltip("查询当前对话 API 余额，由可露汇报"));
+        showBalance.setTooltip(new Tooltip("查询 API 费用、用量或余额，由可露汇报"));
         showBalance.selectedProperty().addListener((property, before, selected) -> {
             balancePane.setVisible(selected);
             if (selected) balancePane.query(); else balancePane.cancel();

@@ -30,7 +30,7 @@ final class BalanceJson {
     static BigDecimal number(Object value) {
         try {
             BigDecimal number = value instanceof BigDecimal b ? b : new BigDecimal((String) value);
-            if (number.precision() > 30 || Math.abs((long) number.scale()) > 12) throw invalid();
+            if (number.precision() > 50 || Math.abs((long) number.scale()) > 24) throw invalid();
             return number;
         } catch (RuntimeException invalid) { throw invalid(); }
     }
@@ -119,5 +119,5 @@ final class BalanceJson {
     private void expect(char c) { if (!takeSpace(c)) throw invalid(); }
     private boolean takeSpace(char c) { space(); return take(c); }
     private boolean take(char c) { if (at < source.length() && source.charAt(at) == c) { at++; return true; } return false; }
-    static BalanceException invalid() { return new BalanceException("平台返回的余额数据不完整，暂时无法确认。请稍后重试。"); }
+    static BalanceException invalid() { return new BalanceException("平台返回的账户数据不完整，暂时无法确认。请稍后重试。"); }
 }

@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0041",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "接入 OpenAI Admin key 并汇报组织费用与用量",
+  "objective": "为当前 OpenAI 官方对话连接接入独立 Admin API key，在工作台配置并查询、展示和播报组织费用与模型用量，明确区别于剩余充值余额。",
+  "architecture": [
+    "Codex direct implementation；从已交付 main 48d352b761491f2491a6f6fc2646bab812f76c7c 创建独立副本，保留原工作区、正式运行目录、已有模型与语音配置。",
+    "独立管理 Admin key：支持工作台 PasswordField 本地填入与 CLOSURE_OPENAI_ADMIN_KEY 环境变量。界面填入只在本次运行内存保存，应用后清空输入；不写入普通对话配置、日志、报告、LLM 或 TTS，关闭时清除内存引用。管理员密钥不复用为对话密钥。",
+    "仅当当前对话端点属于 OpenAI 官方地址时进入管理适配器，Admin key 仅用于固定 https://api.openai.com/v1/organization/costs 与 /organization/usage/completions 只读请求，拒绝重定向；不转发到兼容中转平台。",
+    "按同一 UTC 时间截点查询本月组织费用与 completions 用量，处理分页并用十进制定点汇总；从当日 bucket 汇总今日费用，报告本月输入/输出 tokens 与请求数。明确 UTC 区间、组织范围及可能的数据延迟，不把费用或零数据称为余额。",
+    "工作台沿用现有账户面板、可露动作与共享 TTS，增加管理密钥配置、修改/清除及官方账单入口。缺失密钥、认证/权限错误、限流、网络超时、取消和不完整响应均有明确结果，不播报部分汇总；晚返回不抢占新语音。",
+    "使用本地 HTTP 替身和合成密钥覆盖接口协议、分页、精度、凭据隔离、固定目的地与取消，并运行实际窗口回归；不读取现有私有配置或要求用户把真实密钥发到聊天，不进行真实付费生成。"
+  ],
+  "non_goals": [
+    "创建或替换用户真实密钥、读取私有配置、修改对话/语音连接、自动充值或管理组织写操作、抓取浏览器登录态、把消费估算成余额、无关工作流或模型重构。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/billing/**",
+    "src/main/java/app/ui/chat/WorkbenchBalancePane.java",
+    "src/main/java/app/ui/chat/WorkbenchView.java",
+    "src/main/resources/ui/workbench.css",
+    "src/test/java/app/billing/**",
+    "src/test/java/app/ui/chat/**"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "当前 OpenAI 官方连接可通过独立 Admin key 查询完整费用与用量，正确汇总 UTC 今日/本月费用和本月输入/输出 tokens 与请求数，清楚标注组织范围和费用不是余额。",
+      "verification": "官方文档对应的本地 HTTP 替身覆盖不同日期/月份、分页、多 bucket、十进制及多币种、空数据、异常字段/分页循环；完整结果的显示及播报不含“剩余”误称。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "工作台可本地填写、修改与清除 Admin key，输入为隐藏密码，应用后清空；使用会话内存或独立环境变量，不覆盖普通对话 key，也不把 Admin key 发往中转、聊天、TTS、日志或报告。",
+      "verification": "配置与路由测试核对管理/对话凭据分离、固定官方目的地、重定向拒绝、配置优先级和关闭清除；原生界面检查缺密钥配置、应用后清空、清除后提示且可继续使用原对话。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "费用/用量查询具有加载、错误及重试结果，支持可露自动汇报与重播；权限不足、超时、关闭/隐藏取消或新语音到来不会伪造汇总或产生迟到抢占。",
+      "verification": "本地接口替身覆盖 401/403/429/5xx、坏响应、网络失败和取消；实际工作台与模型验证配置、显示/朗读、重播、新语音优先及隐藏清理。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "保留既有非 OpenAI 平台余额、启动天气问候、聊天布局与模型生命周期，通过复核、精确提交 CI/main CI 和合并版检查后更新原桌面入口。",
+      "verification": "冻结六项检查及十组既有和新增管理入口原生回归，实际合并版构建/启动、原入口离线 smoke 与安装文件/本地美术/正式目录完整性核验。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "真实 Admin key 尚未提供，工程测试只使用本地替身；运行时需用户在工作台或环境变量配置具备相应读取权限的管理密钥。",
+    "官方统计有延迟且按组织汇总，不能代表只在 Closure 内的消耗或账户充值余额。",
+    "本次界面密钥仅会话保存，退出后需重新填写或通过环境变量提供。"
+  ],
+  "rollback": "回退本任务合并或恢复桌面入口到 48d352b；保留普通对话/语音配置与角色美术。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}
