@@ -41,4 +41,14 @@ class MacOsAdminKeyStoreTest {
                 new MacOsAdminKeyStore.Result(0, read ? "old-synthetic-admin" : ""));
         assertThrows(BalanceException.class, () -> store.save("new-synthetic-admin"));
     }
+    @Test void oversizedInputIsRejectedBeforeAnyKeychainOperation() {
+        var store = new MacOsAdminKeyStore("synthetic.service", "fixture", (command, input, read) -> {
+            fail("An oversized credential must not reach the system tool");
+            return null;
+        });
+        for (String secret : List.of("x".repeat(4096), "\\\"".repeat(500))) {
+            var error = assertThrows(BalanceException.class, () -> store.save(secret));
+            assertFalse(error.toString().contains(secret));
+        }
+    }
 }

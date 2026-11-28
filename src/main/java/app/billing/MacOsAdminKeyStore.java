@@ -10,6 +10,8 @@ import java.util.concurrent.TimeUnit;
 /** System Keychain bridge. Secrets travel through private pipes, never process arguments or files. */
 final class MacOsAdminKeyStore implements AdminKeyStore {
     static final String SERVICE = "com.closure.desktop.openai-admin";
+    // security's interactive reader has a bounded command line; reject before a truncated write can occur.
+    static final int MAX_INTERACTIVE_LINE_BYTES = 1023;
     private final String service, account;
     private final Runner runner;
 
@@ -38,6 +40,10 @@ final class MacOsAdminKeyStore implements AdminKeyStore {
     @Override public void save(String key) {
         String normalized = OpenAiAdminClient.normalizeKey(key);
         String command = "add-generic-password -U -s " + quote(service) + " -a " + quote(account) + " -w " + quote(normalized) + "\n";
+        // Namespaces and normalized keys are ASCII, including the escaping added above.
+        if (command.length() > MAX_INTERACTIVE_LINE_BYTES) {
+            throw new BalanceException("管理密钥过长，无法保存到系统钥匙串。请确认粘贴的是 Admin API key。", BalanceException.Action.CONFIGURE_OPENAI_ADMIN);
+        }
         Result result = execute(List.of("/usr/bin/security", "-i"), command, false);
         // Interactive mode may complete successfully even if its command failed. Verify the persisted value.
         if (result.status() != 0 || !normalized.equals(load())) throw unavailable();

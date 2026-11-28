@@ -18,6 +18,7 @@ interface AdminKeyStore extends AutoCloseable {
             public synchronized String load() { return value; }
             public synchronized void save(String key) { value = key; }
             public synchronized void clear() { value = null; }
+            public synchronized void close() { value = null; }
             public boolean persistent() { return false; }
         };
     }
