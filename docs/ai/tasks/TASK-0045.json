@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0045",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "修复 Admin key 重启后的保存状态与错误提示",
+  "objective": "重启后账户工具自动使用保存的管理密钥，并清楚区分已保存、未设置、钥匙串不可访问与组织权限问题，避免要求反复填写；补充独立进程与真实工作台重启回归。",
+  "architecture": [
+    "Codex direct implementation；从实际交付 main b0d47723373d239003d5a264194cce0e29c1f3ea 创建独立共享克隆，保留原工作区、未提交任务、正式配置、会话与美术。",
+    "诊断已确认原桌面入口仍指向上次交付版；固定服务/账户条目只检查存在状态，不请求密码、不保留属性输出。独立合成命名的两个 JVM 在原代码上保存、退出、读取成功；不把这份证据当作用户实际故障已复现。",
+    "保留系统钥匙串及 stdin-only 保存方式。增加异步的管理密钥状态查询，macOS 仅读取固定匹配项的存在状态，不读取密码或返回属性；按实际结果显示已保存/当前运行已配置/未设置/不可访问，不在空输入框回填保存值。",
+    "缺少或格式无效的密钥才引导本地输入；钥匙串访问受限应引导解锁/允许访问并重试；OpenAI 401/403 单独提示密钥或组织权限，不宣称保存丢失，不自动删除或覆盖凭据。",
+    "状态查询与保存/清除在后台序列化，生命周期、取消与迟到结果受守卫，不能阻塞 FX 或服务状态锁。保留原操作的语音版本、凭据隔离、环境优先级和余额指纹。",
+    "测试覆盖状态、错误分类及恢复/更新/删除/取消。macOS 原生回归通过两个完全独立 JVM 分别在真实工作台输入保存与重开免输入查询，使用唯一临时钥匙串项、本地 HTTP 与合成对话/TTS，最后清理测试项。",
+    "工程工具不读取实际密钥、账户费用或私有配置；只允许固定 Closure 条目的无密码存在状态，以及临时唯一合成测试条目的读写。CI 不访问用户钥匙串或真实 AI/TTS。"
+  ],
+  "non_goals": [
+    "读取或迁移用户真实凭据、明文保存、对真实账户发起费用请求、自动重置/创建管理密钥、其他操作系统的持久化后端、改动普通对话/语音配置或充值。"
+  ],
+  "allowed_paths": [
+    "README.md",
+    "src/main/java/app/billing/**",
+    "src/main/java/app/ui/chat/WorkbenchBalancePane.java",
+    "src/test/java/app/billing/**",
+    "src/test/java/app/ui/chat/**"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "打开 API 账户后可得知密钥是否已保存；已保存时不需重填、不会回填原值；状态与缺失/当前会话凭据保持一致。",
+      "verification": "服务状态测试及工作台原生回归覆盖保存、跨实例恢复、替换、删除、未设置、环境变量/会话模式；元数据检查不请求密码、不转发值。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "钥匙串不可访问、组织权限错误和真正缺少密钥分别呈现，前两者不自动要求重新输入或删除已保存项；可重试恢复。",
+      "verification": "存储和 OpenAI 客户端测试校验专用错误动作及固定脱敏文案；真实工作台替身覆盖访问失败/401/403/缺失、重试成功，凭据仍保留且输入框不泄漏。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "真实保存后退出进程，新的工作台进程可直接查询；状态及凭据操作不阻塞界面、迟到不覆盖新状态/语音，测试结束清理唯一测试条目。",
+      "verification": "macOS 两个独立 JVM 的实际 PetWindow/WorkbenchWindow 和系统存储、本地 HTTP 全链路；服务与 UI 回归覆盖取消、关闭、串行更新及原有较新前台语音优先。"
+    },
+    {
+      "id": "AC-4",
+      "requirement": "保留日常消费短报/余额同步/低额提醒、桌宠启动与菜单、正式运行目录和美术，通过精确提交及 main CI 后更新原桌面入口。",
+      "verification": "六项冻结检查、既有及新增本机窗口/系统存储回归、启动脚本 smoke；实际合并版构建启动、原入口和公开安装文件哈希验证。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "本机已保存条目存在且原实现合成跨进程读取成功；用户实际失败原因仍需其界面结果确认，不能伪称已复现或读过真实密钥。",
+    "系统钥匙串锁定或访问拒绝可能需要用户在系统授权后重试；不降级为明文。",
+    "保存值始终不回填输入框，界面以独立状态解释；旧版本只在内存中的值仍不能自动恢复。"
+  ],
+  "rollback": "回退本任务合并或将原桌面入口恢复到 b0d47723373d239003d5a264194cce0e29c1f3ea；保留已有钥匙串、余额记录、配置和美术。",
+  "review_budget": {
+    "max_diff_bytes": 150000
+  }
+}

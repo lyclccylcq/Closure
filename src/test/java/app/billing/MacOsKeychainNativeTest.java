@@ -15,7 +15,8 @@ class MacOsKeychainNativeTest {
         String key = "synthetic-admin-" + UUID.randomUUID();
         try {
             try (var first = new MacOsAdminKeyStore(service, "test-only")) {
-                assertNull(first.load()); first.save(key); assertEquals(key, first.load());
+                assertFalse(first.contains()); assertNull(first.load()); first.save(key);
+                assertTrue(first.contains()); assertEquals(key, first.load());
             }
             try (var second = new MacOsAdminKeyStore(service, "test-only")) {
                 String replacement = key + "-'\"\\replacement";
@@ -28,7 +29,7 @@ class MacOsKeychainNativeTest {
                         + " -a " + MacOsAdminKeyStore.quote("test-only") + " -w \"";
                 String boundaryKey = "x".repeat(MacOsAdminKeyStore.MAX_INTERACTIVE_LINE_BYTES - prefix.length() - 2);
                 second.save(boundaryKey); assertEquals(boundaryKey, second.load());
-                second.clear(); assertNull(second.load()); second.clear();
+                second.clear(); assertFalse(second.contains()); assertNull(second.load()); second.clear();
             }
             System.out.println("CLOSURE_KEYCHAIN_NATIVE_PASS isolatedSyntheticItem=true stdinOnly=true reopen=true update=true longInputGuard=true delete=true");
         } finally { try (var cleanup = new MacOsAdminKeyStore(service, "test-only")) { cleanup.clear(); } }

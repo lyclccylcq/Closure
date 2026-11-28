@@ -3,6 +3,7 @@ package app.billing;
 /** OS credential storage, separate from account calibration and ordinary chat settings. */
 interface AdminKeyStore extends AutoCloseable {
     String load();
+    default boolean contains() { return load() != null; }
     void save(String key);
     void clear();
     boolean persistent();

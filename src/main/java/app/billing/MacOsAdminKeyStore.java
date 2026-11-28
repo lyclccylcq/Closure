@@ -29,6 +29,13 @@ final class MacOsAdminKeyStore implements AdminKeyStore {
         this.service = service; this.account = account; this.runner = runner;
     }
     @Override public boolean persistent() { return true; }
+    @Override public boolean contains() {
+        // No -w: check item existence without requesting its password or retaining attributes.
+        Result result = execute(List.of("/usr/bin/security", "find-generic-password", "-s", service, "-a", account), null, false);
+        if (result.status() == 44) return false;
+        if (result.status() != 0) throw unavailable();
+        return true;
+    }
     @Override public String load() {
         Result result = execute(List.of("/usr/bin/security", "find-generic-password", "-w", "-s", service, "-a", account), null, true);
         if (result.status() == 44) return null; // errSecItemNotFound, as returned by the system tool.
@@ -68,7 +75,7 @@ final class MacOsAdminKeyStore implements AdminKeyStore {
         }
     }
     private static BalanceException unavailable() {
-        return new BalanceException("系统钥匙串暂时无法访问，请解锁或允许访问后重试。", BalanceException.Action.CONFIGURE_OPENAI_ADMIN);
+        return new BalanceException("系统钥匙串暂时无法访问。请解锁或允许访问后重试，无需反复填写管理密钥。", BalanceException.Action.ACCESS_OPENAI_ADMIN);
     }
 
     private static final class NativeRunner implements Runner {

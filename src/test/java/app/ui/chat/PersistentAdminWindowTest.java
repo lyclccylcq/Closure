@@ -39,6 +39,10 @@ class PersistentAdminWindowTest {
     private WorkbenchWindow workbench;
     private final AtomicReference<CharacterController> character = new AtomicReference<>();
     private final LinkedBlockingQueue<CompletableFuture<Void>> audio = new LinkedBlockingQueue<>();
+    private final CompletableFuture<app.billing.AdminKeyState> staleState = new CompletableFuture<>() {
+        @Override public boolean cancel(boolean interrupt) { return false; }
+    };
+    private final java.util.concurrent.atomic.AtomicInteger stateRequests = new java.util.concurrent.atomic.AtomicInteger();
 
     @Test void actualWorkbenchSavesThenReopensWithoutReentryAndClearRemovesTheCredential() throws Exception {
         try (var fixture = new OpenAiFundsFixture(directory.resolve("funds.json"))) {
@@ -69,19 +73,50 @@ class PersistentAdminWindowTest {
                 var foreground = audio.poll(3, TimeUnit.SECONDS); assertNotNull(foreground);
                 saveGate.complete(null);
                 await(() -> fx(() -> result().getText().contains("1.2 USD")));
+                staleState.complete(app.billing.AdminKeyState.MISSING);
+                fx(() -> null); fx(() -> null);
+                fx(() -> { assertTrue(state().getText().contains("已保存")); return null; });
                 assertNull(audio.poll(150, TimeUnit.MILLISECONDS)); assertFalse(foreground.isCancelled()); foreground.complete(null);
                 fx(() -> { button("workbench-balance-read").fire(); return null; });
                 var first = audio.poll(3, TimeUnit.SECONDS); assertNotNull(first); first.complete(null);
             } finally { swing(() -> { firstPet.dispose(); return null; }); }
 
+            fixture.setStoredReadFailure(true);
+            PetWindow lockedPet = open(fixture, speech, chat, null);
+            try {
+                workbench.whenReady().get(10, TimeUnit.SECONDS); query();
+                await(() -> fx(() -> result().getText().contains("钥匙串")));
+                fx(() -> {
+                    assertFalse(input().getParent().isVisible()); assertTrue(input().getText().isEmpty());
+                    assertTrue(state().getText().contains("重试")); return null;
+                });
+                fixture.setStoredReadFailure(false);
+                fx(() -> { button("workbench-balance-refresh").fire(); return null; });
+                var retried = audio.poll(3, TimeUnit.SECONDS); assertNotNull(retried); retried.complete(null);
+                await(() -> fx(() -> state().getText().contains("已保存")));
+            } finally { swing(() -> { lockedPet.dispose(); return null; }); }
+
             PetWindow restoredPet = open(fixture, speech, chat, null);
             try {
                 workbench.whenReady().get(10, TimeUnit.SECONDS); query();
                 var restored = audio.poll(3, TimeUnit.SECONDS); assertNotNull(restored); restored.complete(null);
+                await(() -> fx(() -> state().getText().contains("已保存")));
+                for (int status : new int[]{401, 403}) {
+                    fixture.setStatus(status);
+                    fx(() -> { button("workbench-balance-refresh").fire(); return null; });
+                    await(() -> fx(() -> result().getText().contains("组织权限")));
+                    fx(() -> {
+                        assertFalse(input().getParent().isVisible()); assertTrue(state().getText().contains("已保存")); return null;
+                    });
+                }
+                fixture.setStatus(200);
+                fx(() -> { button("workbench-balance-refresh").fire(); return null; });
+                var recovered = audio.poll(3, TimeUnit.SECONDS); assertNotNull(recovered); recovered.complete(null);
                 fx(() -> {
                     assertTrue(result().getText().contains("1.2 USD")); assertTrue(input().getText().isEmpty());
                     assertFalse(input().getParent().isVisible());
                     button("workbench-admin-settings").fire(); assertTrue(input().getText().isEmpty());
+                    assertTrue(input().getPromptText().contains("无需重填"));
                     view().applyCss(); view().layout(); capture();
                     button("workbench-admin-clear").fire(); return null;
                 });
@@ -93,7 +128,7 @@ class PersistentAdminWindowTest {
                 workbench.whenReady().get(10, TimeUnit.SECONDS); query();
                 await(() -> fx(() -> result().getText().contains("Admin API key")));
                 assertTrue(chat.calls.isEmpty());
-                System.out.println("CLOSURE_PERSISTENT_ADMIN_NATIVE_PASS masked=true saved=true reopened=true noPrefill=true noReentry=true cleared=true missingAfterReopen=true newerSpeechWins=true noModelCalls=true");
+                System.out.println("CLOSURE_PERSISTENT_ADMIN_NATIVE_PASS masked=true saved=true reopened=true noPrefill=true noReentry=true accessRetry=true permissionsKeepSaved=true staleStateIgnored=true cleared=true missingAfterReopen=true newerSpeechWins=true noModelCalls=true");
             } finally { swing(() -> { clearedPet.dispose(); return null; }); speech.close(); }
         }
     }
@@ -105,6 +140,9 @@ class PersistentAdminWindowTest {
                     public CompletableFuture<BalanceReport> query() { return actual.query(); }
                     public boolean canConfigureOpenAiAdminKey() { return true; }
                     public boolean persistsOpenAiAdminKey() { return true; }
+                    public CompletableFuture<app.billing.AdminKeyState> openAiAdminKeyStateAsync() {
+                        return stateRequests.incrementAndGet() == 1 ? staleState : actual.openAiAdminKeyStateAsync();
+                    }
                     public CompletableFuture<Void> configureOpenAiAdminKeyAsync(String key) {
                         return actual.configureOpenAiAdminKeyAsync(key).thenCompose(ignored -> gate);
                     }
@@ -121,6 +159,7 @@ class PersistentAdminWindowTest {
     private Button button(String id) { return (Button) view().lookup("#" + id); }
     private PasswordField input() { return (PasswordField) view().lookup("#workbench-admin-key"); }
     private Label result() { return (Label) view().lookup("#workbench-balance-result"); }
+    private Label state() { return (Label) view().lookup("#workbench-admin-state"); }
     private void capture() throws Exception {
         String folder = System.getProperty("closure.persistentAdminEvidence"); if (folder == null) return;
         Files.createDirectories(Path.of(folder));

@@ -51,4 +51,16 @@ class MacOsAdminKeyStoreTest {
             assertFalse(error.toString().contains(secret));
         }
     }
+    @Test void existenceChecksNeverRequestOrCaptureThePasswordAndAccessErrorsAreDistinct() {
+        for (int status : List.of(0, 44, 36)) {
+            var store = new MacOsAdminKeyStore("synthetic.service", "fixture", (command, input, read) -> {
+                assertEquals(List.of("/usr/bin/security", "find-generic-password", "-s", "synthetic.service", "-a", "fixture"), command);
+                assertEquals(0, input.length); assertFalse(read);
+                return new MacOsAdminKeyStore.Result(status, "ignored-synthetic-attributes");
+            });
+            if (status == 36) assertEquals(BalanceException.Action.ACCESS_OPENAI_ADMIN,
+                    assertThrows(BalanceException.class, store::contains).action());
+            else assertEquals(status == 0, store.contains());
+        }
+    }
 }
