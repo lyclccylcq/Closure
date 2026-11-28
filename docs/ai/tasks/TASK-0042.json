@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-0042",
+  "spec_version": 1,
+  "status": "READY",
+  "title": "修复 OpenAI 账户查询拒绝高精度数值的问题",
+  "objective": "修复工作台 OpenAI 账户查询误报数据不完整，精确解析高精度金额，并用明确且无敏感内容的提示区分响应失败来源。",
+  "architecture": [
+    "Codex direct implementation；以实际已交付 main 7e23011b24a2c11e72b47360a78f1316d6e90987 为基线使用独立副本，保留原工作区和正式配置。",
+    "当前运行窗口的一次只读诊断只返回异常类与代码位置，已定位 BalanceJson.number 的过窄数值精度限制；不采集密钥、账单内容或触发生成/TTS。",
+    "金额继续使用 BigDecimal，扩展有界精度与小数位范围以覆盖官方浮点数及十进制字符串；保留 JSON 大小、结构、分页、数字类型、计数整数和有限范围校验，不舍入、不吞异常或伪造零余额。",
+    "费用与用量解析异常分别使用固定类别提示，不包含响应原文、URL、密钥或账单字段值。",
+    "补充高精度金额、科学计数、数值字符串、可选附加数值和异常值的本地 HTTP 回归，冻结检查通过后按精确提交 CI/main CI 和实际桌面入口完成交付。"
+  ],
+  "non_goals": [
+    "更换管理/对话密钥、持久保存密钥、修改账单口径或界面布局、读取私有配置或账单内容、真实付费模型/TTS、工作流重构。"
+  ],
+  "allowed_paths": [
+    "src/main/java/app/billing/BalanceJson.java",
+    "src/main/java/app/billing/OpenAiAdminClient.java",
+    "src/test/java/app/billing/OpenAiAdminClientTest.java",
+    "src/test/java/app/billing/BalanceJsonTest.java"
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "requirement": "高于原 24 位小数或 50 位精度的合法有界金额/附加数值可正常解析、汇总与显示，不损失精度；畸形或超界数值仍失败，不能当作零费用。",
+      "verification": "本地 HTTP 用例先证明旧实现失败，再验证长小数、科学计数、数字字符串、退款、可选元数据、分页与精确金额；重复键、坏 JSON、极端指数和缺失必填金额继续拒绝。"
+    },
+    {
+      "id": "AC-2",
+      "requirement": "费用或用量 JSON 解析错误能标明来源类别，提示不包含密钥或响应原文；管理凭据隔离、取消、权限提示和旧平台余额保持正确。",
+      "verification": "本地替身校验两种来源的固定错误提示、私密响应文本不外泄，运行已有管理接口、凭据路由和余额回归。"
+    },
+    {
+      "id": "AC-3",
+      "requirement": "冻结检查、实际工作台与桌宠回归、精确提交 CI/main CI、合并版测试和原启动入口验证通过并更新桌面版。",
+      "verification": "六项冻结检查、十一组现有原生回归和默认/兼容入口 smoke；校验安装源文件、模型美术和正式运行目录保持完整。如当前连接仍可用，仅验证查询成功状态，不记录账户结果。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "CHECK-1",
+      "command": "python3 scripts/ai_workflow.py validate",
+      "required": true
+    },
+    {
+      "id": "CHECK-2",
+      "command": "python3 -m unittest discover -s scripts/tests -v",
+      "required": true
+    },
+    {
+      "id": "CHECK-3",
+      "command": "git diff --check",
+      "required": true
+    },
+    {
+      "id": "CHECK-4",
+      "command": "./mvnw -B -Djava.awt.headless=true test",
+      "required": true
+    },
+    {
+      "id": "CHECK-5",
+      "command": "./mvnw -B -DskipTests package",
+      "required": true
+    },
+    {
+      "id": "CHECK-6",
+      "command": "python3 scripts/verify_startup.py",
+      "required": true
+    }
+  ],
+  "risks": [
+    "真实账单数据不进入工程证据；当前已配置连接仅用于检查成功/失败状态，不记录数据内容。",
+    "官方统计延迟与组织范围不变，费用仍不表示充值余额。"
+  ],
+  "rollback": "将原桌面入口恢复至已保存的 7e23011b 版本，或回退本任务合并；保留现有模型、配置及语音。",
+  "review_budget": {
+    "max_diff_bytes": 60000
+  }
+}
