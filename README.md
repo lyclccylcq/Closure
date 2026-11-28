@@ -75,7 +75,13 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 正式启动时，工作台使用运行目录中的 AI 配置，并共享桌宠已有的朗读服务。当前会话回复完成后朗读 `speechText`。切换会话或隐藏工作台会停止该会话的语音，后台完成的回复保留文字。每个会话的「停止」只取消自己正在持有的语音。
 
-点击工作台右上角「API 余额」查询当前对话模型连接的余额，可露会播报结果；「查询并播报」刷新，「再报一次」重播。结果列出平台、币种或额度单位和查询时间。不查询 Fish 语音余额，不把账户数据交给聊天模型，也不在应用启动时自动查询。
+点击工作台右上角「API 账户」查询当前模型连接的账户数据，可露会播报结果；「查询并播报」刷新，「再报一次」重播。结果列出平台、币种或额度单位和查询时间。不查询 Fish 语音余额，不把账户数据交给聊天模型，也不在应用启动时自动查询。
+
+OpenAI 官方连接使用独立 **Admin API key** 查询组织费用与用量。首次查询会显示管理密钥输入框：在本地粘贴后点「应用并查询」，或点击「管理密钥」修改/清除。输入以密码形式显示，应用后清空；界面填写的密钥仅在本次运行内存保存，退出后需重新填写，不覆盖普通对话 key。也可以在启动应用的终端设置 `CLOSURE_OPENAI_ADMIN_KEY` 环境变量提供密钥；点击清除会停止本次运行使用该管理密钥，包括环境变量提供的值。密钥不要发送到聊天或提交到仓库。
+
+OpenAI 显示今日/本月费用、本月输入/输出 tokens 和请求数，按所配置 Admin key 的**组织**汇总，包含其他应用的调用；日期以 UTC 划分，官方数据可能延迟。费用不是剩余充值余额；无费用记录时不会猜测币种或余额。管理密钥只发送到 OpenAI 官方的只读费用/用量接口，不会用于对话、TTS 或兼容中转。充值余额可通过面板的「OpenAI 账单」打开官方页面查看。
+
+[创建 Admin API key](https://platform.openai.com/settings/organization/admin-keys)需相应组织权限；接口参考：[Costs](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/costs)、[Completions usage](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage/methods/completions)、[Administration](https://developers.openai.com/api/reference/administration/overview)。
 
 当前支持 DeepSeek 官方余额接口、SiliconFlow 账户接口及 New API / One API 兼容额度接口。平台识别依据当前 API 地址和同一站点的实际接口响应，不能仅凭 token 格式识别。令牌额度与账户余额分别标明；令牌未设上限不表示账户资金无限，未提供币种时保留原始额度单位。未开放余额接口、权限不足或网络失败会明确提示，不能把查询失败当作零余额。
 

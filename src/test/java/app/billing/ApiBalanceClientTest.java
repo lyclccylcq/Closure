@@ -60,9 +60,9 @@ class ApiBalanceClientTest {
         token(",\"user_quota\":{\"total_available\":6172839}", false, "250000"); metadata("\"quota_display_type\":\"USD\"");
         BalanceReport report = client().query().get(3, TimeUnit.SECONDS);
         assertEquals(CLOCK.instant(), report.checkedAt());
-        assertEquals(new BigDecimal("12.345678"), report.lines().getFirst().remaining());
+        assertEquals(new BigDecimal("12.345678"), report.lines().getFirst().amount());
         assertEquals("账户", report.lines().getFirst().scope()); assertEquals("USD", report.lines().getFirst().unit());
-        assertEquals(new BigDecimal("0.5"), report.lines().getLast().remaining());
+        assertEquals(new BigDecimal("0.5"), report.lines().getLast().amount());
         assertEquals(List.of("/api/usage/token", "/api/status"), requests);
         assertEquals("Bearer synthetic-secret", auth.get("/api/usage/token")); assertEquals("", auth.get("/api/status"));
         assertFalse(report.toString().contains("synthetic-secret"));
@@ -71,7 +71,7 @@ class ApiBalanceClientTest {
     @Test void unlimitedTokenDoesNotInventUnlimitedAccountFunds() {
         token("", true, "0");
         BalanceReport report = client().query().join();
-        assertTrue(report.lines().getFirst().unlimited()); assertNull(report.lines().getFirst().remaining());
+        assertTrue(report.lines().getFirst().unlimited()); assertNull(report.lines().getFirst().amount());
         assertTrue(report.speechText().contains("账户余额")); assertFalse(report.speechText().contains("账户未设额度上限"));
     }
 
@@ -79,7 +79,7 @@ class ApiBalanceClientTest {
         token("", false, "123456789");
         BalanceReport report = client().query().join();
         assertEquals("额度单位", report.lines().getFirst().unit());
-        assertEquals(new BigDecimal("123456789"), report.lines().getFirst().remaining());
+        assertEquals(new BigDecimal("123456789"), report.lines().getFirst().amount());
         assertFalse(report.speechText().contains("美元"));
     }
 
@@ -87,7 +87,7 @@ class ApiBalanceClientTest {
         token(",\"user_quota\":{\"total_available\":-500000}", false, "500000");
         metadata("\"quota_display_type\":\"CNY\",\"usd_exchange_rate\":7.2");
         var report = client().query().join();
-        assertEquals(new BigDecimal("-7.2"), report.lines().getFirst().remaining()); assertEquals("CNY", report.lines().getFirst().unit());
+        assertEquals(new BigDecimal("-7.2"), report.lines().getFirst().amount()); assertEquals("CNY", report.lines().getFirst().unit());
         metadata("\"quota_display_type\":\"CNY\",\"usd_exchange_rate\":-7.2");
         assertEquals("额度单位", client().query().join().lines().getFirst().unit());
     }
@@ -97,7 +97,7 @@ class ApiBalanceClientTest {
         bodies.put("/dashboard/billing/usage", "{\"object\":\"list\",\"total_usage\":123.4567}");
         metadata("\"display_in_currency\":true");
         BalanceReport report = client().query().join();
-        assertEquals(new BigDecimal("11.111111"), report.lines().getFirst().remaining());
+        assertEquals(new BigDecimal("11.111111"), report.lines().getFirst().amount());
         assertEquals("接口可用额度", report.lines().getFirst().scope()); assertTrue(report.note().contains("口径"));
     }
 
@@ -135,7 +135,7 @@ class ApiBalanceClientTest {
         });
         BalanceReport report = new ApiBalanceClient(config("https://api.deepseek.com/v1/chat/completions"), routed, CLOCK).query().get(3, TimeUnit.SECONDS);
         assertEquals("https://api.deepseek.com/user/balance", requested.get().toString());
-        assertEquals(2, report.lines().size()); assertEquals(new BigDecimal("0.000001"), report.lines().getLast().remaining());
+        assertEquals(2, report.lines().size()); assertEquals(new BigDecimal("0.000001"), report.lines().getLast().amount());
         assertTrue(report.note().contains("暂不可调用")); assertEquals("Bearer synthetic-secret", auth.get("/user/balance"));
     }
 
@@ -155,7 +155,7 @@ class ApiBalanceClientTest {
         HttpClient routed = new RoutedClient(HttpClient.newHttpClient(), request -> HttpRequest.newBuilder(
                 URI.create(origin + request.uri().getPath())).header("Authorization", request.headers().firstValue("Authorization").orElseThrow()).GET().build());
         BalanceReport report = new ApiBalanceClient(config("https://api.siliconflow.cn/v1/chat/completions"), routed, CLOCK).query().get(3, TimeUnit.SECONDS);
-        assertEquals(new BigDecimal("1.01"), report.lines().getFirst().remaining());
+        assertEquals(new BigDecimal("1.01"), report.lines().getFirst().amount());
         assertTrue(report.note().contains("没有注明币种")); assertFalse(report.speechText().contains("美元"));
     }
 
@@ -176,7 +176,7 @@ class ApiBalanceClientTest {
         for (String invalid : List.of("{\"n\":1,\"n\":2}", "{\"n\":01}", "{\"n\":1}junk", "{\"n\":1e99999}", "{\"n\":NaN}", "{\"n\":null,\"n\":3}")) assertThrows(BalanceException.class, () -> BalanceJson.read(invalid));
     }
 
-    private static class RoutedClient extends HttpClient {
+    static class RoutedClient extends HttpClient {
         private final HttpClient delegate;
         private final java.util.function.UnaryOperator<HttpRequest> route;
         RoutedClient(HttpClient delegate, java.util.function.UnaryOperator<HttpRequest> route) { this.delegate = delegate; this.route = route; }

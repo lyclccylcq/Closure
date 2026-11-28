@@ -110,6 +110,20 @@
     -fx-text-fill: #e7e0f2;
 }
 
+.workbench-admin-input {
+    -fx-background-color: #171429;
+    -fx-text-fill: #e7e0f2;
+    -fx-prompt-text-fill: #b6aaca;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-border-color: #594775;
+    -fx-padding: 7 9;
+}
+
+.workbench-balance .hyperlink {
+    -fx-text-fill: #b5a5f5;
+}
+
 .workbench-chat-column {
     -fx-padding: 0 24 0 24;
 }
