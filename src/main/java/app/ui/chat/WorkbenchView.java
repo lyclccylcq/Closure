@@ -1,6 +1,7 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.billing.BalanceService;
 import app.character.CharacterActivityListener;
 import app.service.ChatSpeechController;
 import app.ui.UiFonts;
@@ -39,6 +40,8 @@ final class WorkbenchView extends BorderPane {
     private final ToggleButton showFiles = new ToggleButton("项目文件", WorkbenchTheme.icon(WorkbenchTheme.DIRECTORY));
     private double projectWidth = 306;
     private WorkbenchPetDock petDock;
+    private final WorkbenchBalancePane balancePane;
+    private final ToggleButton showBalance = new ToggleButton("API 余额");
 
     WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
                   ChatSpeechController speech) {
@@ -47,9 +50,16 @@ final class WorkbenchView extends BorderPane {
 
     WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
                   ChatSpeechController speech, CharacterActivityListener activity) {
+        this(services, chooseProject, speech, activity, BalanceService.fromEnvironment());
+    }
+
+    WorkbenchView(Supplier<ChatService> services, Consumer<Consumer<Path>> chooseProject,
+                  ChatSpeechController speech, CharacterActivityListener activity, BalanceService balances) {
         this.services = services;
         this.speech = speech;
         this.activity = Objects.requireNonNull(activity);
+        balancePane = new WorkbenchBalancePane(balances, speech, activity,
+                text -> showPetBubble(text, javafx.util.Duration.seconds(12)));
         project = new WorkbenchProjectPane(chooseProject);
         getStyleClass().add("workbench");
         setStyle(UiFonts.fxStyle(""));
@@ -101,6 +111,7 @@ final class WorkbenchView extends BorderPane {
         });
         sessions.getSelectionModel().selectedItemProperty().addListener((property, oldValue, selected) -> {
             if (oldValue != null) {
+                balancePane.cancel();
                 oldValue.chat.setSpeechActive(false);
                 if (petDock != null) oldValue.chat.setCompanion(null);
             }
@@ -117,6 +128,7 @@ final class WorkbenchView extends BorderPane {
             }
         });
         visibleProperty().addListener((property, oldValue, visible) -> {
+            if (!visible) balancePane.cancel();
             Session selected = sessions.getSelectionModel().getSelectedItem();
             if (selected != null) selected.chat.setSpeechActive(visible);
         });
@@ -149,10 +161,17 @@ final class WorkbenchView extends BorderPane {
         showFiles.getStyleClass().add("workbench-panel-toggle");
         showFiles.setTooltip(new Tooltip("显示或隐藏项目文件"));
         showFiles.selectedProperty().addListener((property, oldValue, visible) -> setFilesVisible(visible));
-        HBox toolbar = new HBox(11, showNavigation, conversationTitle, showFiles);
+        showBalance.setId("workbench-toggle-balance");
+        showBalance.getStyleClass().add("workbench-panel-toggle");
+        showBalance.setTooltip(new Tooltip("查询当前对话 API 余额，由可露汇报"));
+        showBalance.selectedProperty().addListener((property, before, selected) -> {
+            balancePane.setVisible(selected);
+            if (selected) balancePane.query(); else balancePane.cancel();
+        });
+        HBox toolbar = new HBox(11, showNavigation, conversationTitle, showBalance, showFiles);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.getStyleClass().add("workbench-toolbar");
-        conversation.setTop(toolbar);
+        conversation.setTop(new VBox(toolbar, balancePane));
 
         project.setId("workbench-project-pane");
         project.setMinWidth(245);
@@ -201,6 +220,7 @@ final class WorkbenchView extends BorderPane {
     void hidePetBubble() { if (petDock != null) petDock.hideBubble(); }
 
     void close() {
+        balancePane.close();
         if (petDock != null) petDock.close();
         project.close();
         for (Session session : sessions.getItems()) {

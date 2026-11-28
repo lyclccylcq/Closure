@@ -32,10 +32,6 @@ import app.util.AvatarLoader;
 import app.voice.GptSovitsServerProcess;
 import app.weather.WeatherGreetingService;
 
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -44,9 +40,7 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -56,9 +50,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -110,11 +102,6 @@ public class PetWindow extends JFrame {
     private static final Duration WORK_REMINDER_INTERVAL = Duration.ofHours(2);
 
     /**
-     * 可露希尔上线时显示的短对白。
-     */
-    private static final String STARTUP_BUBBLE_TEXT = "工程部可露希尔在线。";
-
-    /**
      * 单击模型时随机显示的短互动对白。
      */
     private static final String[] INTERACTION_BUBBLE_LINES = {
@@ -143,8 +130,6 @@ public class PetWindow extends JFrame {
     private static final int IDLE_CHATTER_MAX_DELAY_MILLIS = (int) Duration.ofMinutes(18).toMillis();
     private static final long IDLE_CHATTER_MIN_IDLE_MILLIS = Duration.ofMinutes(5).toMillis();
     private static final javafx.util.Duration WEATHER_GREETING_BUBBLE_DURATION = javafx.util.Duration.seconds(45);
-    private static final int STARTUP_GREETING_SPEECH_MAX_ATTEMPTS = 5;
-    private static final long STARTUP_GREETING_SPEECH_RETRY_DELAY_MILLIS = 8_000L;
 
     /**
      * 桌宠图片路径。
@@ -153,11 +138,6 @@ public class PetWindow extends JFrame {
      * 只在模型帧缺失时作为兜底图显示。
      */
     private static final String PET_IMAGE_PATH = "/images/closure-logo.png";
-
-    /**
-     * 打开模型时播放的语音路径。
-     */
-    private static final String OPEN_AUDIO_PATH = "/audio/Japanese/open.wav";
 
     /**
      * 聊天窗口对象。
@@ -340,7 +320,7 @@ public class PetWindow extends JFrame {
 
         startIdleSleepTimer();
         startRoamingTimer();
-        playOpenVoice(this::finishOpenVoiceAndShowStartupWeatherGreeting);
+        showStartupWeatherGreetingAfterSpeechReady();
         startWorkBreakReminder();
         startEventReminder();
         startIdleChatterTimer();
@@ -564,15 +544,6 @@ public class PetWindow extends JFrame {
         if (interactionClickTimer != null) {
             interactionClickTimer.stop();
             interactionClickTimer = null;
-        }
-    }
-
-    private void showStartupSpeechBubble() {
-        showSpeechBubble(STARTUP_BUBBLE_TEXT);
-        if (speechController != null && (speechController.usesLocalQwen() || speechController.usesHostedVoice())) {
-            speechController.speakStartupGreetingIfIdle(STARTUP_BUBBLE_TEXT);
-        } else {
-            speakSpeechBubble(STARTUP_BUBBLE_TEXT);
         }
     }
 
@@ -1081,75 +1052,21 @@ public class PetWindow extends JFrame {
     }
 
     private void showStartupWeatherGreeting() {
-        if (weatherGreetingService == null) {
-            showStartupSpeechBubble();
-            return;
-        }
-
-        CompletableFuture<String> greetingFuture = startupWeatherGreetingFuture;
-        if (greetingFuture == null) {
-            greetingFuture = weatherGreetingService.startupGreeting();
-        }
-
-        greetingFuture
-                .thenAccept(greeting -> SwingUtilities.invokeLater(() -> {
-                    if (petAnimationPanel != null && isShowing()) {
-                        showSpeechBubble(greeting, WEATHER_GREETING_BUBBLE_DURATION);
-                        speakStartupGreeting(greeting, 1);
-                    }
-                }));
+        CompletableFuture<String> greeting = startupWeatherGreetingFuture;
+        if (greeting == null && weatherGreetingService != null) greeting = weatherGreetingService.startupGreeting();
+        if (greeting == null) return;
+        greeting.thenAccept(text -> SwingUtilities.invokeLater(() -> {
+            if (!disposing && petAnimationPanel != null && (isShowing() || workbenchDocked)) {
+                showSpeechBubble(text, WEATHER_GREETING_BUBBLE_DURATION);
+                if (speechController != null) speechController.speakStartupGreetingIfIdle(text);
+            }
+        }));
     }
 
     private void showStartupWeatherGreetingAfterSpeechReady() {
-        if (speechController == null) {
-            return;
-        }
-
-        speechController.readyForSpeechFuture()
-                .thenRun(this::showStartupWeatherGreeting)
-                .exceptionally(error -> {
-                    System.out.println("启动天气问候等待语音暖机失败：" + safeErrorMessage(error));
-                    return null;
-                });
-    }
-
-    private void finishOpenVoiceAndShowStartupWeatherGreeting() {
-        // The greeting one-shot restores the current state itself; a late audio callback
-        // must not replace a newer walk, sleep or visible-conversation request.
-        showStartupWeatherGreetingAfterSpeechReady();
-    }
-
-    private void speakStartupGreeting(String greeting, int attempt) {
-        if (speechController == null || speechController.usesHostedVoice()) {
-            return;
-        }
-
-        if (speechController.usesLocalQwen()) {
-            speechController.speakStartupGreetingIfIdle(greeting);
-            return;
-        }
-
-        speechController.speakFullTextAsync(greeting)
-                .whenComplete((unused, error) -> {
-                    if (error == null || attempt >= STARTUP_GREETING_SPEECH_MAX_ATTEMPTS) {
-                        return;
-                    }
-                    if (!shouldRetryStartupGreetingSpeech(error)) {
-                        return;
-                    }
-
-                    CompletableFuture.delayedExecutor(
-                            STARTUP_GREETING_SPEECH_RETRY_DELAY_MILLIS,
-                            TimeUnit.MILLISECONDS
-                    ).execute(() -> speakStartupGreeting(greeting, attempt + 1));
-                });
-    }
-
-    private boolean shouldRetryStartupGreetingSpeech(Throwable error) {
-        String message = safeErrorMessage(error);
-        return !message.contains("本地语音配置不存在")
-                && !message.contains("缺少 GPT-SoVITS 配置")
-                && !message.contains("参考音频不存在");
+        if (speechController == null) { showStartupWeatherGreeting(); return; }
+        speechController.readyForSpeechFuture().handle((ready, error) -> null)
+                .thenRun(this::showStartupWeatherGreeting);
     }
 
     private String safeErrorMessage(Throwable error) {
@@ -1163,43 +1080,6 @@ public class PetWindow extends JFrame {
         }
 
         return current.getMessage();
-    }
-
-    private void playOpenVoice(Runnable afterPlayback) {
-        Thread soundThread = new Thread(() -> {
-            AtomicBoolean callbackCalled = new AtomicBoolean(false);
-            try (InputStream inputStream = PetWindow.class.getResourceAsStream(OPEN_AUDIO_PATH)) {
-                if (inputStream == null) {
-                    System.out.println("语音路径不存在：" + OPEN_AUDIO_PATH);
-                    runOnce(callbackCalled, afterPlayback);
-                    return;
-                }
-
-                try (BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream)) {
-                    Clip clip = AudioSystem.getClip();
-                    clip.open(AudioSystem.getAudioInputStream(bufferedInputStream));
-                    clip.addLineListener(event -> {
-                        if (event.getType() == javax.sound.sampled.LineEvent.Type.STOP) {
-                            clip.close();
-                            runOnce(callbackCalled, afterPlayback);
-                        }
-                    });
-                    clip.start();
-                }
-            } catch (IOException | LineUnavailableException | UnsupportedAudioFileException exception) {
-                System.out.println("open 语音播放失败：" + exception.getMessage());
-                runOnce(callbackCalled, afterPlayback);
-            }
-        }, "open-voice-player");
-
-        soundThread.setDaemon(true);
-        soundThread.start();
-    }
-
-    private void runOnce(AtomicBoolean called, Runnable task) {
-        if (task != null && called.compareAndSet(false, true)) {
-            task.run();
-        }
     }
 
     /**

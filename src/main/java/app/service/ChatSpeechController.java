@@ -213,6 +213,8 @@ public final class ChatSpeechController implements AutoCloseable {
         return new SpeechSession();
     }
 
+    public synchronized long speechRequestVersion() { return requestGeneration; }
+
     public final class SpeechSession {
         private SpeechSession() {}
 
@@ -220,6 +222,14 @@ public final class ChatSpeechController implements AutoCloseable {
             synchronized (requestLock) {
                 return reply == null ? CompletableFuture.completedFuture(null)
                         : requestSpeech(reply.getSpeechText(), reply.getDominantEmotion(), false, this);
+            }
+        }
+
+        /** A delayed tool response must not replace speech requested after its query began. */
+        public CompletableFuture<Void> speakIfUnchanged(AssistantReply reply, long version) {
+            synchronized (requestLock) {
+                if (speechRequestVersion() != version) return CompletableFuture.completedFuture(null);
+                return speak(reply);
             }
         }
 
@@ -286,7 +296,6 @@ public final class ChatSpeechController implements AutoCloseable {
     /** A late background greeting must never cancel a foreground speech request. */
     public CompletableFuture<Void> speakStartupGreetingIfIdle(String text) {
         synchronized (requestLock) {
-            if (hostedVoice) return CompletableFuture.completedFuture(null);
             if (requestGeneration != 0) return CompletableFuture.completedFuture(null);
             return speakFullTextAsync(text);
         }

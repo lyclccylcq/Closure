@@ -1,6 +1,8 @@
 package app.ui.chat;
 
 import app.service.ChatService;
+import app.billing.BalanceService;
+import app.billing.BalanceException;
 import app.character.CharacterActivityListener;
 import app.service.ChatSpeechController;
 import app.ui.UiFonts;
@@ -62,7 +64,9 @@ public final class WorkbenchWindow extends JFrame {
     }
 
     public static WorkbenchWindow startupSmokeWindow(ChatSpeechController speech) {
-        return new WorkbenchWindow(() -> new ChatService((app.ai.AiModelClient) null), speech, false);
+        return new WorkbenchWindow(() -> new ChatService((app.ai.AiModelClient) null), speech, false,
+                CharacterActivityListener.NONE,
+                () -> CompletableFuture.failedFuture(new BalanceException("离线预览不查询账户余额。")));
     }
 
     public ChatSpeechController speechController() {
@@ -91,6 +95,16 @@ public final class WorkbenchWindow extends JFrame {
 
     private WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech, boolean ownsSpeech,
                             CharacterActivityListener activity) {
+        this(sessions, speech, ownsSpeech, activity, BalanceService.fromEnvironment());
+    }
+
+    WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech,
+                    CharacterActivityListener activity, BalanceService balances) {
+        this(sessions, speech, false, activity, balances);
+    }
+
+    private WorkbenchWindow(Supplier<ChatService> sessions, ChatSpeechController speech, boolean ownsSpeech,
+                            CharacterActivityListener activity, BalanceService balances) {
         super("Closure 工作台");
         this.speech = speech;
         this.ownsSpeech = ownsSpeech;
@@ -113,7 +127,7 @@ public final class WorkbenchWindow extends JFrame {
         Platform.runLater(() -> {
             if (!disposed) {
                 try {
-                    view = new WorkbenchView(sessions, this::chooseProject, speech, activity);
+                    view = new WorkbenchView(sessions, this::chooseProject, speech, activity, balances);
                     view.setVisible(windowVisible);
                     panel.setScene(new Scene(view));
                     publishPetFrame();
