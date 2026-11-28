@@ -14,8 +14,15 @@ public interface BalanceService extends AutoCloseable {
     }
     default void clearSyncedOpenAiBalance() { }
     default boolean canConfigureOpenAiAdminKey() { return false; }
+    default boolean persistsOpenAiAdminKey() { return false; }
     default void configureOpenAiAdminKey(String key) { throw new BalanceException("此连接不支持设置 OpenAI 管理密钥。"); }
     default void clearOpenAiAdminKey() { }
+    default CompletableFuture<Void> configureOpenAiAdminKeyAsync(String key) {
+        return CompletableFuture.runAsync(() -> configureOpenAiAdminKey(key));
+    }
+    default CompletableFuture<Void> clearOpenAiAdminKeyAsync() {
+        return CompletableFuture.runAsync(this::clearOpenAiAdminKey);
+    }
     @Override default void close() { }
 
     /** Resolve connections and credentials only after an explicit query, never at startup. */
