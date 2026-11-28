@@ -35,7 +35,8 @@ class PersistentAdminRestartWindowTest {
                         "-m", "com.example.closure/" + PersistentAdminRestartProbe.class.getName(), mode, namespace, evidence.toString());
                 var builder = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile());
                 builder.environment().entrySet().removeIf(entry -> entry.getKey().matches("(?i).*(TOKEN|SECRET|PASSWORD|API_KEY|CREDENTIAL).*" )
-                        || entry.getKey().matches("(?i)^(OPENAI_|ANTHROPIC_|FISH_).*"));
+                        || (entry.getKey().matches("(?i)^(CLOSURE_|OPENAI_|ANTHROPIC_|FISH_).*" )
+                        && !entry.getKey().equals("CLOSURE_PET_ASSETS_DIRECTORY")));
                 Process process = builder.start();
                 try { assertTrue(process.waitFor(45, TimeUnit.SECONDS), "Synthetic restart child timed out: " + mode); }
                 finally { if (process.isAlive()) process.destroyForcibly().waitFor(5, TimeUnit.SECONDS); }

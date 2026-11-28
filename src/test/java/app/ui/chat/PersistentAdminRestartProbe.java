@@ -60,6 +60,12 @@ public final class PersistentAdminRestartProbe {
                 fx(() -> {
                     assertFalse(input().getParent().isVisible()); assertTrue(input().getText().isEmpty());
                     button("workbench-admin-settings").fire(); assertTrue(input().getPromptText().contains("无需重填"));
+                    assertTrue(button("workbench-admin-apply").isDisabled());
+                    input().setText("synthetic-replacement-check"); assertFalse(button("workbench-admin-apply").isDisabled());
+                    input().setText(""); button("workbench-admin-apply").fire(); input().fireEvent(new javafx.event.ActionEvent());
+                    assertTrue(result().getText().contains("1.2 USD")); assertTrue(state().getText().contains("已保存"));
+                    assertTrue(fixture.requests().stream().allMatch(request -> request.headers().firstValue("Authorization")
+                            .orElse("").equals("Bearer synthetic-admin-restart-only")));
                     assertTrue(input().getText().isEmpty()); view().applyCss(); view().layout();
                     ImageIO.write(SwingFXUtils.fromFXImage(view().snapshot(null, null), null), "png",
                             Path.of(args[2], "admin-restart-" + args[0] + ".png").toFile());

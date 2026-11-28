@@ -78,6 +78,8 @@ final class WorkbenchBalancePane extends VBox {
         adminInput.getStyleClass().add("workbench-admin-input");
         adminInput.setPromptText("粘贴 OpenAI Admin API key"); adminInput.setMinWidth(0);
         applyAdmin.setId("workbench-admin-apply"); clearAdmin.setId("workbench-admin-clear");
+        applyAdmin.disableProperty().bind(adminInput.disabledProperty().or(javafx.beans.binding.Bindings.createBooleanBinding(
+                () -> adminInput.getText().isBlank(), adminInput.textProperty())));
         for (Button button : new Button[]{adminSettings, applyAdmin, clearAdmin}) button.getStyleClass().add("workbench-action");
         Label hint = new Label(balances.persistsOpenAiAdminKey()
                 ? "保存到 macOS 钥匙串，之后自动读取。仅用于 OpenAI 官方费用查询。"
@@ -221,6 +223,7 @@ final class WorkbenchBalancePane extends VBox {
 
     private void changeAdminKey(boolean clear) {
         if (closed || !balances.canConfigureOpenAiAdminKey()) return;
+        if (!clear && adminInput.getText().isBlank()) return;
         String key = clear ? null : adminInput.getText();
         adminInput.setText("");
         cancel(); resetReport();
@@ -302,7 +305,7 @@ final class WorkbenchBalancePane extends VBox {
         refresh.setDisable(value); syncFunds.setDisable(value); clearFunds.setDisable(value); balanceInput.setDisable(value);
     }
     private void editingCredential(boolean value) {
-        applyAdmin.setDisable(value); clearAdmin.setDisable(value); adminSettings.setDisable(value); adminInput.setDisable(value);
+        clearAdmin.setDisable(value); adminSettings.setDisable(value); adminInput.setDisable(value);
     }
 
     void close() {
