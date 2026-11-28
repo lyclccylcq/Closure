@@ -65,14 +65,14 @@ class OpenAiAdminClientTest {
         assertEquals(new BigDecimal("0.200000000000001"), report.lines().get(0).amount());
         assertEquals(new BigDecimal("1.300000000000001"), report.lines().get(1).amount());
         assertEquals("USD", report.lines().getFirst().unit()); assertTrue(report.isUsageReport());
-        assertEquals(new BigDecimal("200"), report.lines().get(2).amount());
-        assertEquals(new BigDecimal("50"), report.lines().get(3).amount());
-        assertEquals(new BigDecimal("3"), report.lines().get(4).amount());
+        assertEquals(new BigDecimal("1.300000000000001"), report.costs().usdTotal());
+        assertTrue(report.costs().usdOnly());
         assertFalse(report.speechText().contains("剩余")); assertTrue(report.note().contains("费用不等于充值余额"));
-        assertEquals(NOW, report.checkedAt()); assertEquals(2, requests.size());
+        assertEquals(NOW, report.checkedAt()); assertEquals(1, requests.size());
         for (HttpRequest request : requests) {
             assertEquals("GET", request.method()); assertEquals("https", request.uri().getScheme());
             assertEquals("api.openai.com", request.uri().getHost());
+            assertEquals("/v1/organization/costs", request.uri().getPath());
             assertEquals("Bearer synthetic-admin-key", request.headers().firstValue("Authorization").orElseThrow());
             assertFalse(request.uri().toString().contains("synthetic-admin-key"));
             String query = request.uri().getQuery();
@@ -93,9 +93,9 @@ class OpenAiAdminClientTest {
         BalanceReport report = client().query().join();
         assertEquals(new BigDecimal("0.3"), report.lines().get(1).amount());
         assertEquals("EUR", report.lines().get(2).unit());
-        assertEquals(new BigDecimal("12"), report.lines().get(4).amount());
-        assertEquals(new BigDecimal("23"), report.lines().get(5).amount());
-        assertEquals(4, requests.size());
+        assertEquals(new BigDecimal("0.3"), report.costs().usdTotal());
+        assertFalse(report.costs().usdOnly());
+        assertEquals(2, requests.size());
         assertTrue(requests.stream().anyMatch(request -> URLDecoder.decode(request.uri().getRawQuery(), StandardCharsets.UTF_8).contains("page=cursor+/&=?")));
     }
 
@@ -126,11 +126,11 @@ class OpenAiAdminClientTest {
                 : page(bucket(DAY, usage(5, 2, 1)), false, null);
         BalanceReport report = client().query().join();
         assertEquals(new BigDecimal("1.25"), report.lines().getFirst().amount());
-        assertEquals(new BigDecimal("5"), report.lines().get(2).amount());
+        assertEquals(new BigDecimal("1.25"), report.costs().usdTotal());
     }
 
     @Test void invalidJsonIdentifiesTheReaderWithoutExposingItsResponseBody() {
-        for (String resource : List.of("costs", "usage/completions")) {
+        for (String resource : List.of("costs")) {
             response = uri -> uri.getPath().endsWith(resource) ? "private-response synthetic-admin-key" : page("", false, null);
             var failure = assertThrows(java.util.concurrent.CompletionException.class, () -> client().query().join());
             String message = failure.getCause().getMessage();
@@ -179,7 +179,7 @@ class OpenAiAdminClientTest {
         assertTrue(requests.stream().noneMatch(request -> request.uri().getPath().contains("steal")));
     }
 
-    @Test void cancellationStopsBothReadsAndTimeoutIsNotReportedAsZero() {
+    @Test void cancellationStopsTheCostsReadAndTimeoutIsNotReportedAsZero() {
         List<CompletableFuture<?>> waiting = new CopyOnWriteArrayList<>();
         HttpClient blocked = new ApiBalanceClientTest.RoutedClient(HttpClient.newHttpClient(), request -> request) {
             @Override public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
@@ -188,7 +188,7 @@ class OpenAiAdminClientTest {
             }
         };
         CompletableFuture<BalanceReport> query = new OpenAiAdminClient("synthetic-admin-key", blocked, CLOCK).query();
-        query.cancel(true); assertEquals(2, waiting.size()); assertTrue(waiting.stream().allMatch(CompletableFuture::isCancelled));
+        query.cancel(true); assertEquals(1, waiting.size()); assertTrue(waiting.stream().allMatch(CompletableFuture::isCancelled));
         HttpClient timeout = new ApiBalanceClientTest.RoutedClient(HttpClient.newHttpClient(), request -> request) {
             @Override public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
                 return CompletableFuture.failedFuture(new java.net.http.HttpTimeoutException("synthetic timeout"));

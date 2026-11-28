@@ -14,16 +14,17 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.Hyperlink;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import java.time.ZoneId;
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /** On-demand account tool, independent of conversation history and the language model. */
 final class WorkbenchBalancePane extends VBox {
@@ -41,6 +42,10 @@ final class WorkbenchBalancePane extends VBox {
     private final VBox adminForm = new VBox(6);
     private final Button adminSettings = new Button("管理密钥");
     private final Hyperlink billingPage = new Hyperlink("OpenAI 账单");
+    private final TextField balanceInput = new TextField();
+    private final VBox fundsForm = new VBox(6);
+    private final Button syncFunds = new Button("同步余额");
+    private final Button clearFunds = new Button("清除同步");
     private CompletableFuture<BalanceReport> pending;
     private ChatActivity.Request thinking;
     private BalanceReport report;
@@ -94,25 +99,51 @@ final class WorkbenchBalancePane extends VBox {
         }));
         title.setMinWidth(0); title.setMaxWidth(Double.MAX_VALUE); HBox.setHgrow(title, Priority.ALWAYS);
         HBox heading = new HBox(8, title, billingPage, adminSettings); heading.setAlignment(Pos.CENTER_LEFT);
-        getChildren().addAll(heading, adminForm, result, actions);
+        balanceInput.setId("workbench-funds-input"); balanceInput.getStyleClass().add("workbench-admin-input");
+        balanceInput.setPromptText("充值后官方账单中的当前余额（USD）"); balanceInput.setMinWidth(0);
+        syncFunds.setId("workbench-funds-sync"); clearFunds.setId("workbench-funds-clear");
+        syncFunds.getStyleClass().add("workbench-action"); clearFunds.getStyleClass().add("workbench-action");
+        HBox fundsActions = new HBox(8, balanceInput, syncFunds, clearFunds); HBox.setHgrow(balanceInput, Priority.ALWAYS);
+        Label fundsHint = new Label("消费按 UTC 日统计；同步后按新增消耗估算余额，官方统计可能延迟。");
+        fundsHint.setWrapText(true); fundsHint.getStyleClass().add("workbench-path");
+        fundsForm.getChildren().addAll(fundsActions, fundsHint);
+        fundsForm.setVisible(false); fundsForm.managedProperty().bind(fundsForm.visibleProperty());
+        syncFunds.setOnAction(event -> syncFunds()); balanceInput.setOnAction(event -> syncFunds());
+        clearFunds.setOnAction(event -> {
+            cancel();
+            try {
+                balances.clearSyncedOpenAiBalance(); balanceInput.clear();
+                if (report != null) { report = report.withFunding(null); result.setText(report.summaryText()); }
+                updated.setText("余额同步记录已清除");
+            } catch (BalanceException invalid) { updated.setText(invalid.getMessage()); }
+        });
+        getChildren().addAll(heading, adminForm, result, fundsForm, actions);
         setVisible(false); managedProperty().bind(visibleProperty());
     }
 
-    void query() {
+    void query() { request(null); }
+
+    private void syncFunds() {
+        if (closed || pending != null) return;
+        try { request(new BigDecimal(balanceInput.getText().trim())); }
+        catch (NumberFormatException invalid) { updated.setText("请填写官方账单中的当前美元余额。"); balanceInput.requestFocus(); }
+    }
+
+    private void request(BigDecimal calibration) {
         if (closed || pending != null) return;
         long version = ++epoch;
         long speechVersion = speech == null ? 0 : speech.speechRequestVersion();
-        report = null; refresh.setDisable(true); read.setDisable(true);
+        report = null; working(true); read.setDisable(true);
         title.setText("当前对话 API");
-        result.setText("博士，等我看一眼当前 API 的账户信息。"); updated.setText("正在查询…");
+        result.setText("博士，等我翻一下今天的账本。"); updated.setText(calibration == null ? "正在查询…" : "正在同步余额…");
         thinking = activity.start();
-        try { pending = balances.query(); }
+        try { pending = calibration == null ? balances.query() : balances.syncOpenAiBalance(calibration); }
         catch (RuntimeException invalid) { pending = CompletableFuture.failedFuture(invalid); }
         pending.whenComplete((value, error) -> Platform.runLater(() -> {
             if (closed || version != epoch) return;
             pending = null;
             if (thinking != null) { thinking.close(); thinking = null; }
-            refresh.setDisable(false);
+            working(false);
             if (error != null || value == null) {
                 result.setText(message(error)); updated.setText("尚未取得账户数据");
                 Throwable cause = unwrap(error);
@@ -124,9 +155,10 @@ final class WorkbenchBalancePane extends VBox {
             report = value;
             if (value.isUsageReport()) showAdminConfiguration();
             title.setText(value.platform());
-            result.setText(value.lines().stream().map(BalanceReport.Line::text).collect(Collectors.joining("\n"))
-                    + (value.note().isBlank() ? "" : "\n" + value.note()));
-            updated.setText("查询于 " + DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")
+            result.setText(value.summaryText());
+            fundsForm.setVisible(value.isUsageReport() && balances.canSyncOpenAiBalance());
+            if (calibration != null) balanceInput.clear();
+            updated.setText((calibration == null ? "查询于 " : "余额已同步 · ") + DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")
                     .withZone(ZoneId.systemDefault()).format(value.checkedAt()));
             read.setDisable(speechSession == null);
             speak(true, speechVersion);
@@ -139,7 +171,8 @@ final class WorkbenchBalancePane extends VBox {
         String text = report.speechText();
         bubble.accept(text);
         if (speechSession != null) {
-            AssistantReply reply = new AssistantReply(text, text, SpeechEmotion.NEUTRAL);
+            SpeechEmotion emotion = report.emptyFunds() ? SpeechEmotion.SERIOUS : report.lowFunds() ? SpeechEmotion.TEASING : SpeechEmotion.NEUTRAL;
+            AssistantReply reply = new AssistantReply(text, text, emotion);
             if (automatic) speechSession.speakIfUnchanged(reply, version);
             else speechSession.speak(reply);
         }
@@ -149,7 +182,7 @@ final class WorkbenchBalancePane extends VBox {
         epoch++;
         if (pending != null) { pending.cancel(true); pending = null; updated.setText("查询已取消"); }
         if (thinking != null) { thinking.close(); thinking = null; }
-        refresh.setDisable(false);
+        working(false);
         if (speechSession != null) speechSession.stop();
     }
 
@@ -169,10 +202,15 @@ final class WorkbenchBalancePane extends VBox {
 
     private void resetReport() {
         report = null; read.setDisable(true); title.setText("当前对话 API"); updated.setText("尚未查询");
+        fundsForm.setVisible(false); balanceInput.clear();
+    }
+
+    private void working(boolean value) {
+        refresh.setDisable(value); syncFunds.setDisable(value); clearFunds.setDisable(value); balanceInput.setDisable(value);
     }
 
     void close() {
-        closed = true; cancel(); activity.close(); adminInput.setText(""); balances.close();
+        closed = true; cancel(); activity.close(); adminInput.setText(""); balanceInput.clear(); balances.close();
     }
 
     private static Throwable unwrap(Throwable error) {

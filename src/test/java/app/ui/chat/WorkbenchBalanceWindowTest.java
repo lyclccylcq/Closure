@@ -79,7 +79,7 @@ class WorkbenchBalanceWindowTest {
             var firstAudio = audio.poll(3, TimeUnit.SECONDS); assertNotNull(firstAudio);
             await(() -> character.get().state() == CharacterState.TALKING);
             fx(() -> {
-                assertTrue(result().getText().contains("12.345678 USD"));
+                assertTrue(result().getText().contains("12.3 USD"));
                 assertTrue(((Label) view().lookup("#workbench-balance-updated")).getText().contains("11-28"));
                 view().applyCss(); view().layout(); capture();
                 button("workbench-balance-read").fire(); return null;

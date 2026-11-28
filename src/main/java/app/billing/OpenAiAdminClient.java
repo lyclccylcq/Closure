@@ -49,31 +49,33 @@ public final class OpenAiAdminClient implements BalanceService {
         return normalized;
     }
 
-    @Override public CompletableFuture<BalanceReport> query() {
+    @Override public CompletableFuture<BalanceReport> query() { return querySince(null); }
+
+    @Override public CompletableFuture<BalanceReport> querySince(Instant since) {
         Instant end = clock.instant();
         LocalDate today = end.atZone(ZoneOffset.UTC).toLocalDate();
         long month = today.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
         long day = today.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        long start = since == null ? month : Math.min(month, since.getEpochSecond());
+        if (since != null && (since.getNano() != 0 || Math.floorMod(since.getEpochSecond(), 86400) != 0)) {
+            return CompletableFuture.failedFuture(new BalanceException("余额同步的统计起点无效，请重新同步。"));
+        }
         // At the exact UTC month boundary there is no completed query interval yet.
-        if (end.getEpochSecond() <= month) return CompletableFuture.completedFuture(report(List.of(), List.of(), day, today, end));
-        Query query = new Query(month, end.getEpochSecond());
-        CompletableFuture<BalanceReport> result = new CompletableFuture<>();
+        if (end.getEpochSecond() <= start) return CompletableFuture.completedFuture(report(List.of(), start, day, today, end));
+        Query query = new Query(start, end.getEpochSecond());
         var costs = query.pages("costs", null, new HashSet<>(), new HashSet<>(), new ArrayList<>());
-        var usage = query.pages("usage/completions", null, new HashSet<>(), new HashSet<>(), new ArrayList<>());
-        costs.whenComplete((value, error) -> { if (error != null) result.completeExceptionally(error); });
-        usage.whenComplete((value, error) -> { if (error != null) result.completeExceptionally(error); });
-        costs.thenCombine(usage, (charges, tokens) -> report(charges, tokens, day, today, end))
-                .whenComplete((value, error) -> {
-                    if (error == null) result.complete(value); else result.completeExceptionally(error);
-                });
+        CompletableFuture<BalanceReport> result = costs.thenApply(charges -> report(charges, start, day, today, end));
         result.orTimeout(25, TimeUnit.SECONDS).whenComplete((value, error) -> { if (error != null) query.cancel(); });
         return result;
     }
 
     private record Bucket(long start, List<?> results) { }
 
-    private BalanceReport report(List<Bucket> costs, List<Bucket> usage, long day, LocalDate today, Instant checked) {
+    private BalanceReport report(List<Bucket> costs, long start, long day, LocalDate today, Instant checked) {
         Map<String,BigDecimal> monthCosts = new LinkedHashMap<>(), dayCosts = new LinkedHashMap<>();
+        long month = today.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        BigDecimal allUsd = BigDecimal.ZERO;
+        boolean usdOnly = true;
         for (Bucket bucket : costs) {
             for (Object raw : bucket.results()) {
                 Map<String,Object> item = BalanceJson.object(raw);
@@ -82,19 +84,10 @@ public final class OpenAiAdminClient implements BalanceService {
                 String currency = BalanceJson.string(amount.get("currency")).toUpperCase(Locale.ROOT);
                 if (!currency.matches("[A-Z]{3}")) throw BalanceJson.invalid();
                 BigDecimal value = BalanceJson.number(amount.get("value"));
-                monthCosts.merge(currency, value, BigDecimal::add);
+                if (currency.equals("USD")) allUsd = allUsd.add(value); else usdOnly = false;
+                if (bucket.start() >= month) monthCosts.merge(currency, value, BigDecimal::add);
                 if (bucket.start() >= day) dayCosts.merge(currency, value, BigDecimal::add);
                 if (monthCosts.size() > 8) throw BalanceJson.invalid();
-            }
-        }
-        BigDecimal input = BigDecimal.ZERO, output = BigDecimal.ZERO, requests = BigDecimal.ZERO;
-        for (Bucket bucket : usage) {
-            for (Object raw : bucket.results()) {
-                Map<String,Object> item = BalanceJson.object(raw);
-                if (!"organization.usage.completions.result".equals(item.get("object"))) throw BalanceJson.invalid();
-                input = input.add(count(item.get("input_tokens")));
-                output = output.add(count(item.get("output_tokens")));
-                requests = requests.add(count(item.get("num_model_requests")));
             }
         }
         List<BalanceReport.Line> lines = new ArrayList<>();
@@ -105,17 +98,9 @@ public final class OpenAiAdminClient implements BalanceService {
             lines.add(new BalanceReport.Line("今日费用（UTC）", dayCosts.getOrDefault(currency, BigDecimal.ZERO), currency, false, BalanceReport.Kind.COST));
             lines.add(new BalanceReport.Line("本月费用（UTC）", value, currency, false, BalanceReport.Kind.COST));
         });
-        lines.add(new BalanceReport.Line("本月输入", input, "tokens", false, BalanceReport.Kind.USAGE));
-        lines.add(new BalanceReport.Line("本月输出", output, "tokens", false, BalanceReport.Kind.USAGE));
-        lines.add(new BalanceReport.Line("本月请求", requests, "次", false, BalanceReport.Kind.USAGE));
-        return new BalanceReport("OpenAI · 组织费用与用量", lines,
-                "统计区间 " + today.withDayOfMonth(1) + " 至 " + today + "（UTC）。组织汇总包含其他应用，官方数据可能延迟。费用不等于充值余额。", checked);
-    }
-
-    private static BigDecimal count(Object value) {
-        BigDecimal number = BalanceJson.number(value);
-        if (number.signum() < 0 || number.stripTrailingZeros().scale() > 0) throw BalanceJson.invalid();
-        return number;
+        return new BalanceReport("OpenAI · 今日消耗", lines,
+                "费用按 UTC 日期与组织汇总，官方数据可能延迟。费用不等于充值余额。同步后的余额为估算。", checked,
+                new BalanceReport.CostSnapshot(Instant.ofEpochSecond(start), checked, allUsd, usdOnly), null);
     }
 
     private final class Query {
